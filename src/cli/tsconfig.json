@@ -1,0 +1,9 @@
+{
+  "include": ["."],
+  "exclude": [],
+  "extends": "../../tsconfig",
+  "compilerOptions": {
+    "outDir": "../../dist/types",
+    "lib": ["ES2020"]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "main": "../dist/cjs/schema/index.js",
+  "module": "../dist/esm/schema/index.js",
+  "types": "../dist/types/schema/schema.d.ts"
+}

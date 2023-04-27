@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": ["fs", "node:fs"],
+            "message": "Use a `Filesystem` implementation like `nodeFs` instead of Node's 'fs' package directly."
+          },
+          {
+            "group": ["fs/promises", "node:fs/promises"],
+            "message": "Use a `Filesystem` implementation like `nodeFs` instead of Node's 'fs/promises' package directly. Additionally, use synchronous filesystem IO within our CLI."
+          }
+        ]
+      }
+    ],
+    // Makes it harder to accidentally fire off a promise without waiting for it.
+    "@typescript-eslint/no-floating-promises": "error",
+    "eqeqeq": ["error", "always"]
+    // TODO: fix to allow process.exit(0) but not process.exit(1)
+    // "no-restricted-syntax": [
+    //   "warn",
+    //   {
+    //     "message": "Use flushAndExit from convex/src/cli/utils.ts instead of process.exit so that Sentry gets flushed.",
+    //     "selector": "CallExpression[callee.object.name='process'][callee.property.name='exit'][callee.value=1]"
+    //   }
+    // ]
+  }
+}
