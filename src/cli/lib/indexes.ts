@@ -92,7 +92,7 @@ export async function pushSchema(
 
   changeSpinner(
     ctx,
-    "Backfilling indexes and checking that all documents match your schema..."
+    "Backfilling indexes and checking that documents match your schema..."
   );
   const schemaState = await waitForReadySchema(ctx, origin, adminKey, schemaId);
   logIndexChanges(ctx, data, dryRun);
@@ -144,7 +144,7 @@ async function waitForReadySchema(
       logError(ctx, chalk.red(`Schema was overwritten by another push.`));
       return await ctx.crash(1, "fatal");
     case "validated":
-      logFinishedStep(ctx, "All documents match your schema.");
+      logFinishedStep(ctx, "Schema validation complete.");
       break;
     case "active":
       break;

@@ -2,14 +2,16 @@
 
 TypeScript/JavaScript client libraries and CLI for Convex.
 
-Convex is the backend application platform with everything you need to build your product.
+Convex is the backend application platform with everything you need to build
+your product.
 
 Get started at [docs.convex.dev](https://docs.convex.dev)!
 
 Or see [Convex demos](https://github.com/get-convex/convex-demos).
 
-Open discussions and issues in this repository about Convex TypeScript/JavaScript
-clients, the Convex CLI, or the Convex platform in general.
+Open discussions and issues in this repository about Convex
+TypeScript/JavaScript clients, the Convex CLI, or the Convex platform in
+general.
 
 Also feel free to share feature requests, product feedback, or general questions
 in the [Convex Discord Community](https://convex.dev/community).
