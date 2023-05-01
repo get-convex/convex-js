@@ -63,7 +63,7 @@ export async function checkAuthorization(ctx: Context): Promise<boolean> {
     return false;
   }
   try {
-    const resp = await axios.head(`${provisionHost}/api/${version}/authorize`, {
+    const resp = await axios.head(`${provisionHost}/api/authorize`, {
       headers: {
         Authorization: header,
         "Convex-Client": `npm-cli-${version}`,

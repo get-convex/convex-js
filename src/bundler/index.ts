@@ -3,6 +3,7 @@ import path from "path";
 import chalk from "chalk";
 import esbuild from "esbuild";
 import { Filesystem } from "./fs.js";
+import { wasmPlugin } from "./wasm.js";
 export { nodeFs, RecordingFs } from "./fs.js";
 export type { Filesystem } from "./fs.js";
 
@@ -59,6 +60,7 @@ async function doEsbuild(
       target: "esnext",
       outdir: "out",
       outbase: dir,
+      plugins: [wasmPlugin],
       write: false,
       sourcemap: generateSourceMaps,
       splitting: true,
@@ -72,7 +74,11 @@ async function doEsbuild(
     for (const [relPath, input] of Object.entries(result.metafile!.inputs)) {
       // TODO: esbuild outputs paths prefixed with "(disabled)"" when bundling our internal
       // udf-system package. The files do actually exist locally, though.
-      if (relPath.indexOf("(disabled):") !== -1) {
+      if (
+        relPath.indexOf("(disabled):") !== -1 ||
+        relPath.startsWith("wasm-binary:") ||
+        relPath.startsWith("wasm-stub:")
+      ) {
         continue;
       }
       const absPath = path.resolve(relPath);
@@ -138,7 +144,7 @@ export async function bundle(
 }
 
 export async function bundleSchema(fs: Filesystem, dir: string) {
-  return bundle(fs, dir, [path.resolve(dir, "schema.ts")], true, "neutral");
+  return bundle(fs, dir, [path.resolve(dir, "schema.ts")], true, "browser");
 }
 
 export async function entryPoints(

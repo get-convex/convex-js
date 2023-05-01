@@ -15,7 +15,7 @@ import { Project } from "./api.js";
 export const productionProvisionHost = "https://provision.convex.dev";
 export const provisionHost =
   process.env.CONVEX_PROVISION_HOST || productionProvisionHost;
-const BIG_BRAIN_URL = `${provisionHost}/api/${version}`;
+const BIG_BRAIN_URL = `${provisionHost}/api`;
 
 /** Prompt for keyboard input with the given `query` string and return a promise
  * that resolves to the input. */
