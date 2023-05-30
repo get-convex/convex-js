@@ -6,11 +6,20 @@ import path from "path";
 import os from "os";
 import { z } from "zod";
 
-import type { ProjectConfig } from "./config.js";
+import { ProjectConfig, readProjectConfig } from "./config.js";
 
-import { Context, ErrorType, logError, logWarning } from "./context.js";
+import {
+  Context,
+  ErrorType,
+  logError,
+  logFailure,
+  logMessage,
+  logWarning,
+} from "../../bundler/context.js";
 import { version } from "../../index.js";
 import { Project } from "./api.js";
+import { spawn } from "child_process";
+import { readDeploymentEnvVar } from "./deployment.js";
 
 export const productionProvisionHost = "https://provision.convex.dev";
 export const provisionHost =
@@ -22,7 +31,7 @@ const BIG_BRAIN_URL = `${provisionHost}/api`;
 export function prompt(query: string) {
   const rl = readline.createInterface({
     input: process.stdin,
-    output: process.stdout,
+    output: process.stderr,
   });
   return new Promise(resolve =>
     rl.question(query, answer => {
@@ -48,7 +57,7 @@ export async function logAndHandleAxiosError(
   err: any
 ): Promise<never> {
   if (ctx.spinner) {
-    // Fail the spinner so the console logs appear
+    // Fail the spinner so the stderr lines appear
     ctx.spinner.fail();
   }
 
@@ -135,6 +144,7 @@ export function deprecationCheckWarning(
       case "Deprecated":
       case "UpgradeCritical":
         // This should never happen because such states are errors, not warnings.
+        // eslint-disable-next-line no-restricted-syntax
         throw new Error(
           "Called deprecationCheckWarning on a fatal error. This is a bug."
         );
@@ -165,6 +175,8 @@ export async function validateOrSelectTeam(
   const teams: Team[] = await bigBrainAPI(ctx, "GET", "teams");
   if (teams.length === 0) {
     console.error(chalk.red("Error: No teams found"));
+    // Unexpected error
+    // eslint-disable-next-line no-restricted-syntax
     throw new Error("No teams found");
   }
   if (!teamSlug) {
@@ -238,7 +250,8 @@ export async function validateOrSelectProject(
     `/teams/${teamSlug}/projects`
   );
   if (projects.length === 0) {
-    console.error(chalk.red("Error: No projects found"));
+    // Unexpected error
+    // eslint-disable-next-line no-restricted-syntax
     throw new Error("No projects found");
   }
   if (!projectSlug) {
@@ -290,8 +303,6 @@ export async function validateOrSelectProject(
   }
 }
 
-class PackageJsonLoadError extends Error {}
-
 /**
  * @param ctx
  * @returns a Record of dependency name to dependency version for dependencies
@@ -319,9 +330,8 @@ export async function loadPackageJson(
     return await ctx.crash(1, "invalid filesystem data", err);
   }
   if (typeof obj !== "object") {
-    throw new PackageJsonLoadError(
-      "Expected to parse an object from package.json"
-    );
+    logError(ctx, "Expected to parse an object from package.json");
+    return await ctx.crash(1, "invalid filesystem data");
   }
   const packages = {
     ...(obj.dependencies ?? {}),
@@ -578,9 +588,8 @@ export async function isInExistingProject(ctx: Context) {
   const { parentPackageJson, parentConvexJson } = findParentConfigs(ctx);
   if (!parentPackageJson) {
     console.error(
-      "No package.json found. If you meant to create a new project, try"
+      "No package.json found. To create a new project using Convex, see https://docs.convex.dev/home#quickstarts"
     );
-    console.error(`npx create-next-app@latest -e convex my-convex-app`);
     await ctx.crash(1);
   }
   if (parentPackageJson !== path.resolve("package.json")) {
@@ -588,4 +597,133 @@ export async function isInExistingProject(ctx: Context) {
     return await ctx.crash(1, "invalid filesystem data");
   }
   return !!parentConvexJson;
+}
+
+export async function getConfiguredDeploymentOrCrashIfNoConfig(ctx: Context) {
+  const configuredDeployment = await getConfiguredDeployment(ctx);
+  if (shouldUseNewFlow() && configuredDeployment === null) {
+    const { projectConfig } = await readProjectConfig(ctx);
+    if (projectConfig.team === undefined || projectConfig.team === undefined) {
+      logFailure(
+        ctx,
+        "No CONVEX_DEPLOYMENT set, run `npx convex dev` to configure a Convex project"
+      );
+      return await ctx.crash(1, "invalid filesystem data");
+    }
+  }
+  return configuredDeployment;
+}
+
+export async function getConfiguredDeployment(ctx: Context) {
+  const { parentPackageJson } = findParentConfigs(ctx);
+  if (!parentPackageJson) {
+    console.error(
+      "No package.json found. To create a new project using Convex, see https://docs.convex.dev/home#quickstarts"
+    );
+    await ctx.crash(1);
+  }
+  if (parentPackageJson !== path.resolve("package.json")) {
+    console.error("Run this command from the root directory of a project.");
+    return await ctx.crash(1, "invalid filesystem data");
+  }
+  return readDeploymentEnvVar();
+}
+
+// Gates the new dev/prod flow behind an env var
+export function shouldUseNewFlow() {
+  return (process.env.CONVEX_NEW_FLOW ?? undefined) !== undefined;
+}
+
+// `spawnAsync` is the async version of Node's `spawnSync` (and `spawn`).
+//
+// By default, this returns the produced `stdout` and `stderror` and
+// an error if one was encountered (to mirror `spawnSync`).
+//
+// If `stdio` is set to `"inherit"`, pipes `stdout` and `stderror` (
+// pausing the spinner if one is running) and rejects the promise
+// on errors (to mirror `execFileSync`).
+export function spawnAsync(
+  ctx: Context,
+  command: string,
+  args: ReadonlyArray<string>
+): Promise<{
+  stdout: string;
+  stderr: string;
+  status: null | number;
+  error?: Error | undefined;
+}>;
+export function spawnAsync(
+  ctx: Context,
+  command: string,
+  args: ReadonlyArray<string>,
+  options: { stdio: "inherit" }
+): Promise<void>;
+export function spawnAsync(
+  ctx: Context,
+  command: string,
+  args: ReadonlyArray<string>,
+  options?: { stdio: "inherit" }
+) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args);
+    let stdout = "";
+    let stderr = "";
+
+    const pipeOutput = options?.stdio === "inherit";
+
+    if (pipeOutput) {
+      child.stdout.on("data", text =>
+        logMessage(ctx, text.toString("utf-8").trimEnd())
+      );
+      child.stderr.on("data", text =>
+        logError(ctx, text.toString("utf-8").trimEnd())
+      );
+    } else {
+      child.stdout.on("data", data => {
+        stdout += data.toString("utf-8");
+      });
+
+      child.stderr.on("data", data => {
+        stderr += data.toString("utf-8");
+      });
+    }
+
+    const completionListener = (code: number | null) => {
+      child.removeListener("error", errorListener);
+      const result = pipeOutput
+        ? { status: code }
+        : { stdout, stderr, status: code };
+      if (code !== 0) {
+        const argumentString =
+          args && args.length > 0 ? ` ${args.join(" ")}` : "";
+        const error = new Error(
+          `\`${command}${argumentString}\` exited with non-zero code: ${code}`
+        );
+        if (pipeOutput) {
+          reject({ ...result, error });
+        } else {
+          resolve({ ...result, error });
+        }
+      } else {
+        resolve(result);
+      }
+    };
+
+    const errorListener = (error: Error) => {
+      child.removeListener("exit", completionListener);
+      child.removeListener("close", completionListener);
+      if (pipeOutput) {
+        reject({ error, status: null });
+      } else {
+        resolve({ error, status: null });
+      }
+    };
+
+    if (pipeOutput) {
+      child.once("exit", completionListener);
+    } else {
+      child.once("close", completionListener);
+    }
+    child.once("error", errorListener);
+  });
 }

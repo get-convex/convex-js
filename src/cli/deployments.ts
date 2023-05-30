@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { readProjectConfig } from "./lib/config.js";
 import chalk from "chalk";
 import { bigBrainAPI } from "./lib/utils.js";
-import { oneoffContext } from "./lib/context.js";
+import { oneoffContext } from "../bundler/context.js";
 
 type Deployment = {
   id: number;

@@ -10,7 +10,7 @@ import {
   logFinishedStep,
   stopSpinner,
   logError,
-} from "./context.js";
+} from "../../bundler/context.js";
 import {
   poll,
   logAndHandleAxiosError,
@@ -59,7 +59,7 @@ export async function pushSchema(
     // Don't do anything.
     return {};
   }
-  const bundles = await bundleSchema(ctx.fs, schemaDir);
+  const bundles = await bundleSchema(ctx, schemaDir);
 
   changeSpinner(ctx, "Checking for index or schema changes...");
 
@@ -81,10 +81,7 @@ export async function pushSchema(
     deprecationCheckWarning(ctx, res);
     data = res.data;
   } catch (err) {
-    logFailure(
-      ctx,
-      chalk.red("Error: Unable to build run schema validation on", origin)
-    );
+    logFailure(ctx, `Error: Unable to run schema validation on ${origin}`);
     return await logAndHandleAxiosError(ctx, err);
   }
 
@@ -110,7 +107,7 @@ async function waitForReadySchema(
   const url = `${origin}/api/schema_state/${schemaId}`;
   const fetch = async () => {
     try {
-      return axios.get<SchemaStateResponse>(url, {
+      return await axios.get<SchemaStateResponse>(url, {
         headers: {
           Authorization: `Convex ${adminKey}`,
           "Convex-Client": `npm-cli-${version}`,
@@ -120,10 +117,7 @@ async function waitForReadySchema(
     } catch (err) {
       logFailure(
         ctx,
-        chalk.red(
-          "Error: Unable to build indexes and run schema validation on",
-          origin
-        )
+        `Error: Unable to build indexes and run schema validation on ${origin}`
       );
       return await logAndHandleAxiosError(ctx, err);
     }

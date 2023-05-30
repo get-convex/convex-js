@@ -58,14 +58,14 @@ test("Authenticate via valid static token", async () => {
 });
 
 // This happens when a user opens a page after their cached token expired
-test("Reauthenticate using new token without versioning", async () => {
-  await testRauthenticationSucceeds(undefined);
+test("Reauthenticate after token expiration without versioning", async () => {
+  await testRauthenticationOnInvalidTokenSucceeds(undefined);
 });
-test("Reauthenticate using new token with versioning", async () => {
-  await testRauthenticationSucceeds(0);
+test("Reauthenticate after token expiration with versioning", async () => {
+  await testRauthenticationOnInvalidTokenSucceeds(0);
 });
 
-async function testRauthenticationSucceeds(
+async function testRauthenticationOnInvalidTokenSucceeds(
   authErrorBaseVersion: number | undefined
 ) {
   await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
@@ -123,6 +123,54 @@ async function testRauthenticationSucceeds(
     expect(onAuthChange).toHaveBeenCalledWith(true);
   });
 }
+
+// This happens when a user opens a page and they cannot
+// fetch from a cache (say due to Prevent Cross Site tracking)
+test("Reauthenticate after token cache failure", async () => {
+  await withInMemoryWebSocket(async ({ address, receive, send }) => {
+    const client = testReactClient(address);
+
+    const token: string | null = null;
+    const fetchToken = async (args: { forceRefreshToken: boolean }) =>
+      args.forceRefreshToken
+        ? jwtEncode({ iat: 1234500, exp: 1244500 }, "secret")
+        : token;
+    const tokenFetcher = jest.fn(fetchToken);
+    const onAuthChange = jest.fn();
+    void client.setAuth(tokenFetcher, onAuthChange);
+
+    expect((await receive()).type).toEqual("Connect");
+    // The client authenticates after the token refetch
+    expect((await receive()).type).toEqual("Authenticate");
+    expect((await receive()).type).toEqual("ModifyQuerySet");
+
+    const querySetVersion = client.sync["remoteQuerySet"]["version"];
+
+    // Server accepts new token
+    send({
+      type: "Transition",
+      startVersion: querySetVersion,
+      endVersion: {
+        ...querySetVersion,
+        identity: querySetVersion.identity + 1,
+      },
+      modifications: [],
+    });
+
+    await waitForExpect(() => {
+      expect(onAuthChange).toHaveBeenCalledTimes(1);
+    });
+    await client.close();
+
+    expect(tokenFetcher).toHaveBeenNthCalledWith(1, {
+      forceRefreshToken: false,
+    });
+    expect(tokenFetcher).toHaveBeenNthCalledWith(2, {
+      forceRefreshToken: true,
+    });
+    expect(onAuthChange).toHaveBeenCalledWith(true);
+  });
+});
 
 // This is usually a misconfigured server rejecting any token
 test("Fail when tokens are always rejected without versioning", async () => {
@@ -192,6 +240,28 @@ async function testRauthenticationFails(
     );
   });
 }
+
+// This happens when "refresh token"s expired - auth provider client thinks
+// it's authed but it cannot fetch a token at all.
+test("Fail when tokens cannot be fetched", async () => {
+  await withInMemoryWebSocket(async ({ address, receive }) => {
+    const client = testReactClient(address);
+    const tokenFetcher = jest.fn(async () => null);
+    const onAuthChange = jest.fn();
+    void client.setAuth(tokenFetcher, onAuthChange);
+
+    expect((await receive()).type).toEqual("Connect");
+    expect((await receive()).type).toEqual("ModifyQuerySet");
+
+    await waitForExpect(() => {
+      expect(onAuthChange).toHaveBeenCalledTimes(1);
+    });
+    await client.close();
+
+    expect(onAuthChange).toHaveBeenCalledTimes(1);
+    expect(onAuthChange).toHaveBeenCalledWith(false);
+  });
+});
 
 test("Client is protected against token rejection race", async () => {
   await withInMemoryWebSocket(async ({ address, receive, send, close }) => {

@@ -13,10 +13,8 @@ import { reactCodegen } from "../codegen_templates/react.js";
 import { readmeCodegen } from "../codegen_templates/readme.js";
 import { serverCodegen } from "../codegen_templates/server.js";
 import { tsconfigCodegen } from "../codegen_templates/tsconfig.js";
-import { ProjectConfig } from "./config.js";
-import { Context, logMessage } from "./context.js";
+import { Context, logMessage, logOutput } from "../../bundler/context.js";
 import { typeCheckFunctionsInMode, TypeCheckMode } from "./typecheck.js";
-import { functionsDir } from "./utils.js";
 
 /**
  * Run prettier so we don't have to think about formatting!
@@ -34,8 +32,8 @@ function format(source: string, filetype: string): string {
  * Codegen output is generally ESM format, but in some Node zero-bundle
  * setups it's useful to use CommonJS format for JavaScript output.
  */
-function compileToCommonJS(source: string): string {
-  const { code } = esbuild.transformSync(source, {
+async function compileToCommonJS(source: string): Promise<string> {
+  const { code } = await esbuild.transform(source, {
     format: "cjs",
     target: "node14",
     minify: false,
@@ -56,18 +54,18 @@ function writeFile(
   const formattedSource = format(source, filetype);
   const dest = path.join(dir.tmpPath, filename);
   if (debug) {
-    logMessage(ctx, `# ${filename}`);
-    logMessage(ctx, formattedSource);
+    logOutput(ctx, `# ${filename}`);
+    logOutput(ctx, formattedSource);
     return;
   }
   if (dryRun) {
     if (ctx.fs.exists(dest)) {
       const fileText = ctx.fs.readUtf8File(dest);
       if (fileText !== formattedSource) {
-        logMessage(ctx, `Command would replace file: ${dest}`);
+        logOutput(ctx, `Command would replace file: ${dest}`);
       }
     } else {
-      logMessage(ctx, `Command would create file: ${dest}`);
+      logOutput(ctx, `Command would create file: ${dest}`);
     }
     return;
   }
@@ -79,7 +77,7 @@ function writeFile(
   nodeFs.writeUtf8File(dest, formattedSource);
 }
 
-function writeJsWithTypes(
+async function writeJsWithTypes(
   ctx: Context,
   name: string,
   content: GeneratedJsWithTypes,
@@ -93,12 +91,12 @@ function writeJsWithTypes(
   // default exports.
   writeFile(ctx, `${name}.d.ts`, content.DTS, codegenDir, dryRun, debug, quiet);
   if (content.JS) {
-    const js = commonjs ? compileToCommonJS(content.JS) : content.JS;
+    const js = commonjs ? await compileToCommonJS(content.JS) : content.JS;
     writeFile(ctx, `${name}.js`, js, codegenDir, dryRun, debug, quiet);
   }
 }
 
-function doServerCodegen(
+async function doServerCodegen(
   ctx: Context,
   codegenDir: TempDir,
   dryRun: boolean,
@@ -108,7 +106,7 @@ function doServerCodegen(
   commonjs = false
 ) {
   if (hasSchemaFile) {
-    writeJsWithTypes(
+    await writeJsWithTypes(
       ctx,
       "dataModel",
       dataModel,
@@ -119,7 +117,7 @@ function doServerCodegen(
       commonjs
     );
   } else {
-    writeJsWithTypes(
+    await writeJsWithTypes(
       ctx,
       "dataModel",
       dataModelWithoutSchema,
@@ -130,7 +128,7 @@ function doServerCodegen(
       commonjs
     );
   }
-  writeJsWithTypes(
+  await writeJsWithTypes(
     ctx,
     "server",
     serverCodegen(),
@@ -151,10 +149,10 @@ async function doApiCodegen(
   quiet = false,
   commonjs = false
 ) {
-  const modulePaths = (await entryPoints(ctx.fs, functionsDir, false)).map(
+  const modulePaths = (await entryPoints(ctx, functionsDir, false)).map(
     entryPoint => path.relative(functionsDir, entryPoint)
   );
-  writeJsWithTypes(
+  await writeJsWithTypes(
     ctx,
     "api",
     apiCodegen(modulePaths),
@@ -174,7 +172,7 @@ async function doReactCodegen(
   quiet = false,
   commonjs = false
 ) {
-  writeJsWithTypes(
+  await writeJsWithTypes(
     ctx,
     "react",
     reactCodegen(),
@@ -188,8 +186,7 @@ async function doReactCodegen(
 
 export async function doCodegen({
   ctx,
-  projectConfig,
-  configPath,
+  functionsDirectoryPath,
   typeCheckMode,
   dryRun = false,
   debug = false,
@@ -197,34 +194,31 @@ export async function doCodegen({
   commonjs = false,
 }: {
   ctx: Context;
-  projectConfig: ProjectConfig;
-  configPath: string;
+  functionsDirectoryPath: string;
   typeCheckMode: TypeCheckMode;
   dryRun?: boolean;
   debug?: boolean;
   quiet?: boolean;
   commonjs?: boolean;
 }): Promise<void> {
-  const funcDir = functionsDir(configPath, projectConfig);
-
   // Delete the old _generated.ts because v0.1.2 used to put the react generated
   // code there
-  const legacyCodegenPath = path.join(funcDir, "_generated.ts");
+  const legacyCodegenPath = path.join(functionsDirectoryPath, "_generated.ts");
   if (ctx.fs.exists(legacyCodegenPath)) {
     if (!dryRun) {
-      console.log(`Deleting legacy codegen file: ${legacyCodegenPath}}`);
+      console.error(`Deleting legacy codegen file: ${legacyCodegenPath}}`);
       ctx.fs.unlink(legacyCodegenPath);
     } else {
-      console.log(
+      console.error(
         `Command would delete legacy codegen file: ${legacyCodegenPath}}`
       );
     }
   }
 
   // Create the function dir if it doesn't already exist.
-  ctx.fs.mkdir(funcDir, { allowExisting: true });
+  ctx.fs.mkdir(functionsDirectoryPath, { allowExisting: true });
 
-  const schemaPath = path.join(funcDir, "schema.ts");
+  const schemaPath = path.join(functionsDirectoryPath, "schema.ts");
   const hasSchemaFile = ctx.fs.exists(schemaPath);
 
   // Recreate the codegen directory in a temp location
@@ -245,7 +239,7 @@ export async function doCodegen({
     // (where -> means "depends on")
 
     // 1. Use the schema.ts file to create the server codegen
-    doServerCodegen(
+    await doServerCodegen(
       ctx,
       tempCodegenDir,
       dryRun,
@@ -256,19 +250,26 @@ export async function doCodegen({
     );
 
     // 2. Generate API
-    await doApiCodegen(ctx, funcDir, tempCodegenDir, dryRun, debug, quiet);
+    await doApiCodegen(
+      ctx,
+      functionsDirectoryPath,
+      tempCodegenDir,
+      dryRun,
+      debug,
+      quiet
+    );
 
     // 3. Generate the React code
     await doReactCodegen(ctx, tempCodegenDir, dryRun, debug, quiet, commonjs);
 
     // Replace the codegen directory with its new contents
     if (!debug && !dryRun) {
-      const codegenDir = path.join(funcDir, "_generated");
+      const codegenDir = path.join(functionsDirectoryPath, "_generated");
       syncFromTemp(ctx, tempCodegenDir, codegenDir, true);
     }
 
     // Generated code is updated, typecheck the query and mutation functions.
-    await typeCheckFunctionsInMode(ctx, typeCheckMode, funcDir);
+    await typeCheckFunctionsInMode(ctx, typeCheckMode, functionsDirectoryPath);
   });
 }
 
@@ -336,7 +337,7 @@ function syncFromTemp(
 // automatically written again in case developers have modified them.
 export async function doInitCodegen(
   ctx: Context,
-  functionsDir: string,
+  functionsDirectoryPath: string,
   quiet = false,
   dryRun = false,
   debug = false
@@ -344,9 +345,10 @@ export async function doInitCodegen(
   await mkdtemp("convex", async tempFunctionsDir => {
     doReadmeCodegen(ctx, tempFunctionsDir, dryRun, debug, quiet);
     doTsconfigCodegen(ctx, tempFunctionsDir, dryRun, debug, quiet);
-    syncFromTemp(ctx, tempFunctionsDir, functionsDir, false);
+    syncFromTemp(ctx, tempFunctionsDir, functionsDirectoryPath, false);
   });
 }
+
 function doReadmeCodegen(
   ctx: Context,
   tempFunctionsDir: TempDir,
@@ -365,6 +367,7 @@ function doReadmeCodegen(
     "markdown"
   );
 }
+
 function doTsconfigCodegen(
   ctx: Context,
   tempFunctionsDir: TempDir,

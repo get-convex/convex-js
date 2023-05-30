@@ -1,7 +1,7 @@
 {
   "name": "convex",
   "description": "Client for the Convex Cloud",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "author": "Convex, Inc. <team@convex.dev>",
   "homepage": "https://convex.dev",
   "main": "./dist/cjs/index.js",
@@ -15,52 +15,62 @@
       "require": "./dist/cjs/index.js"
     },
     "./schema": {
-      "types": "./dist/types/schema/schema.d.ts",
+      "types": "./dist/types/schema/index.d.ts",
+      "import": "./dist/esm/schema/index.js",
+      "require": "./dist/cjs/schema/index.js"
+    },
+    "./schema-internal": {
+      "types": "./dist/internal-types/schema/index.d.ts",
       "import": "./dist/esm/schema/index.js",
       "require": "./dist/cjs/schema/index.js"
     },
     "./server": {
-      "types": "./dist/types/server/server.d.ts",
+      "types": "./dist/types/server/index.d.ts",
       "import": "./dist/esm/server/index.js",
       "require": "./dist/cjs/server/index.js"
     },
     "./server-internal": {
-      "types": "./dist/types/server/server-internal.d.ts",
+      "types": "./dist/internal-types/server/index.d.ts",
       "import": "./dist/esm/server/index.js",
       "require": "./dist/cjs/server/index.js"
     },
     "./react": {
-      "types": "./dist/types/react/react.d.ts",
+      "types": "./dist/types/react/index.d.ts",
       "import": "./dist/esm/react/index.js",
       "require": "./dist/cjs/react/index.js"
     },
     "./react-internal": {
-      "types": "./dist/types/react/react-internal.d.ts",
+      "types": "./dist/internal-types/react/index.d.ts",
       "import": "./dist/esm/react/index.js",
       "require": "./dist/cjs/react/index.js"
     },
     "./react-auth0": {
-      "types": "./dist/types/react-auth0/react-auth0.d.ts",
+      "types": "./dist/types/react-auth0/index.d.ts",
       "import": "./dist/esm/react-auth0/index.js",
       "require": "./dist/cjs/react-auth0/index.js"
     },
     "./react-clerk": {
-      "types": "./dist/types/react-clerk/react-clerk.d.ts",
+      "types": "./dist/types/react-clerk/index.d.ts",
       "import": "./dist/esm/react-clerk/index.js",
       "require": "./dist/cjs/react-clerk/index.js"
     },
     "./browser": {
-      "types": "./dist/types/browser/browser.d.ts",
+      "types": "./dist/types/browser/index.d.ts",
       "import": "./dist/esm/browser/index.js",
       "require": "./dist/cjs/browser/index.js"
     },
     "./browser-internal": {
-      "types": "./dist/types/browser/browser-internal.d.ts",
+      "types": "./dist/internal-types/browser/index.d.ts",
       "import": "./dist/esm/browser/index.js",
       "require": "./dist/cjs/browser/index.js"
     },
     "./values": {
-      "types": "./dist/types/values/values.d.ts",
+      "types": "./dist/types/values/index.d.ts",
+      "import": "./dist/esm/values/index.js",
+      "require": "./dist/cjs/values/index.js"
+    },
+    "./values-internal": {
+      "types": "./dist/internal-types/values/index.d.ts",
       "import": "./dist/esm/values/index.js",
       "require": "./dist/cjs/values/index.js"
     },
@@ -87,34 +97,40 @@
         "./dist/types/index.d.ts"
       ],
       "schema": [
-        "./dist/types/schema/schema.d.ts"
+        "./dist/types/schema/index.d.ts"
+      ],
+      "schema-internal": [
+        "./dist/internal-types/schema/index.d.ts"
       ],
       "server": [
-        "./dist/types/server/server.d.ts"
+        "./dist/types/server/index.d.ts"
       ],
       "server-internal": [
-        "./dist/types/server/server-internal.d.ts"
+        "./dist/internal-types/server/index.d.ts"
       ],
       "react": [
-        "./dist/types/react/react.d.ts"
+        "./dist/types/react/index.d.ts"
       ],
       "react-internal": [
-        "./dist/types/react/react-internal.d.ts"
+        "./dist/internal-types/react/index.d.ts"
       ],
       "react-auth0": [
-        "./dist/types/react-auth0/react-auth0.d.ts"
+        "./dist/types/react-auth0/index.d.ts"
       ],
       "react-clerk": [
-        "./dist/types/react-clerk/react-clerk.d.ts"
+        "./dist/types/react-clerk/index.d.ts"
       ],
       "browser": [
-        "./dist/types/browser/browser.d.ts"
+        "./dist/types/browser/internal.d.ts"
       ],
       "browser-internal": [
-        "./dist/types/browser/browser-internal.d.ts"
+        "./dist/internal-types/browser/index.d.ts"
       ],
       "values": [
-        "./dist/types/values/values.d.ts"
+        "./dist/types/values/index.d.ts"
+      ],
+      "values-internal": [
+        "./dist/internal-types/values/index.d.ts"
       ],
       "common": [
         "./dist/esm/common/index.d.ts"
@@ -123,7 +139,7 @@
         "./dist/types/environment/index.d.ts"
       ],
       "api": [
-        "./dist/types/api/api.d.ts"
+        "./dist/types/api/index.d.ts"
       ]
     }
   },
@@ -132,7 +148,7 @@
   },
   "scripts": {
     "build": "npm run clean && shx mkdir -p dist/ && python3 scripts/build.py 2>&1",
-    "build-types": "tsc && tsc -p src/cli/tsconfig.json",
+    "build-types": "tsc && tsc --stripInternal false --outDir ./dist/internal-types && tsc -p src/cli/tsconfig.json",
     "build-esm": "shx mkdir -p dist/esm && echo '{\"type\": \"module\"}' > dist/esm/package.json && node scripts/build.cjs esm && npm run build-environment",
     "build-cjs": "shx mkdir -p dist/cjs && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json && node scripts/build.cjs cjs",
     "build-environment": "shx mkdir -p dist/types/environment dist/types/esm && shx cp src/environment/index.d.ts dist/types/environment && shx cp src/environment/index.d.ts dist/esm/environment",
@@ -242,11 +258,11 @@
     "shx": "~0.3.4",
     "strip-ansi": "^7.0.1",
     "ts-jest": "^27.1.3",
-    "typedoc": "^0.23.21",
+    "typedoc": "^0.24.6",
     "typescript": "~4.8.4",
     "utf-8-validate": "^5.0.10",
     "ws": "^8.11.0",
-    "zod": "~3.19.1",
+    "zod": "^3.21.4",
     "jwt-encode": "~1.0.1",
     "@testing-library/react": "~12.1.2",
     "@types/jwt-encode": "~1.0.0",

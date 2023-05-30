@@ -6,7 +6,7 @@ import {
   NamedSearchIndex,
   SearchIndexNames,
 } from "./data_model.js";
-import { Expression, FilterBuilder } from "./filter_builder.js";
+import { ExpressionOrValue, FilterBuilder } from "./filter_builder.js";
 import { IndexRange, IndexRangeBuilder } from "./index_range_builder.js";
 import { PaginationResult, PaginationOptions } from "./pagination.js";
 import { SearchFilter, SearchFilterBuilder } from "./search_filter_builder.js";
@@ -141,16 +141,6 @@ export interface QueryInitializer<TableInfo extends GenericTableInfo>
 export interface Query<TableInfo extends GenericTableInfo>
   extends OrderedQuery<TableInfo> {
   /**
-   * Filter the query output, returning only the values for which `predicate` evaluates to true.
-   *
-   * @param predicate - An {@link Expression} constructed with the supplied {@link FilterBuilder} that specifies which documents to keep.
-   * @returns - A new {@link Query} with the given filter predicate applied.
-   */
-  filter(
-    predicate: (q: FilterBuilder<TableInfo>) => Expression<boolean>
-  ): Query<TableInfo>;
-
-  /**
    * Define the order of the query output.
    *
    * Use `"asc"` for an ascending order and `"desc"` for a descending order. If not specified, the order defaults to ascending.
@@ -173,8 +163,8 @@ export interface OrderedQuery<TableInfo extends GenericTableInfo>
    * @returns - A new {@link OrderedQuery} with the given filter predicate applied.
    */
   filter(
-    predicate: (q: FilterBuilder<TableInfo>) => Expression<boolean>
-  ): OrderedQuery<TableInfo>;
+    predicate: (q: FilterBuilder<TableInfo>) => ExpressionOrValue<boolean>
+  ): this;
 
   /**
    * Take only the first `n` results from the pipeline so far.
@@ -184,7 +174,7 @@ export interface OrderedQuery<TableInfo extends GenericTableInfo>
    *
    * @internal
    */
-  limit(n: number): OrderedQuery<TableInfo>;
+  limit(n: number): this;
 
   /**
    * Load a page of `n` results and obtain a {@link Cursor} for loading more.

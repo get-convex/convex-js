@@ -3,16 +3,29 @@ import chalk from "chalk";
 import { Command, Option } from "commander";
 import path from "path";
 import { performance } from "perf_hooks";
-import { getDevDeploymentMaybeThrows, getUrlAndAdminKey } from "./lib/api";
-import { ProjectConfig, readProjectConfig } from "./lib/config";
+import {
+  deploymentName,
+  DeploymentType,
+  getDevDeploymentMaybeThrows,
+  getUrlAndAdminKeyByDeploymentType,
+  getUrlAndAdminKeyFromSlug,
+} from "./lib/api";
+import {
+  ProjectConfig,
+  enforceDeprecatedConfigField,
+  readProjectConfig,
+  upgradeOldAuthInfoToAuthConfig,
+} from "./lib/config";
 import {
   Context,
+  logError,
   logFailure,
   logFinishedStep,
+  logMessage,
   oneoffContext,
   showSpinner,
   stopSpinner,
-} from "./lib/context";
+} from "../bundler/context";
 import {
   askAboutWritingToEnv,
   logConfiguration,
@@ -30,10 +43,15 @@ import {
   hasProjects,
   hasTeam,
   isInExistingProject as isInExistingProject,
+  shouldUseNewFlow,
+  getConfiguredDeployment,
+  functionsDir,
 } from "./lib/utils";
 import { Crash, WatchContext, Watcher } from "./lib/watch";
 import { init } from "./lib/init";
 import { reinit } from "./lib/reinit";
+import { writeDeploymentEnvVar } from "./lib/deployment";
+import { writeProjectConfig } from "./lib/config";
 
 export const dev = new Command("dev")
   .summary("Develop against a dev deployment, watching for changes")
@@ -50,7 +68,9 @@ export const dev = new Command("dev")
       .choices(["enable", "try", "disable"])
       .default("try")
   )
+  // TODO: deprecate
   .option("--save-url", "Save deployment URLs to .env and .env.local")
+  // TODO: deprecate
   .option("--no-save-url", "Do not save deployment URLs to .env and .env.local")
   .addOption(
     new Option("--codegen <mode>", "Regenerate code in `convex/_generated/`")
@@ -89,6 +109,36 @@ export const dev = new Command("dev")
   .action(async cmdOptions => {
     const ctx = oneoffContext;
 
+    if (!cmdOptions.url || !cmdOptions.adminKey) {
+      if (!(await checkAuthorization(ctx, false))) {
+        await performLogin(ctx, cmdOptions);
+      }
+    }
+
+    const chosenConfiguration: "new" | "existing" | null =
+      cmdOptions.configure === "ask" ? null : cmdOptions.configure ?? null;
+
+    if (shouldUseNewFlow()) {
+      const credentials = await deploymentCredentialsOrConfigure(
+        ctx,
+        chosenConfiguration,
+        cmdOptions
+      );
+      await watchAndPush(
+        ctx,
+        {
+          ...credentials,
+          verbose: !!cmdOptions.verbose,
+          dryRun: false,
+          typecheck: cmdOptions.typecheck,
+          debug: false,
+          codegen: cmdOptions.codegen === "enable",
+        },
+        cmdOptions
+      );
+      return;
+    }
+
     const saveUrl =
       cmdOptions.saveUrl === true
         ? "yes"
@@ -96,13 +146,7 @@ export const dev = new Command("dev")
         ? "no"
         : "ask";
 
-    if (!cmdOptions.url || !cmdOptions.adminKey) {
-      if (!(await checkAuthorization(ctx))) {
-        await performLogin(ctx, cmdOptions);
-      }
-    }
-
-    let projectConfig: ProjectConfig;
+    let projectConfig: ProjectConfig | null = null;
     let options: PushOptions;
 
     const promptForDevDeployment = (isInit: boolean) => async () => {
@@ -124,8 +168,6 @@ export const dev = new Command("dev")
       };
     };
 
-    const chosenConfiguration: "new" | "existing" =
-      cmdOptions.configure === "ask" ? null : cmdOptions.configure;
     const { team, project } = cmdOptions;
 
     if (!(await isInExistingProject(ctx))) {
@@ -134,6 +176,7 @@ export const dev = new Command("dev")
         case "new":
           await init(
             ctx,
+            "prod",
             { team, project },
             saveUrl,
             promptForDevDeployment(true)
@@ -142,6 +185,7 @@ export const dev = new Command("dev")
         case "existing":
           await reinit(
             ctx,
+            "prod",
             { team, project },
             saveUrl,
             promptForDevDeployment(false)
@@ -168,6 +212,7 @@ export const dev = new Command("dev")
           case "new":
             await init(
               ctx,
+              "prod",
               { team, project },
               saveUrl,
               promptForDevDeployment(true),
@@ -177,6 +222,7 @@ export const dev = new Command("dev")
           case "existing":
             await reinit(
               ctx,
+              "prod",
               { team, project },
               saveUrl,
               promptForDevDeployment(false),
@@ -190,17 +236,119 @@ export const dev = new Command("dev")
       }
     }
 
-    await watchAndPush(ctx, projectConfig!, options!, cmdOptions);
+    await watchAndPush(ctx, options!, cmdOptions, projectConfig!);
   });
 
-async function watchAndPush(
+type DeploymentCredentials = {
+  url: string;
+  adminKey: string;
+};
+
+async function deploymentCredentialsOrConfigure(
+  ctx: Context,
+  chosenConfiguration: "new" | "existing" | null,
+  cmdOptions: {
+    prod: boolean;
+    team: string | null;
+    project: string | null;
+    url?: string | undefined;
+    adminKey?: string | undefined;
+  }
+): Promise<DeploymentCredentials> {
+  const { url, adminKey } = cmdOptions;
+  if (url !== undefined && adminKey !== undefined) {
+    return { url, adminKey };
+  }
+  const deploymentType = cmdOptions.prod ? "prod" : "dev";
+  const configuredDeployment =
+    chosenConfiguration === null
+      ? await getConfiguredDeploymentOrUpgrade(ctx, deploymentType)
+      : null;
+  // No configured deployment NOR existing config
+  if (configuredDeployment === null) {
+    const choice = chosenConfiguration ?? (await askToConfigure(ctx));
+    return await initOrReinit(ctx, choice, deploymentType, cmdOptions);
+  }
+  // Existing config but user doesn't have access to it
+  if ("error" in configuredDeployment) {
+    const projectConfig = (await readProjectConfig(ctx)).projectConfig;
+    const choice = await askToReconfigure(
+      ctx,
+      projectConfig,
+      configuredDeployment.error
+    );
+    return initOrReinit(ctx, choice, deploymentType, cmdOptions);
+  }
+  const { deploymentName } = configuredDeployment;
+  const adminKeyAndUrlForConfiguredDeployment = await getUrlAndAdminKeyFromSlug(
+    ctx,
+    deploymentName,
+    deploymentType
+  );
+  // Configured deployment and user has access
+  if (!("error" in adminKeyAndUrlForConfiguredDeployment)) {
+    return adminKeyAndUrlForConfiguredDeployment;
+  }
+  await checkForDeploymentTypeError(
+    ctx,
+    adminKeyAndUrlForConfiguredDeployment.error
+  );
+
+  // Configured deployment and user doesn't has access to it
+  const choice =
+    chosenConfiguration ?? (await askToReconfigureNew(ctx, deploymentName));
+  return initOrReinit(ctx, choice, deploymentType, cmdOptions);
+}
+
+async function checkForDeploymentTypeError(ctx: Context, error: unknown) {
+  if ((error as any).response?.data?.code === "DeploymentTypeMismatch") {
+    logFailure(
+      ctx,
+      "Use `npx convex deploy` to push changes to your production deployment configured in CONVEX_DEPLOYMENT"
+    );
+    logError(ctx, chalk.red((error as any).response.data.message));
+    await ctx.crash(1, "invalid filesystem data", error);
+  }
+}
+
+async function getConfiguredDeploymentOrUpgrade(
+  ctx: Context,
+  deploymentType: DeploymentType
+) {
+  const deploymentName = await getConfiguredDeployment(ctx);
+  if (deploymentName !== null) {
+    return { deploymentName };
+  }
+  return await upgradeOldConfigToDeploymentVar(ctx, deploymentType);
+}
+
+async function initOrReinit(
+  ctx: Context,
+  choice: "new" | "existing",
+  deploymentType: DeploymentType,
+  cmdOptions: { team: string | null; project: string | null }
+): Promise<DeploymentCredentials> {
+  switch (choice) {
+    case "new":
+      return (await init(ctx, deploymentType, cmdOptions))!;
+    case "existing": {
+      const credentials = (await reinit(ctx, deploymentType, cmdOptions))!;
+      return credentials;
+    }
+    default: {
+      return choice;
+    }
+  }
+}
+
+export async function watchAndPush(
   outerCtx: Context,
-  { project: projectSlug, team: teamSlug }: ProjectConfig,
   options: PushOptions,
   cmdOptions: {
     once: boolean;
     traceEvents: boolean;
-  }
+  },
+  originalProjectConfig?: ProjectConfig
 ) {
   let watcher: Watcher | undefined;
   let numFailures = 0;
@@ -210,15 +358,17 @@ async function watchAndPush(
     const start = performance.now();
     const ctx = new WatchContext(cmdOptions.traceEvents);
     showSpinner(ctx, "Preparing Convex functions...");
-    // If the project or team slugs change, exit because that's the
-    // simplest thing to do.
-    const config = await readProjectConfig(ctx);
-    if (
-      projectSlug !== config.projectConfig.project ||
-      teamSlug !== config.projectConfig.team
-    ) {
-      logFailure(ctx, "Detected a change in your `convex.json`. Exiting...");
-      return await outerCtx.crash(1, "invalid filesystem data");
+    if (originalProjectConfig !== undefined) {
+      // If the project or team slugs change, exit because that's the
+      // simplest thing to do.
+      const config = await readProjectConfig(ctx);
+      if (
+        originalProjectConfig.project !== config.projectConfig.project ||
+        originalProjectConfig.team !== config.projectConfig.team
+      ) {
+        logFailure(ctx, "Detected a change in your `convex.json`. Exiting...");
+        return await outerCtx.crash(1, "invalid filesystem data");
+      }
     }
 
     try {
@@ -234,13 +384,14 @@ async function watchAndPush(
     } catch (e: any) {
       // Crash the app on unexpected errors.
       if (!(e instanceof Crash) || !e.errorType || e.errorType === "fatal") {
+        // eslint-disable-next-line no-restricted-syntax
         throw e;
       }
       // Retry after an exponential backoff if we hit a transient error.
       if (e.errorType === "transient") {
         const delay = nextBackoff(numFailures);
         numFailures += 1;
-        console.log(
+        console.error(
           chalk.yellow(
             `Failed due to network error, retrying in ${formatDuration(
               delay
@@ -265,7 +416,7 @@ async function watchAndPush(
     }
     const observations = ctx.fs.finalize();
     if (observations === "invalidated") {
-      console.log("Filesystem changed during push, retrying...");
+      console.error("Filesystem changed during push, retrying...");
       continue;
     }
     // Initialize the watcher if we haven't done it already. Chokidar expects to have a
@@ -284,7 +435,7 @@ async function watchAndPush(
       await watcher.waitForEvent();
       for (const event of watcher.drainEvents()) {
         if (cmdOptions.traceEvents) {
-          console.log(
+          console.error(
             "Processing",
             event.name,
             path.relative("", event.absPath)
@@ -294,7 +445,7 @@ async function watchAndPush(
         if (result.overlaps) {
           const relPath = path.relative("", event.absPath);
           if (cmdOptions.traceEvents) {
-            console.log(`${relPath} ${result.reason}, rebuilding...`);
+            console.error(`${relPath} ${result.reason}, rebuilding...`);
           }
           anyChanges = true;
           break;
@@ -314,7 +465,7 @@ async function watchAndPush(
       }
       const remaining = deadline - now;
       if (cmdOptions.traceEvents) {
-        console.log(`Waiting for ${formatDuration(remaining)} to quiesce...`);
+        console.error(`Waiting for ${formatDuration(remaining)} to quiesce...`);
       }
       const remainingWait = new Promise<"timeout">(resolve =>
         setTimeout(() => resolve("timeout"), deadline - now)
@@ -329,7 +480,7 @@ async function watchAndPush(
           // Delay another `quiescenceDelay` since we had an overlapping event.
           if (result.overlaps) {
             if (cmdOptions.traceEvents) {
-              console.log(
+              console.error(
                 `Received an overlapping event at ${event.absPath}, delaying push.`
               );
             }
@@ -342,6 +493,59 @@ async function watchAndPush(
       }
     }
   }
+}
+
+async function upgradeOldConfigToDeploymentVar(
+  ctx: Context,
+  deploymentType: DeploymentType
+): Promise<{ deploymentName: string } | { error: unknown } | null> {
+  const { configPath, projectConfig } = await readProjectConfig(ctx);
+  const { team, project } = projectConfig;
+  if (typeof team !== "string" || typeof project !== "string") {
+    // The config is not a valid old config, proceed to init/reinit
+    return null;
+  }
+  let devDeploymentName;
+  try {
+    const { deploymentName } =
+      deploymentType === "prod"
+        ? // If we're upgrading from an old config "prod" is guaranteed to exist
+          await getUrlAndAdminKeyByDeploymentType(
+            ctx,
+            project,
+            team,
+            deploymentType
+          )
+        : // But "dev" is not, this call provisions it on demand
+          await getDevDeploymentMaybeThrows(ctx, {
+            projectSlug: project,
+            teamSlug: team,
+          });
+    devDeploymentName = deploymentName!;
+  } catch (error) {
+    // Could not retrieve the deployment name using the old config, proceed to reconfigure
+    return { error };
+  }
+  await writeDeploymentEnvVar(ctx, deploymentType, {
+    team,
+    project,
+    deploymentName: devDeploymentName,
+  });
+  logMessage(
+    ctx,
+    chalk.green(
+      `Saved the ${deploymentType} deployment name as CONVEX_DEPLOYMENT to .env.local`
+    )
+  );
+  const projectConfigWithoutAuthInfo = await upgradeOldAuthInfoToAuthConfig(
+    ctx,
+    projectConfig,
+    functionsDir(configPath, projectConfig)
+  );
+  await writeProjectConfig(ctx, projectConfigWithoutAuthInfo, {
+    deleteIfAllDefault: true,
+  });
+  return { deploymentName: devDeploymentName };
 }
 
 async function askToConfigure(ctx: Context): Promise<"new" | "existing"> {
@@ -365,7 +569,12 @@ async function askToReconfigure(
   projectConfig: ProjectConfig,
   error: unknown
 ): Promise<"new" | "existing"> {
-  const { team, project } = projectConfig;
+  const team = await enforceDeprecatedConfigField(ctx, projectConfig, "team");
+  const project = await enforceDeprecatedConfigField(
+    ctx,
+    projectConfig,
+    "project"
+  );
   const [isExistingTeam, existingProject, hasAnyProjects] = await Promise.all([
     await hasTeam(ctx, team),
     await hasProject(ctx, team, project),
@@ -399,16 +608,46 @@ async function askToReconfigure(
         type: "confirm",
         name: "confirmed",
         message: `Create a new project?`,
-        default: "new",
-        choices: [
-          { name: "a new project", value: "new" },
-          { name: "an existing project", value: "existing" },
-        ],
+        default: true,
       },
     ]);
     if (!confirmed) {
       console.error(
         "Run `npx convex dev` in a directory with a valid convex.json."
+      );
+      return await ctx.crash(1, "invalid filesystem data");
+    }
+    return "new";
+  }
+
+  return await promptToReconfigure();
+}
+
+async function askToReconfigureNew(
+  ctx: Context,
+  configuredDeploymentName: deploymentName
+): Promise<"new" | "existing"> {
+  logFailure(
+    ctx,
+    `You don't have access to the project with deployment ${chalk.bold(
+      configuredDeploymentName
+    )}, as configured in ${chalk.bold("CONVEX_DEPLOYMENT")}`
+  );
+
+  const hasAnyProjects = await hasProjects(ctx);
+
+  if (!hasAnyProjects) {
+    const { confirmed } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "confirmed",
+        message: `Configure a new project?`,
+        default: true,
+      },
+    ]);
+    if (!confirmed) {
+      console.error(
+        "Run `npx convex dev` in a directory with a valid CONVEX_DEPLOYMENT set"
       );
       return await ctx.crash(1, "invalid filesystem data");
     }
@@ -439,8 +678,16 @@ async function getDevDeploymentOptionsMaybeThrows(
   projectConfig: ProjectConfig,
   cmdOptions: DevDeploymentCmdOptions
 ): Promise<PushOptions> {
-  const projectSlug = projectConfig.project;
-  const teamSlug = projectConfig.team;
+  const teamSlug = await enforceDeprecatedConfigField(
+    ctx,
+    projectConfig,
+    "team"
+  );
+  const projectSlug = await enforceDeprecatedConfigField(
+    ctx,
+    projectConfig,
+    "project"
+  );
 
   let deployment: {
     url: string;
@@ -448,7 +695,12 @@ async function getDevDeploymentOptionsMaybeThrows(
   };
   if (!cmdOptions.url || !cmdOptions.adminKey) {
     if (cmdOptions.prod) {
-      deployment = await getUrlAndAdminKey(ctx, projectSlug, teamSlug, "prod");
+      deployment = await getUrlAndAdminKeyByDeploymentType(
+        ctx,
+        projectSlug,
+        teamSlug,
+        "prod"
+      );
       console.error("Found deployment ready");
     } else {
       deployment = await getDevDeploymentMaybeThrows(ctx, {

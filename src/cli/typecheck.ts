@@ -3,7 +3,7 @@ import { functionsDir, ensureHasConvexDependency } from "./lib/utils";
 import { Command } from "commander";
 import { readConfig } from "./lib/config";
 import { typeCheckFunctions } from "./lib/typecheck";
-import { oneoffContext } from "./lib/context";
+import { oneoffContext } from "../bundler/context";
 
 // Experimental (it's going to fail sometimes) TypeScript type checking.
 // Includes a separate command to help users debug their TypeScript configs.

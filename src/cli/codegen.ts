@@ -1,9 +1,9 @@
 import { Command, Option } from "commander";
-import { readProjectConfig } from "./lib/config.js";
 import chalk from "chalk";
-import { functionsDir, ensureHasConvexDependency } from "./lib/utils.js";
+import { ensureHasConvexDependency } from "./lib/utils.js";
 import { doInitCodegen, doCodegen } from "./lib/codegen";
-import { oneoffContext } from "./lib/context.js";
+import { oneoffContext } from "../bundler/context.js";
+import { getFunctionsDirectoryPath } from "./lib/config.js";
 
 export const codegen = new Command("codegen")
   .summary("Generate backend type definitions")
@@ -36,15 +36,15 @@ export const codegen = new Command("codegen")
   )
   .action(async options => {
     const ctx = oneoffContext;
-    const { projectConfig, configPath } = await readProjectConfig(ctx);
+    const functionsDirectoryPath = await getFunctionsDirectoryPath(ctx);
+
     // This also ensures the current directory is the project root.
     await ensureHasConvexDependency(ctx, "codegen");
 
     if (options.init) {
       await doInitCodegen(
         ctx,
-        functionsDir(configPath, projectConfig),
-        false,
+        functionsDirectoryPath,
         options.dryRun,
         options.debug
       );
@@ -56,12 +56,10 @@ export const codegen = new Command("codegen")
 
     await doCodegen({
       ctx,
-      projectConfig,
-      configPath,
+      functionsDirectoryPath: functionsDirectoryPath,
       typeCheckMode: options.typecheck,
       dryRun: options.dryRun,
       debug: options.debug,
       commonjs: options.commonjs,
     });
-    chalk.green("Codegen finished.");
   });

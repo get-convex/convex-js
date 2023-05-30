@@ -202,9 +202,15 @@ type CronString = string;
  */
 export type CronJobsForAPI<API extends GenericAPI> = () => Crons<API>;
 
+function validateIntervalNumber(n: number) {
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error("Interval must be an integer greater than 0");
+  }
+}
+
 function validatedDayOfMonth(n: number) {
-  if (typeof n !== "number" || isNaN(n) || n < 1 || n > 31) {
-    throw new Error("Day of month must be a number from 1 to 31");
+  if (!Number.isInteger(n) || n < 1 || n > 31) {
+    throw new Error("Day of month must be an integer from 1 to 31");
   }
   return n;
 }
@@ -217,15 +223,15 @@ function validatedDayOfWeek(s: string) {
 }
 
 function validatedHourOfDay(n: number) {
-  if (typeof n !== "number" || isNaN(n) || n < 0 || n > 23) {
-    throw new Error("Hour of day must be a number from 0 to 23");
+  if (!Number.isInteger(n) || n < 0 || n > 23) {
+    throw new Error("Hour of day must be an integer from 0 to 23");
   }
   return n;
 }
 
 function validatedMinuteOfHour(n: number) {
-  if (typeof n !== "number" || isNaN(n) || n < 0 || n > 59) {
-    throw new Error("Minute of hour must be a number from 0 to 59");
+  if (!Number.isInteger(n) || n < 0 || n > 59) {
+    throw new Error("Minute of hour must be an integer from 0 to 59");
   }
   return n;
 }
@@ -302,6 +308,13 @@ export class Crons<API extends GenericAPI> {
     const total = hasSeconds + hasMinutes + hasHours;
     if (total !== 1) {
       throw new Error("Must specify one of seconds, minutes, or hours");
+    }
+    if (hasSeconds) {
+      validateIntervalNumber(schedule.seconds!);
+    } else if (hasMinutes) {
+      validateIntervalNumber(schedule.minutes!);
+    } else if (hasHours) {
+      validateIntervalNumber(schedule.hours!);
     }
     this.schedule(
       cronIdentifier,

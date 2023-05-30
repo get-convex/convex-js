@@ -1,8 +1,14 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { ProjectConfig, readProjectConfig } from "./lib/config.js";
+import {
+  ProjectConfig,
+  enforceDeprecatedConfigField,
+  readProjectConfig,
+} from "./lib/config.js";
 import open from "open";
-import { Context, oneoffContext } from "./lib/context.js";
+import { Context, oneoffContext } from "../bundler/context.js";
+import { fetchTeamAndProject } from "./lib/api.js";
+import { getConfiguredDeploymentOrCrashIfNoConfig } from "./lib/utils.js";
 
 export const dashboard = new Command("dashboard")
   .description("Open the dashboard in the browser")
@@ -12,29 +18,50 @@ export const dashboard = new Command("dashboard")
   )
   .action(async options => {
     const ctx = oneoffContext;
-    const loginUrl = await dashboardUrl(ctx);
+    const loginUrl = await dashboardUrlForConfiguredDeployment(ctx);
 
     if (options.open) {
-      console.log(chalk.gray(`Opening ${loginUrl} in the default browser...`));
+      console.error(
+        chalk.gray(`Opening ${loginUrl} in the default browser...`)
+      );
       await open(loginUrl);
     } else {
       console.log(loginUrl);
     }
   });
 
-export async function dashboardUrl(
-  ctx: Context,
-  includeDeployment = true
+async function dashboardUrlForConfiguredDeployment(
+  ctx: Context
 ): Promise<string> {
+  const configuredDeployment = await getConfiguredDeploymentOrCrashIfNoConfig(
+    ctx
+  );
+  if (configuredDeployment !== null) {
+    const { team, project } = await fetchTeamAndProject(
+      ctx,
+      configuredDeployment
+    );
+    return dashboardUrl(team, project, configuredDeployment);
+  }
   const { projectConfig } = await readProjectConfig(ctx);
-  return dashboardUrlForConfig(projectConfig, includeDeployment);
+  return dashboardUrlForConfig(ctx, projectConfig);
 }
 
 export async function dashboardUrlForConfig(
-  projectConfig: ProjectConfig,
-  includeDeployment = true
+  ctx: Context,
+  projectConfig: ProjectConfig
 ): Promise<string> {
-  const { project, team, prodUrl } = projectConfig;
+  const team = await enforceDeprecatedConfigField(ctx, projectConfig, "team");
+  const project = await enforceDeprecatedConfigField(
+    ctx,
+    projectConfig,
+    "project"
+  );
+  const prodUrl = await enforceDeprecatedConfigField(
+    ctx,
+    projectConfig,
+    "prodUrl"
+  );
   const host = process.env.CONVEX_PROVISION_HOST
     ? "http://localhost:3000"
     : "https://dashboard.convex.dev";
@@ -45,7 +72,18 @@ export async function dashboardUrlForConfig(
   }
 
   const deployment = prodUrl.match(/https?:\/\/([^.]*)[.]/)![1];
+  return dashboardUrl(team, project, deployment);
+}
+
+export function dashboardUrl(
+  team: string,
+  project: string,
+  deploymentName: string | null
+) {
+  const host = process.env.CONVEX_PROVISION_HOST
+    ? "http://localhost:3000"
+    : "https://dashboard.convex.dev";
   return `${host}/t/${team}/${project}${
-    includeDeployment ? `/${deployment}` : ""
+    deploymentName !== null ? `/${deploymentName}` : ""
   }`;
 }

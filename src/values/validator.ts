@@ -27,15 +27,28 @@ export class Validator<
   readonly _isValidator: undefined;
 
   readonly optional: boolean;
+  /**
+   * @internal
+   */
   readonly json: ValidatorJSON;
+  /**
+   * @internal
+   */
   constructor(json: ValidatorJSON, optional: boolean) {
     this.json = json;
     this.optional = optional;
   }
 }
 
-type ObjectFieldType = { fieldType: ValidatorJSON; optional: boolean };
-type ValidatorJSON =
+/**
+ * @internal
+ */
+export type ObjectFieldType = { fieldType: ValidatorJSON; optional: boolean };
+
+/**
+ * @internal
+ */
+export type ValidatorJSON =
   | {
       type: "null";
     }

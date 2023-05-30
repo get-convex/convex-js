@@ -39,11 +39,13 @@ module.exports = {
     // Add React hooks rules so we don't misuse them.
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "warn",
-    // From https://github.com/typescript-eslint/typescript-eslint/issues/1391#issuecomment-1124154589
-    // Prefer `private` ts keyword to `#private` private methods
+
+    // If you add rules here, make sure to add it to subdir eslintrc files as well!
     "no-restricted-syntax": [
       "error",
       {
+        // From https://github.com/typescript-eslint/typescript-eslint/issues/1391#issuecomment-1124154589
+        // Prefer `private` ts keyword to `#private` private methods
         selector:
           ":matches(PropertyDefinition, MethodDefinition) > PrivateIdentifier.key",
         message: "Use `private` instead",

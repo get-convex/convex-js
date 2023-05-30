@@ -61,7 +61,8 @@ class OptimisticLocalStoreImpl implements OptimisticLocalStore {
     args: Record<string, Value>,
     value: Value | undefined
   ): void {
-    const queryToken = serializePathAndArgs(name, args);
+    const queryArgs = parseArgs(args);
+    const queryToken = serializePathAndArgs(name, queryArgs);
 
     let result: FunctionResult | undefined;
     if (value === undefined) {
@@ -76,7 +77,7 @@ class OptimisticLocalStoreImpl implements OptimisticLocalStore {
     }
     const query: Query = {
       udfPath: name,
-      args,
+      args: queryArgs,
       result,
     };
     this.queryResults.set(queryToken, query);

@@ -1,6 +1,7 @@
 import { performJsSyscall } from "./impl/syscall.js";
 import { PublicHttpAction } from "./registration.js";
 
+// Note: this list is duplicated in the dashboard.
 /**
  * A list of the methods supported by Convex HTTP actions.
  *
@@ -63,7 +64,7 @@ type RouteSpec =
  * An example `convex/http.js` file might look like this.
  *
  * ```js
- * import { httpRouter } from "./_generated/server";
+ * import { httpRouter } from "convex/server";
  * import { getMessagesByAuthor } from "./getMessagesByAuthor";
  * import { httpAction } from "./_generated/server";
  *

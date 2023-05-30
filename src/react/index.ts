@@ -88,6 +88,7 @@ export {
 export type { AuthTokenFetcher } from "../browser/sync/client.js";
 export * from "./auth_helpers.js";
 export * from "./ConvexAuthState.js";
+/* @internal */
 export { useSubscription } from "./use_subscription.js";
 export {
   type ReactMutation,

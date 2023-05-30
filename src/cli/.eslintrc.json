@@ -15,16 +15,27 @@
         ]
       }
     ],
-    // Makes it harder to accidentally fire off a promise without waiting for it.
-    "@typescript-eslint/no-floating-promises": "error",
-    "eqeqeq": ["error", "always"]
-    // TODO: fix to allow process.exit(0) but not process.exit(1)
-    // "no-restricted-syntax": [
-    //   "warn",
-    //   {
-    //     "message": "Use flushAndExit from convex/src/cli/utils.ts instead of process.exit so that Sentry gets flushed.",
-    //     "selector": "CallExpression[callee.object.name='process'][callee.property.name='exit'][callee.value=1]"
-    //   }
-    // ]
+
+    "no-restricted-syntax": [
+      "error",
+      {
+        // Copied from `npm-packages/convex/.eslintrc.cjs` because ESLint doesn't merge
+        // rules.
+
+        // From https://github.com/typescript-eslint/typescript-eslint/issues/1391#issuecomment-1124154589
+        // Prefer `private` ts keyword to `#private` private methods
+        "selector": ":matches(PropertyDefinition, MethodDefinition) > PrivateIdentifier.key",
+        "message": "Use `private` instead"
+      },
+      {
+        "selector": "ThrowStatement",
+        "message": "Don't use `throw` if this is a developer-facing error message and this code could be called by `npx convex dev`. Instead use `ctx.crash`."
+      }
+      // TODO: fix to allow process.exit(0) but not process.exit(1)
+      //   {
+      //     "message": "Use flushAndExit from convex/src/cli/utils.ts instead of process.exit so that Sentry gets flushed.",
+      //     "selector": "CallExpression[callee.object.name='process'][callee.property.name='exit'][callee.value=1]"
+      //   }
+    ]
   }
 }

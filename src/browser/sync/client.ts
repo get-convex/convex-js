@@ -18,6 +18,7 @@ import {
   QueryJournal,
   RequestId,
   ServerMessage,
+  TS,
   UserIdentityAttributes,
 } from "./protocol.js";
 import { RemoteQuerySet } from "./remote_query_set.js";
@@ -31,7 +32,7 @@ import {
 } from "./authentication_manager.js";
 export { type AuthTokenFetcher } from "./authentication_manager.js";
 import { getMarksReport, mark, MarkName } from "./metrics.js";
-import { parseArgs } from "../../common/index.js";
+import { parseArgs, validateDeploymentUrl } from "../../common/index.js";
 
 /**
  * Options for {@link BaseConvexClient}.
@@ -136,6 +137,7 @@ export class BaseConvexClient {
   private firstMessageReceived = false;
   private readonly verbose: boolean;
   private readonly debug: boolean;
+  private maxObservedTimestamp: TS | undefined;
 
   /**
    * @param address - The url of your Convex deployment, often provided
@@ -154,6 +156,7 @@ export class BaseConvexClient {
         "Passing a ClientConfig object is no longer supported. Pass the URL of the Convex deployment as a string directly."
       );
     }
+    validateDeploymentUrl(address);
     options = { ...options };
     let webSocketConstructor = options.webSocketConstructor;
     if (!webSocketConstructor && typeof WebSocket === "undefined") {
@@ -242,6 +245,7 @@ export class BaseConvexClient {
           ...reconnectMetadata,
           type: "Connect",
           sessionId: this.sessionId,
+          maxObservedTimestamp: this.maxObservedTimestamp,
         });
 
         // Throw out our remote query, reissue queries
@@ -268,6 +272,7 @@ export class BaseConvexClient {
         }
         switch (serverMessage.type) {
           case "Transition": {
+            this.observedTimestamp(serverMessage.endVersion.ts);
             this.authenticationManager.onTransition(serverMessage);
             this.remoteQuerySet.transition(serverMessage);
             this.state.saveQueryJournals(serverMessage);
@@ -278,6 +283,9 @@ export class BaseConvexClient {
             break;
           }
           case "MutationResponse": {
+            if (serverMessage.success) {
+              this.observedTimestamp(serverMessage.ts);
+            }
             const completedMutationId =
               this.requestManager.onResponse(serverMessage);
             if (completedMutationId) {
@@ -309,6 +317,19 @@ export class BaseConvexClient {
       this.verbose
     );
     this.mark("convexClientConstructed");
+  }
+
+  private observedTimestamp(observedTs: TS) {
+    if (
+      this.maxObservedTimestamp === undefined ||
+      this.maxObservedTimestamp.lessThanOrEqual(observedTs)
+    ) {
+      this.maxObservedTimestamp = observedTs;
+    }
+  }
+
+  getMaxObservedTimestamp() {
+    return this.maxObservedTimestamp;
   }
 
   /**

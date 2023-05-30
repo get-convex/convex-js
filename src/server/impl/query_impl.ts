@@ -6,7 +6,7 @@ import {
   serializeExpression,
 } from "./filter_builder_impl.js";
 import { Query, QueryInitializer } from "../query.js";
-import { Expression, FilterBuilder } from "../filter_builder.js";
+import { ExpressionOrValue, FilterBuilder } from "../filter_builder.js";
 import { GenericTableInfo } from "../data_model.js";
 import {
   IndexRangeBuilderImpl,
@@ -109,12 +109,14 @@ export class QueryInitializerImpl
   }
 
   filter(
-    predicate: (q: FilterBuilder<GenericTableInfo>) => Expression<boolean>
-  ): QueryImpl {
+    predicate: (
+      q: FilterBuilder<GenericTableInfo>
+    ) => ExpressionOrValue<boolean>
+  ) {
     return this.fullTableScan().filter(predicate);
   }
 
-  limit(n: number): QueryImpl {
+  limit(n: number) {
     return this.fullTableScan().limit(n);
   }
 
@@ -214,8 +216,10 @@ export class QueryImpl implements Query<GenericTableInfo> {
   }
 
   filter(
-    predicate: (q: FilterBuilder<GenericTableInfo>) => Expression<boolean>
-  ): QueryImpl {
+    predicate: (
+      q: FilterBuilder<GenericTableInfo>
+    ) => ExpressionOrValue<boolean>
+  ): any {
     validateArg(predicate, 1, "filter", "predicate");
     const query = this.takeQuery();
     query.operators.push({
@@ -224,7 +228,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
     return new QueryImpl(query);
   }
 
-  limit(n: number): QueryImpl {
+  limit(n: number): any {
     validateArg(n, 1, "limit", "n");
     const query = this.takeQuery();
     query.operators.push({ limit: n });
@@ -283,6 +287,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
         cursor,
         pageSize,
         maximumRowsRead,
+        maximumBytesRead: paginationOpts.maximumBytesRead,
       }
     );
     return {

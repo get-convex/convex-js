@@ -15,7 +15,6 @@ import type { OptimisticUpdate, QueryToken } from "../browser/index.js";
 import React, { useContext, useMemo } from "react";
 import { convexToJson, Value } from "../values/index.js";
 import ReactDOM from "react-dom";
-import { useSubscription } from "./use_subscription.js";
 import { QueryJournal } from "../browser/sync/protocol.js";
 import {
   AuthTokenFetcher,
@@ -23,6 +22,7 @@ import {
   ConnectionState,
 } from "../browser/sync/client.js";
 import type { UserIdentityAttributes } from "../browser/sync/protocol.js";
+import { RequestForQueries, useQueriesGeneric } from "./use_queries.js";
 import { parseArgs } from "../common/index.js";
 
 if (typeof React === "undefined") {
@@ -536,9 +536,16 @@ export const ConvexProvider: React.FC<{
  *
  * @public
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface UseQueryOptions {
-  // TODO: Add options here once we want to support them.
+  /**
+   * If `true`, skip loading this query and return `undefined`.
+   *
+   * Defaults to `false`.
+   *
+   * This can be used for dependent queries, where the arguments to one query
+   * depend on the result from another.
+   */
+  skip?: boolean;
 }
 
 /**
@@ -554,43 +561,38 @@ export interface UseQueryOptions {
  *
  * @param name - The name of the query function.
  * @param args - The arguments to the query function.
- * @returns `undefined` if loading and the query's return value otherwise.
+ * @param options - [Optional] The {@link UseQueryOptions} options object.
+ * @returns the result of the query. If the query is loading or skipped,
+ * returns `undefined`.
  *
  * @public
  */
 export function useQueryGeneric(
   name: string,
   args?: Record<string, Value>,
-  _options?: UseQueryOptions
+  options?: UseQueryOptions
 ): unknown | undefined {
-  const convex = useContext(ConvexContext);
-  if (convex === undefined) {
-    throw new Error(
-      "Could not find Convex client! `useQuery` must be used in the React component " +
-        "tree under `ConvexProvider`. Did you forget it? " +
-        "See https://docs.convex.dev/quick-start#set-up-convex-in-your-react-app"
-    );
-  }
+  const skip = options?.skip === undefined ? false : options.skip;
+  const argsObject = parseArgs(args);
 
-  const queryArgs = parseArgs(args);
-
-  const subscription = useMemo(
-    () => {
-      const watch = convex.watchQuery(name, queryArgs);
-      return {
-        getCurrentValue: () => watch.localQueryResult(),
-        subscribe: (callback: () => void) => watch.onUpdate(callback),
-      };
-    },
-    // ESLint doesn't like that we're stringifying the args. We do this because
-    // we want to avoid recreating the subscription if the args are a different
-    // object that serializes to the same result.
+  const queries = useMemo(
+    () =>
+      skip ? ({} as RequestForQueries) : { query: { name, args: argsObject } },
+    // Stringify args so args that are semantically the same don't trigger a
+    // rerender. Saves developers from adding `useMemo` on every args usage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [name, convex, JSON.stringify(convexToJson(queryArgs))]
+    [JSON.stringify(convexToJson(argsObject)), skip, name]
   );
 
-  const queryResult = useSubscription(subscription);
-  return queryResult;
+  const results = useQueriesGeneric(queries);
+  if (skip) {
+    return undefined;
+  }
+  const result = results["query"];
+  if (result instanceof Error) {
+    throw result;
+  }
+  return result;
 }
 
 /**
@@ -664,6 +666,12 @@ export function useActionGeneric<
   return useMemo(() => createAction(name, convex), [convex, name]);
 }
 
+type UseQueryArgsAndOptions<F extends (args?: Record<string, Value>) => any> =
+  // If `skip: true`, be permissive and allow any objects as `args` because
+  // we're not using it anyway.
+  | [args: object, options: UseQueryOptions & { skip: true }]
+  | ArgsAndOptions<F, UseQueryOptions>;
+
 /**
  * Internal type helper used by Convex code generation.
  *
@@ -674,7 +682,7 @@ export type UseQueryForAPI<API extends GenericAPI> = <
   Name extends PublicQueryNames<API>
 >(
   name: Name,
-  ...argsAndOptions: ArgsAndOptions<NamedQuery<API, Name>, UseQueryOptions>
+  ...argsAndOptions: UseQueryArgsAndOptions<NamedQuery<API, Name>>
 ) => ReturnType<NamedQuery<API, Name>> | undefined;
 
 /**

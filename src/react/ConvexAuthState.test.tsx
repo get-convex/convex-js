@@ -17,7 +17,7 @@ const flushPromises = () =>
   act(() => new Promise((jest.requireActual("timers") as any).setImmediate));
 
 test("setAuth legacy signature typechecks and doesn't throw", async () => {
-  const convex = new ConvexReactClient("https://localhost:3001");
+  const convex = new ConvexReactClient("https://127.0.0.1:3001");
   // We're moving towards removing the Promise, but for backwards compatibility
   // it's still here now.
   await convex.setAuth(async () => "foo");

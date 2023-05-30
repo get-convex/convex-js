@@ -1,6 +1,5 @@
 import { Command, Option } from "commander";
 import chalk from "chalk";
-import { readProjectConfig } from "./lib/config";
 import {
   ensureHasConvexDependency,
   logAndHandleAxiosError,
@@ -8,8 +7,15 @@ import {
 } from "./lib/utils";
 import axios, { AxiosResponse } from "axios";
 import { version } from "../index.js";
-import { getUrlAndAdminKey } from "./lib/api";
-import { oneoffContext } from "./lib/context";
+import {
+  logFailure,
+  oneoffContext,
+  Context,
+  showSpinner,
+  logFinishedStep,
+} from "../bundler/context";
+import { getUrlAndAdminKeyForConfiguredDeployment } from "./lib/api";
+import path from "path";
 
 export const convexImport = new Command("import")
   .description("Import data from a file into a table")
@@ -41,62 +47,26 @@ export const convexImport = new Command("import")
   .argument("<tableName>", "Destination table name")
   .argument("<path>", "Path to the input file")
   .showHelpAfterError()
-  .action(async (tableName: string, path: string, options: any) => {
+  .action(async (tableName: string, filePath: string, options: any) => {
     const ctx = oneoffContext;
-    let format = options.format;
-    const pathParts = path.split(".");
-    if (pathParts.length > 1) {
-      const fileType = pathParts[pathParts.length - 1];
-      const formatToFileType: Record<string, string> = {
-        csv: "csv",
-        jsonLines: "jsonl",
-        jsonArray: "json",
-      };
-      const fileTypeToFormat = Object.fromEntries(
-        Object.entries(formatToFileType).map(a => a.reverse())
-      );
-      if (format && fileType !== formatToFileType[format]) {
-        console.warn(
-          chalk.yellow(
-            `Warning: Extension of file ${path} (${fileType}) does not match specified format: ${format} (${formatToFileType[format]}).`
-          )
-        );
-      }
-      if (format === undefined) {
-        format = fileTypeToFormat[fileType];
-      }
-    }
-    if (!format) {
-      throw new Error(
-        "No input file format inferred by the filename extension or specified. Specify your input file's format using the `--format` flag."
-      );
-    }
-    const { projectConfig } = await readProjectConfig(ctx);
-    const deploymentType = options.prod ? "prod" : "dev";
-    let deploymentUrl, adminKey;
-    if (!options.url || !options.adminKey) {
-      let url;
-      ({ url, adminKey } = await getUrlAndAdminKey(
-        ctx,
-        projectConfig.project,
-        projectConfig.team,
-        deploymentType
-      ));
-      deploymentUrl = url;
-    }
-    adminKey = options.adminKey ?? adminKey;
-    deploymentUrl = options.url ?? deploymentUrl;
-    await ensureHasConvexDependency(ctx, "import");
 
-    if (!ctx.fs.exists(path)) {
-      console.error(chalk.gray(`Error: Path ${path} does not exist.`));
+    if (!ctx.fs.exists(filePath)) {
+      logFailure(ctx, `Error: Path ${chalk.bold(filePath)} does not exist.`);
       return await ctx.crash(1, "invalid filesystem data");
     }
-    const data = ctx.fs.createReadStream(path);
-    const fileStats = ctx.fs.stat(path);
-    console.log(
-      chalk.gray(`Importing ${path} (${formatSize(fileStats.size)})...`)
-    );
+
+    const format = await determineFormat(ctx, filePath, options.format ?? null);
+
+    const { adminKey, url: deploymentUrl } =
+      await getUrlAndAdminKeyForConfiguredDeployment(ctx, options);
+
+    await ensureHasConvexDependency(ctx, "import");
+
+    const data = ctx.fs.createReadStream(filePath);
+    const fileStats = ctx.fs.stat(filePath);
+
+    showSpinner(ctx, `Importing ${filePath} (${formatSize(fileStats.size)})`);
+
     const urlName = encodeURIComponent(tableName);
     const urlFormat = encodeURIComponent(format);
     const client = axios.create();
@@ -107,6 +77,9 @@ export const convexImport = new Command("import")
     } else if (options.replace) {
       mode = "replace";
     }
+    const deploymentNotice = options.prod
+      ? ` in your ${chalk.bold("prod")} deployment`
+      : "";
     try {
       const url = `${deploymentUrl}/api/import?tableName=${urlName}&format=${urlFormat}&mode=${mode}`;
       resp = await client.post(url, data, {
@@ -117,9 +90,52 @@ export const convexImport = new Command("import")
         },
       });
     } catch (e) {
+      logFailure(
+        ctx,
+        `Importing data from ${chalk.bold(filePath)} to table ${chalk.bold(
+          tableName
+        )}${deploymentNotice} failed`
+      );
       return await logAndHandleAxiosError(ctx, e);
     }
-    console.log(
-      chalk.green(`Wrote ${resp.data.numWritten} rows to ${tableName}.`)
+    logFinishedStep(
+      ctx,
+      `Added ${resp.data.numWritten} documents to table ${chalk.bold(
+        tableName
+      )}${deploymentNotice}.`
     );
   });
+
+async function determineFormat(
+  ctx: Context,
+  filePath: string,
+  format: string | null
+) {
+  const fileExtension = path.extname(filePath);
+  if (fileExtension !== "") {
+    const formatToExtension: Record<string, string> = {
+      csv: ".csv",
+      jsonLines: ".jsonl",
+      jsonArray: ".json",
+    };
+    const extensionToFormat = Object.fromEntries(
+      Object.entries(formatToExtension).map(a => a.reverse())
+    );
+    if (format !== null && fileExtension !== formatToExtension[format]) {
+      console.warn(
+        chalk.yellow(
+          `Warning: Extension of file ${filePath} (${fileExtension}) does not match specified format: ${format} (${formatToExtension[format]}).`
+        )
+      );
+    }
+    format ??= extensionToFormat[fileExtension];
+  }
+  if (format === null) {
+    logFailure(
+      ctx,
+      "No input file format inferred by the filename extension or specified. Specify your input file's format using the `--format` flag."
+    );
+    return await ctx.crash(1, "fatal");
+  }
+  return format;
+}

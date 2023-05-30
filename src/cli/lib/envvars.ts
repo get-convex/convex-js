@@ -5,7 +5,7 @@ import chalk from "chalk";
 import * as dotenv from "dotenv";
 
 import inquirer from "inquirer";
-import { Context, logFinishedStep } from "./context";
+import { Context, logFinishedStep } from "../../bundler/context";
 import { loadPackageJson } from "./utils";
 
 const FRAMEWORKS = ["create-react-app", "Next.js", "Vite", "Remix"] as const;
@@ -28,7 +28,7 @@ export async function offerToWriteToEnv(
   }
 }
 
-type WriteConfig = {
+export type WriteConfig = {
   envFile: string;
   type: string;
   envVar: string;

@@ -3,6 +3,7 @@ import path from "path";
 import chalk from "chalk";
 import esbuild from "esbuild";
 import { Filesystem } from "./fs.js";
+import { Context, logFailure, logWarning } from "./context.js";
 import { wasmPlugin } from "./wasm.js";
 export { nodeFs, RecordingFs } from "./fs.js";
 export type { Filesystem } from "./fs.js";
@@ -37,14 +38,12 @@ export interface Bundle {
   environment: ModuleEnvironment;
 }
 
-export class BundleError extends Error {}
-
 type EsBuildResult = esbuild.BuildResult & {
   outputFiles: esbuild.OutputFile[];
 };
 
 async function doEsbuild(
-  fs: Filesystem,
+  ctx: Context,
   dir: string,
   entryPoints: string[],
   generateSourceMaps: boolean,
@@ -82,22 +81,27 @@ async function doEsbuild(
         continue;
       }
       const absPath = path.resolve(relPath);
-      const st = fs.stat(absPath);
+      const st = ctx.fs.stat(absPath);
       if (st.size !== input.bytes) {
-        throw new Error(
+        logWarning(
+          ctx,
           `Bundled file ${absPath} changed right after esbuild invocation`
         );
+        // Consider this a transient error so we'll try again and hopefully
+        // no files change right after esbuild next time.
+        return await ctx.crash(1, "transient");
       }
-      fs.registerPath(absPath, st);
+      ctx.fs.registerPath(absPath, st);
     }
     return result;
   } catch (err) {
-    throw new BundleError(`esbuild failed: ${(err as any).toString()}`);
+    logFailure(ctx, `esbuild failed: ${(err as any).toString()}`);
+    return await ctx.crash(1, "invalid filesystem data");
   }
 }
 
 export async function bundle(
-  fs: Filesystem,
+  ctx: Context,
   dir: string,
   entryPoints: string[],
   generateSourceMaps: boolean,
@@ -105,7 +109,7 @@ export async function bundle(
   chunksFolder = "_deps"
 ): Promise<Bundle[]> {
   const result = await doEsbuild(
-    fs,
+    ctx,
     dir,
     entryPoints,
     generateSourceMaps,
@@ -116,7 +120,7 @@ export async function bundle(
     for (const error of result.errors) {
       console.log(chalk.red(`esbuild error: ${error.text}`));
     }
-    throw new BundleError("esbuild failed");
+    return await ctx.crash(1, "invalid filesystem data");
   }
   for (const warning of result.warnings) {
     console.log(chalk.yellow(`esbuild warning: ${warning.text}`));
@@ -143,17 +147,25 @@ export async function bundle(
   return modules;
 }
 
-export async function bundleSchema(fs: Filesystem, dir: string) {
-  return bundle(fs, dir, [path.resolve(dir, "schema.ts")], true, "browser");
+export async function bundleSchema(ctx: Context, dir: string) {
+  return bundle(ctx, dir, [path.resolve(dir, "schema.ts")], true, "browser");
+}
+
+export async function bundleAuthConfig(ctx: Context, dir: string) {
+  const authConfigPath = path.resolve(dir, "auth.config.js");
+  if (!ctx.fs.exists(authConfigPath)) {
+    return [];
+  }
+  return await bundle(ctx, dir, [authConfigPath], true, "browser");
 }
 
 export async function entryPoints(
-  fs: Filesystem,
+  ctx: Context,
   dir: string,
   verbose: boolean
 ): Promise<string[]> {
   const entryPoints = [];
-  for (const { isDir, path: fpath } of walkDir(fs, dir)) {
+  for (const { isDir, path: fpath } of walkDir(ctx.fs, dir)) {
     if (isDir) {
       continue;
     }
@@ -167,9 +179,11 @@ export async function entryPoints(
     };
 
     if (relPath.startsWith("_deps" + path.sep)) {
-      throw new Error(
+      logFailure(
+        ctx,
         `The path "${fpath}" is within the "_deps" directory, which is reserved for dependencies. Please move your code to another directory.`
       );
+      return await ctx.crash(1, "invalid filesystem data");
     } else if (relPath.startsWith("_generated" + path.sep)) {
       log(chalk.yellow(`Skipping ${fpath}`));
     } else if (base.startsWith(".")) {
@@ -183,6 +197,8 @@ export async function entryPoints(
     } else if (base.includes(".test.")) {
       log(chalk.yellow(`Skipping ${fpath}`));
     } else if (base === "tsconfig.json") {
+      log(chalk.yellow(`Skipping ${fpath}`));
+    } else if (relPath.endsWith(".config.js")) {
       log(chalk.yellow(`Skipping ${fpath}`));
     } else if (relPath.includes(" ")) {
       log(chalk.yellow(`Skipping ${relPath} because it contains a space`));
@@ -248,46 +264,54 @@ function hasUseNodeDirective(
 
 export function mustBeIsolate(relPath: string): boolean {
   // Check if the path without extension matches any of the static paths.
-  return ["http", "crons", "schema"].includes(relPath.replace(/\.[^/.]+$/, ""));
+  return ["http", "crons", "schema", "auth.config"].includes(
+    relPath.replace(/\.[^/.]+$/, "")
+  );
 }
 
-function determineEnvironment(
-  fs: Filesystem,
+async function determineEnvironment(
+  ctx: Context,
   dir: string,
   fpath: string,
   verbose: boolean
-): ModuleEnvironment {
+): Promise<ModuleEnvironment> {
   const relPath = path.relative(dir, fpath);
 
-  const useNodeDirectiveFound = hasUseNodeDirective(fs, fpath, verbose);
+  const useNodeDirectiveFound = hasUseNodeDirective(ctx.fs, fpath, verbose);
   if (useNodeDirectiveFound) {
     if (mustBeIsolate(relPath)) {
-      throw new BundleError(
-        `"use node" directive is not allowed for ${relPath}.`
-      );
+      logFailure(ctx, `"use node" directive is not allowed for ${relPath}.`);
+      return await ctx.crash(1, "invalid filesystem data");
     }
     return "node";
   }
 
   const actionsPrefix = actionsDir + path.sep;
   if (relPath.startsWith(actionsPrefix)) {
-    throw new Error(
+    logFailure(
+      ctx,
       `${relPath} is in /actions subfolder but has no "use node"; directive. You can now define actions in any folder and indicate they should run in node by adding "use node" directive. /actions is a deprecated way to choose Node.js environment, and we require "use node" for all files within that folder to avoid unexpected errors during the migration. See https://docs.convex.dev/functions/actions for more details`
     );
+    return await ctx.crash(1, "invalid filesystem data");
   }
 
   return "isolate";
 }
 
 export async function entryPointsByEnvironment(
-  fs: Filesystem,
+  ctx: Context,
   dir: string,
   verbose: boolean
 ) {
   const isolate = [];
   const node = [];
-  for (const entryPoint of await entryPoints(fs, dir, verbose)) {
-    const environment = determineEnvironment(fs, dir, entryPoint, verbose);
+  for (const entryPoint of await entryPoints(ctx, dir, verbose)) {
+    const environment = await determineEnvironment(
+      ctx,
+      dir,
+      entryPoint,
+      verbose
+    );
     if (environment === "node") {
       node.push(entryPoint);
     } else {

@@ -56,7 +56,7 @@ type PlusOne<N extends number> = [
  *
  * This class is designed to only allow you to specify ranges that Convex can
  * efficiently use your index to find. For all other filtering use
- * {@link Query.filter}.
+ * {@link OrderedQuery.filter}.
  *
  * To learn about indexes, see [Indexes](https://docs.convex.dev/using/indexes).
  * @public

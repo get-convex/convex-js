@@ -1,6 +1,6 @@
 import { Command, Option } from "commander";
 import chalk from "chalk";
-import { oneoffContext } from "./lib/context.js";
+import { oneoffContext } from "../bundler/context.js";
 import { checkAuthorization, performLogin } from "./lib/login.js";
 
 export const login = new Command("login")
@@ -18,15 +18,24 @@ export const login = new Command("login")
     "Don't automatically open the login link in the default browser"
   )
   // These options are hidden from the help/usage message, but allow overriding settings for testing.
+  // Change the auth credentials with the auth provider
   .addOption(new Option("--override-auth-url <url>").hideHelp())
   .addOption(new Option("--override-auth-client <id>").hideHelp())
   .addOption(new Option("--override-auth-username <username>").hideHelp())
   .addOption(new Option("--override-auth-password <password>").hideHelp())
-  .addOption(new Option("--no-opt-in").hideHelp())
+  // Skip the auth provider login and directly use this access token
+  .addOption(new Option("--override-access-token <token>").hideHelp())
+  // Automatically accept opt ins without prompting
+  .addOption(new Option("--accept-opt-ins").hideHelp())
+  // Dump the access token from the auth provider and skip authorization with Convex
+  .addOption(new Option("--dump-access-token").hideHelp())
   .action(async (options, cmd: Command) => {
     const ctx = oneoffContext;
-    if ((await checkAuthorization(ctx)) && !options.force) {
-      console.log(
+    if (
+      !options.force &&
+      (await checkAuthorization(ctx, options.acceptOptIns))
+    ) {
+      console.error(
         chalk.green(
           "This device has previously been authorized and is ready for use with Convex."
         )

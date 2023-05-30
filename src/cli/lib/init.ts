@@ -3,8 +3,9 @@ import {
   pullConfig,
   writeProjectConfig,
   configFilepath,
-  readProjectConfig,
   removedExistingConfig,
+  getFunctionsDirectoryPath,
+  upgradeOldAuthInfoToAuthConfig,
 } from "./config.js";
 import {
   logAndHandleAxiosError,
@@ -12,6 +13,7 @@ import {
   validateOrSelectTeam,
   bigBrainAPI,
   loadPackageJson,
+  shouldUseNewFlow,
 } from "./utils.js";
 import inquirer from "inquirer";
 import path from "path";
@@ -20,29 +22,36 @@ import {
   Context,
   logFailure,
   logFinishedStep,
+  logMessage,
   showSpinner,
-} from "./context.js";
-import { dashboardUrlForConfig } from "../dashboard.js";
+} from "../../bundler/context.js";
+import { dashboardUrl } from "../dashboard.js";
 import {
+  WriteConfig,
   askAboutWritingToEnv,
   logProvisioning,
   writeToEnv,
 } from "./envvars.js";
+import { writeDeploymentEnvVar } from "./deployment.js";
+import { DeploymentType } from "./api.js";
 
 const cwd = path.basename(process.cwd());
 
 export async function init(
   ctx: Context,
+  deploymentType: DeploymentType = "prod",
   config: {
     team: string | null;
     project: string | null;
   },
   saveUrl: "yes" | "no" | "ask" = "ask",
   promptForAdditionalSteps?: () => Promise<() => Promise<void>>,
-  options: { allowExistingConfig?: boolean } = { allowExistingConfig: false }
+  options: {
+    allowExistingConfig?: boolean;
+  } = {}
 ) {
   const configPath = await configFilepath(ctx);
-  if (ctx.fs.exists(configPath)) {
+  if (!shouldUseNewFlow() && ctx.fs.exists(configPath)) {
     if (!removedExistingConfig(ctx, configPath, options)) {
       console.error(
         chalk.green(`Found existing project config "${configPath}"`)
@@ -68,12 +77,9 @@ export async function init(
     ).project;
   }
 
-  const prodEnvVarWrite = await askAboutWritingToEnv(
-    ctx,
-    "prod",
-    null,
-    saveUrl
-  );
+  const prodEnvVarWrite = shouldUseNewFlow()
+    ? null
+    : await askAboutWritingToEnv(ctx, "prod", null, saveUrl);
 
   const executeAdditionalSteps = await promptForAdditionalSteps?.();
 
@@ -81,20 +87,27 @@ export async function init(
 
   let projectSlug,
     teamSlug,
-    prodUrl,
+    deploymentName,
+    url,
     adminKey,
     projectsRemaining,
     projectConfig,
     modules;
   try {
-    ({ projectSlug, teamSlug, prodUrl, adminKey, projectsRemaining } =
-      await create_project(ctx, selectedTeam, projectName));
+    ({
+      projectSlug,
+      teamSlug,
+      deploymentName,
+      url,
+      adminKey,
+      projectsRemaining,
+    } = await create_project(ctx, selectedTeam, projectName, deploymentType));
 
     ({ projectConfig, modules } = await pullConfig(
       ctx,
       projectSlug,
       teamSlug,
-      prodUrl,
+      url,
       adminKey
     ));
   } catch (err) {
@@ -110,12 +123,12 @@ export async function init(
     `Created project ${chalk.bold(
       projectSlug
     )}${teamMessage}, manage it at ${chalk.bold(
-      await dashboardUrlForConfig(projectConfig, false)
+      dashboardUrl(teamSlug, projectSlug, null)
     )}`
   );
 
   if (projectsRemaining <= 2) {
-    console.log(
+    console.error(
       chalk.yellow.bold(
         `Your account now has ${projectsRemaining} project${
           projectsRemaining === 1 ? "" : "s"
@@ -136,37 +149,92 @@ export async function init(
   if (isCreateReactApp) {
     projectConfig.functions = `src/${projectConfig.functions}`;
   }
+  const functionsPath = functionsDir(configPath, projectConfig);
 
-  await writeProjectConfig(ctx, projectConfig);
+  const { wroteToGitIgnore } = shouldUseNewFlow()
+    ? await writeDeploymentEnvVar(ctx, deploymentType, {
+        team: teamSlug,
+        project: projectSlug,
+        deploymentName,
+      })
+    : { wroteToGitIgnore: false };
+
+  const projectConfigWithoutAuthInfo = shouldUseNewFlow()
+    ? await upgradeOldAuthInfoToAuthConfig(ctx, projectConfig, functionsPath)
+    : projectConfig;
+  await writeProjectConfig(ctx, projectConfigWithoutAuthInfo);
+
   await doInitCodegen(
     ctx,
-    functionsDir(configPath, projectConfig),
+    functionsPath,
     true // quiet
   );
 
   {
-    const { projectConfig, configPath } = await readProjectConfig(ctx);
+    const functionsDirectoryPath = await getFunctionsDirectoryPath(ctx);
     await doCodegen({
       ctx,
-      projectConfig,
-      configPath,
+      functionsDirectoryPath,
       // Don't typecheck because there isn't any code to check yet.
       typeCheckMode: "disable",
       quiet: true,
     });
   }
 
-  logFinishedStep(ctx, `Convex configuration written to ${configPath}`);
-  await writeToEnv(ctx, prodEnvVarWrite, projectConfig.prodUrl);
-  logProvisioning(ctx, prodEnvVarWrite, "prod", projectConfig.prodUrl);
-  await executeAdditionalSteps?.();
-
-  console.log(
-    `\nWrite your Convex functions in ${chalk.bold(
-      functionsDir(configPath, projectConfig)
-    )}`
+  await finalizeConfiguration(
+    ctx,
+    configPath,
+    functionsPath,
+    deploymentType,
+    prodEnvVarWrite,
+    url,
+    wroteToGitIgnore,
+    executeAdditionalSteps
   );
-  console.log(
+
+  return { deploymentName, adminKey, url };
+}
+
+export async function finalizeConfiguration(
+  ctx: Context,
+  configPath: string,
+  functionsPath: string,
+  deploymentType: DeploymentType,
+  prodEnvVarWrite: WriteConfig,
+  url: string,
+  wroteToGitIgnore: boolean,
+  executeAdditionalSteps: (() => Promise<void>) | undefined
+) {
+  if (shouldUseNewFlow()) {
+    const envVarWrite = await askAboutWritingToEnv(ctx, "dev", url, "yes");
+    await writeToEnv(ctx, envVarWrite, url);
+    if (envVarWrite !== null) {
+      logFinishedStep(
+        ctx,
+        `Provisioned a ${deploymentType} deployment and saved its:\n` +
+          `    name as CONVEX_DEPLOYMENT to .env.local\n` +
+          `    URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`
+      );
+    } else {
+      logFinishedStep(
+        ctx,
+        `Provisioned ${deploymentType} deployment and saved its name as CONVEX_DEPLOYMENT to .env.local`
+      );
+    }
+    if (wroteToGitIgnore) {
+      logMessage(ctx, chalk.gray(`  Added ".env.local" to .gitignore`));
+    }
+  } else {
+    logFinishedStep(ctx, `Convex configuration written to ${configPath}`);
+    await writeToEnv(ctx, prodEnvVarWrite, url);
+    logProvisioning(ctx, prodEnvVarWrite, "prod", url);
+    await executeAdditionalSteps?.();
+  }
+
+  console.error(
+    `\nWrite your Convex functions in ${chalk.bold(functionsPath)}`
+  );
+  console.error(
     "Give us feedback at https://convex.dev/community or support@convex.dev\n"
   );
 }
@@ -175,17 +243,20 @@ interface CreateProjectArgs {
   projectName: string;
   team: string;
   backendVersionOverride?: string;
+  deploymentType?: "prod" | "dev";
 }
 
 /** Provision a new empty project and return the origin. */
 async function create_project(
   ctx: Context,
   team: string,
-  projectName: string
+  projectName: string,
+  firstDeploymentType: "prod" | "dev"
 ): Promise<{
   projectSlug: string;
   teamSlug: string;
-  prodUrl: string;
+  deploymentName: string;
+  url: string;
   adminKey: string;
   projectsRemaining: number;
 }> {
@@ -193,6 +264,7 @@ async function create_project(
     team,
     backendVersionOverride: process.env.CONVEX_BACKEND_VERSION_OVERRIDE,
     projectName,
+    deploymentType: firstDeploymentType,
   };
   const data = await bigBrainAPI(
     ctx,
@@ -203,19 +275,30 @@ async function create_project(
 
   const projectSlug = data.projectSlug;
   const teamSlug = data.teamSlug;
-  const prodUrl = data.prodUrl;
+  const deploymentName = data.deploymentName;
+  const url = data.prodUrl;
   const adminKey = data.adminKey;
   const projectsRemaining = data.projectsRemaining;
   if (
     projectSlug === undefined ||
     teamSlug === undefined ||
-    prodUrl === undefined ||
+    deploymentName === undefined ||
+    url === undefined ||
     adminKey === undefined ||
     projectsRemaining === undefined
   ) {
+    // Okay to throw here because this is an unexpected error.
+    // eslint-disable-next-line no-restricted-syntax
     throw new Error(
       "Unknown error during provisioning: " + JSON.stringify(data)
     );
   }
-  return { projectSlug, teamSlug, prodUrl, adminKey, projectsRemaining };
+  return {
+    projectSlug,
+    teamSlug,
+    deploymentName,
+    url,
+    adminKey,
+    projectsRemaining,
+  };
 }

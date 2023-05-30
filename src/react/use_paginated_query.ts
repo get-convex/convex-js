@@ -6,10 +6,14 @@ import {
   OptimisticLocalStore,
   PublicQueryNames,
 } from "../browser/index.js";
-import { PaginationOptions, PaginationResult } from "../server/index.js";
+import {
+  PaginationOptions,
+  paginationOptsValidator,
+  PaginationResult,
+} from "../server/index.js";
 import { BetterOmit, Expand } from "../type_utils.js";
-import { convexToJson, Value } from "../values/index.js";
-import { RequestForQueries, useQueriesGeneric } from "./use_queries.js";
+import { convexToJson, Infer, Value } from "../values/index.js";
+import { useQueriesGeneric } from "./use_queries.js";
 
 /**
  * Load data reactively from a paginated query to a create a growing list.
@@ -28,7 +32,7 @@ import { RequestForQueries, useQueriesGeneric } from "./use_queries.js";
  *
  * Example usage:
  * ```typescript
- * const { results, status, loadMore } = usePaginatedQueryGeneric(
+ * const { results, status, isLoading, loadMore } = usePaginatedQueryGeneric(
  *   "listMessages",
  *   { channel: "#general" },
  *   { initialNumItems: 5 }
@@ -37,8 +41,8 @@ import { RequestForQueries, useQueriesGeneric } from "./use_queries.js";
  *
  * If the query `name` or `args` change, the pagination state will be reset
  * to the first page. Similarly, if any of the pages result in an InvalidCursor
- * or QueryScannedTooManyDocuments error, the pagination state will also reset
- * to the first page.
+ * error or an error associated with too much data, the pagination state will also
+ * reset to the first page.
  *
  * To learn more about pagination, see [Paginated Queries](https://docs.convex.dev/database/pagination).
  *
@@ -103,7 +107,15 @@ export function usePaginatedQueryGeneric(
     args: Record<string, Value>;
     id: number;
     maxQueryIndex: number;
-    queries: RequestForQueries;
+    queries: Record<
+      number,
+      {
+        name: string;
+        // Use the validator type as a test that it matches the args
+        // we generate.
+        args: { paginationOpts: Infer<typeof paginationOptsValidator> };
+      }
+    >;
   }>(createInitialState);
 
   // `currState` is the state that we'll render based on.
@@ -135,22 +147,26 @@ export function usePaginatedQueryGeneric(
       if (currResult instanceof Error) {
         if (
           currResult.message.includes("InvalidCursor") ||
-          currResult.message.includes("QueryScannedTooManyDocuments") ||
-          currResult.message.includes("ArrayTooLong")
+          currResult.message.includes("ArrayTooLong") ||
+          currResult.message.includes("TooManyReads") ||
+          currResult.message.includes("TooManyDocumentsRead") ||
+          currResult.message.includes("ReadsTooLarge")
         ) {
           // `usePaginatedQueryGeneric` handles a few types of query errors:
 
-          // 1. InvalidCursor: If the cursor is invalid, probably the paginated
+          // - InvalidCursor: If the cursor is invalid, probably the paginated
           // database query was data-dependent and changed underneath us. The
           // cursor in the params or journal no longer matches the current
           // database query.
-          // 2. QueryScannedTooManyDocuments: Likely so many elements were
-          // added to a single page they hit our limit.
-          // 3. Array length is too long: Likely so many elements were added
-          // to a single page they hit our limit.
+          // - ArrayTooLong, TooManyReads, TooManyDocumentsRead, ReadsTooLarge:
+          // Likely so many elements were added to a single page they hit our limit.
 
-          // In both cases we want to restart pagination to throw away all our
+          // In all cases, we want to restart pagination to throw away all our
           // existing cursors.
+          console.warn(
+            "usePaginatedQuery hit error, resetting pagination state: " +
+              currResult.message
+          );
           setState(createInitialState);
           return [[], undefined];
         } else {
@@ -162,23 +178,40 @@ export function usePaginatedQueryGeneric(
     return [allItems, currResult];
   }, [resultsObject, currState.maxQueryIndex, createInitialState]);
 
-  const statusAndLoadMore = useMemo(() => {
+  const statusObject = useMemo(() => {
     if (maybeLastResult === undefined) {
-      return {
-        status: "LoadingMore",
-        loadMore: undefined,
-      } as const;
+      if (currState.maxQueryIndex === 0) {
+        return {
+          status: "LoadingFirstPage",
+          isLoading: true,
+          loadMore: (_numItems: number) => {
+            // Intentional noop.
+          },
+        } as const;
+      } else {
+        return {
+          status: "LoadingMore",
+          isLoading: true,
+          loadMore: (_numItems: number) => {
+            // Intentional noop.
+          },
+        } as const;
+      }
     }
     if (maybeLastResult.isDone) {
       return {
         status: "Exhausted",
-        loadMore: undefined,
+        isLoading: false,
+        loadMore: (_numItems: number) => {
+          // Intentional noop.
+        },
       } as const;
     }
     const continueCursor = maybeLastResult.continueCursor;
     let alreadyLoadingMore = false;
     return {
       status: "CanLoadMore",
+      isLoading: false,
       loadMore: (numItems: number) => {
         if (!alreadyLoadingMore) {
           alreadyLoadingMore = true;
@@ -205,11 +238,11 @@ export function usePaginatedQueryGeneric(
         }
       },
     } as const;
-  }, [maybeLastResult]);
+  }, [maybeLastResult, currState.maxQueryIndex]);
 
   return {
     results,
-    ...statusAndLoadMore,
+    ...statusObject,
   };
 }
 
@@ -247,33 +280,48 @@ function nextPaginationId(): number {
  * The result of calling the {@link usePaginatedQueryGeneric} hook.
  *
  * This includes:
- * 1. `results` - An array of the currently loaded results.
- * 2. `status` - The status of the pagination. The possible statuses are:
+ * - `results` - An array of the currently loaded results.
+ * - `isLoading` - Whether the hook is currently loading results.
+ * - `status` - The status of the pagination. The possible statuses are:
+ *   - "LoadingFirstPage": The hook is loading the first page of results.
  *   - "CanLoadMore": This query may have more items to fetch. Call `loadMore` to
  *   fetch another page.
  *   - "LoadingMore": We're currently loading another page of results.
  *   - "Exhausted": We've paginated to the end of the list.
- * 3. `loadMore` A callback to fetch more results. This will be `undefined`
- * unless the status is "CanLoadMore".
+ * - `loadMore(n)` A callback to fetch more results. This will only fetch more
+ * results if the status is "CanLoadMore".
  *
  * @public
  */
 export type UsePaginatedQueryResult<T> = {
   results: T[];
+  loadMore: (numItems: number) => void;
 } & (
   | {
+      status: "LoadingFirstPage";
+      isLoading: true;
+    }
+  | {
       status: "CanLoadMore";
-      loadMore: (numItems: number) => void;
+      isLoading: false;
     }
   | {
       status: "LoadingMore";
-      loadMore: undefined;
+      isLoading: true;
     }
   | {
       status: "Exhausted";
-      loadMore: undefined;
+      isLoading: false;
     }
 );
+
+/**
+ * The possible pagination statuses in {@link UsePaginatedQueryResult}.
+ *
+ * This is a union of string literal types.
+ * @public
+ */
+export type PaginationStatus = UsePaginatedQueryResult<any>["status"];
 
 /**
  * A query function that is usable with {@link usePaginatedQueryGeneric}.

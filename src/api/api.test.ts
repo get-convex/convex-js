@@ -10,7 +10,12 @@ import {
   internalMutationGeneric,
   FunctionArgs,
 } from "../server";
-import { ApiFromModules } from "./index.js";
+import {
+  ApiFromModules,
+  ArgsAndOptions,
+  ArgsObject,
+  OptionalRestArgs,
+} from "./index.js";
 
 describe("ApiFromModules", () => {
   test("finds queries and mutations", () => {
@@ -226,5 +231,58 @@ describe("ApiFromModules", () => {
       publicActions: {};
     };
     assert<Equals<API, ExpectedAPI>>;
+  });
+});
+
+describe("ArgsObject", () => {
+  test("infers Record<string, never> for functions with no args", () => {
+    type MyFunction = () => {};
+    type ExpectedArgs = Record<string, never>;
+    type Args = ArgsObject<MyFunction>;
+    assert<Equals<Args, ExpectedArgs>>();
+  });
+
+  test("infers args for functions with args", () => {
+    type MyFunction = (args: { property: string }) => {};
+    type ExpectedArgs = { property: string };
+    type Args = ArgsObject<MyFunction>;
+    assert<Equals<Args, ExpectedArgs>>();
+  });
+});
+
+describe("OptionalRestArgs", () => {
+  test("infers rest type with optional args for functions with no args", () => {
+    type MyFunction = () => {};
+    type ExpectedArgs = [Record<string, never>?];
+    type Args = OptionalRestArgs<MyFunction>;
+    assert<Equals<Args, ExpectedArgs>>();
+  });
+
+  test("infers rest type with required args for functions with args", () => {
+    type MyFunction = (args: { property: string }) => {};
+    type ExpectedArgs = [{ property: string }];
+    type Args = OptionalRestArgs<MyFunction>;
+    assert<Equals<Args, ExpectedArgs>>();
+  });
+});
+
+describe("ArgsAndOptions", () => {
+  type Options = {
+    option1?: string;
+    option2: number;
+  };
+
+  test("infers rest type with optional args and optional options for functions with no args", () => {
+    type MyFunction = () => {};
+    type ExpectedArgs = [Record<string, never>?, Options?];
+    type Args = ArgsAndOptions<MyFunction, Options>;
+    assert<Equals<Args, ExpectedArgs>>();
+  });
+
+  test("infers rest type with required args and optional options for functions with args", () => {
+    type MyFunction = (args: { property: string }) => {};
+    type ExpectedArgs = [{ property: string }, Options?];
+    type Args = ArgsAndOptions<MyFunction, Options>;
+    assert<Equals<Args, ExpectedArgs>>();
   });
 });

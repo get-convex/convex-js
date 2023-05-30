@@ -22,7 +22,9 @@ export function reactCodegen(): GeneratedJsWithTypes {
    *
    * @param name - The name of the query function.
    * @param args - The arguments to the query function.
-   * @returns \`undefined\` if loading and the query's return value otherwise.
+   * @param options - [Optional] The {@link UseQueryOptions} options object.
+   * @returns the result of the query. If the query is loading or skipped,
+   * returns \`undefined\`.
    */
   export const useQuery = useQueryGeneric;
   
@@ -78,7 +80,7 @@ export function reactCodegen(): GeneratedJsWithTypes {
    * This hook must be used with Convex query functions that match
    * {@link PaginatedQueryFunction}. This means they must:
    * 1. Have a single arguments object with a \`paginationOpts\` property
-   * of type {@link server.PaginationOptions}.
+   * of type {@link PaginationOptions}.
    * 2. Return a {@link PaginationResult}.
    *
    * \`usePaginatedQuery\` concatenates all the pages
@@ -87,7 +89,7 @@ export function reactCodegen(): GeneratedJsWithTypes {
    *
    * Example usage:
    * \`\`\`typescript
-   * const { results, status, loadMore } = usePaginatedQuery(
+   * const { results, status, isLoading, loadMore } = usePaginatedQuery(
    *   "listMessages",
    *   { channel: "#general" },
    *   { initialNumItems: 5 }
@@ -96,8 +98,8 @@ export function reactCodegen(): GeneratedJsWithTypes {
    * 
    * If the query \`name\` or \`args\` change, the pagination state will be reset
    * to the first page. Similarly, if any of the pages result in an InvalidCursor
-   * or QueryScannedTooManyDocuments error, the pagination state will also reset
-   * to the first page.
+   * error or an error associated with too much data, the pagination state will also
+   * reset to the first page.
    *
    * To learn more about pagination, see [Paginated Queries](https://docs.convex.dev/using/pagination).
    *
@@ -129,7 +131,7 @@ export function reactCodegen(): GeneratedJsWithTypes {
    *
    * For example if you loaded a query like:
    * \`\`\`typescript
-   * const results = useQueriesGeneric({
+   * const results = useQueries({
    *   messagesInGeneral: {
    *     name: "listMessages",
    *     args: ["#general"]
@@ -171,7 +173,18 @@ export function reactCodegen(): GeneratedJsWithTypes {
     UseMutationForAPI,
     UseQueriesForAPI,
     UseQueryForAPI,
+    ConvexProvider,
+    UseQueryOptions,
+    ReactMutation,
+    ReactAction,
+    ConvexReactClient,
+    PaginatedQueryFunction,
+    UsePaginatedQueryResult
   } from "convex/react";
+  import {
+    PaginationResult,
+    PaginationOptions
+  } from "convex/server";
   import type { API } from "./api";
 
   /**
@@ -184,7 +197,9 @@ export function reactCodegen(): GeneratedJsWithTypes {
    *
    * @param name - The name of the query function.
    * @param args - The arguments to the query function.
-   * @returns \`undefined\` if loading and the query's return value otherwise.
+   * @param options - [Optional] The {@link UseQueryOptions} options object.
+   * @returns the result of the query. If the query is loading or skipped,
+   * returns \`undefined\`.
    */
   export declare const useQuery: UseQueryForAPI<API>;
   
@@ -240,7 +255,7 @@ export function reactCodegen(): GeneratedJsWithTypes {
    * This hook must be used with Convex query functions that match
    * {@link PaginatedQueryFunction}. This means they must:
    * 1. Have a single arguments object with a \`paginationOpts\` property
-   * of type {@link server.PaginationOptions}.
+   * of type {@link PaginationOptions}.
    * 2. Return a {@link PaginationResult}.
    *
    * \`usePaginatedQuery\` concatenates all the pages
@@ -291,7 +306,7 @@ export function reactCodegen(): GeneratedJsWithTypes {
    *
    * For example if you loaded a query like:
    * \`\`\`typescript
-   * const results = useQueriesGeneric({
+   * const results = useQueries({
    *   messagesInGeneral: {
    *     name: "listMessages",
    *     args: ["#general"]

@@ -1,7 +1,7 @@
-import { Filesystem, nodeFs } from "../../bundler";
 import * as Sentry from "@sentry/node";
 import chalk from "chalk";
 import ora, { Ora } from "ora";
+import { Filesystem, nodeFs } from "./fs.js";
 
 /**
  * How the error should be handled when running `npx convex dev`.
@@ -61,6 +61,13 @@ export function logWarning(ctx: Context, message: string) {
 // Handles clearing spinner so that it doesn't get messed up
 export function logMessage(ctx: Context, ...logged: any) {
   ctx.spinner?.clear();
+  console.error(...logged);
+}
+
+// For the rare case writing output to stdout. Status and error messages
+// (logMesage, logWarning, etc.) should be written to stderr.
+export function logOutput(ctx: Context, ...logged: any) {
+  ctx.spinner?.clear();
   console.log(...logged);
 }
 
@@ -72,16 +79,19 @@ export function logMessage(ctx: Context, ...logged: any) {
 export function showSpinner(ctx: Context, message: string) {
   ctx.spinner?.stop();
   ctx.spinner = ora({
-    text: message,
-    stream: process.stdout,
+    // Add newline to prevent clobbering when a message
+    // we can't pipe through `logMessage` et al gets printed
+    text: message + "\n",
+    stream: process.stderr,
   }).start();
 }
 
 export function changeSpinner(ctx: Context, message: string) {
   if (ctx.spinner) {
-    ctx.spinner.text = message;
+    // Add newline to prevent clobbering
+    ctx.spinner.text = message + "\n";
   } else {
-    console.log(message);
+    console.error(message);
   }
 }
 
@@ -90,7 +100,7 @@ export function logFailure(ctx: Context, message: string) {
     ctx.spinner.fail(message);
     ctx.spinner = undefined;
   } else {
-    console.log(`${chalk.red(`✖`)} ${message}`);
+    console.error(`${chalk.red(`✖`)} ${message}`);
   }
 }
 
@@ -100,7 +110,7 @@ export function logFinishedStep(ctx: Context, message: string) {
     ctx.spinner.succeed(message);
     ctx.spinner = undefined;
   } else {
-    console.log(`${chalk.green(`✔`)} ${message}`);
+    console.error(`${chalk.green(`✔`)} ${message}`);
   }
 }
 
@@ -108,17 +118,5 @@ export function stopSpinner(ctx: Context) {
   if (ctx.spinner) {
     ctx.spinner.stop();
     ctx.spinner = undefined;
-  }
-}
-
-export function pauseSpinner(ctx: Context) {
-  if (ctx.spinner) {
-    ctx.spinner.stop();
-  }
-}
-
-export function resumeSpinner(ctx: Context) {
-  if (ctx.spinner) {
-    ctx.spinner.start();
   }
 }

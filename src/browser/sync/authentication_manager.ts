@@ -45,6 +45,10 @@ type AuthState =
       hasRetried: boolean;
     }
   | {
+      state: "initialRefetch";
+      config: AuthConfig;
+    }
+  | {
       state: "waitingForServerConfirmationOfFreshToken";
       config: AuthConfig;
       hadAuth: boolean;
@@ -75,8 +79,8 @@ export class AuthenticationManager {
   private readonly syncState: LocalSyncState;
   // Passed down by BaseClient, sends a message to the server
   private readonly authenticate: (token: string) => void;
-  private readonly pauseSocket: () => Promise<void>;
-  private readonly resumeSocket: () => Promise<void>;
+  private readonly pauseSocket: () => void;
+  private readonly resumeSocket: () => void;
   // Passed down by BaseClient, sends a message to the server
   private readonly clearAuth: () => void;
   private readonly verbose: boolean;
@@ -91,8 +95,8 @@ export class AuthenticationManager {
       verbose,
     }: {
       authenticate: (token: string) => void;
-      pauseSocket: () => Promise<void>;
-      resumeSocket: () => Promise<void>;
+      pauseSocket: () => void;
+      resumeSocket: () => void;
       clearAuth: () => void;
       verbose: boolean;
     }
@@ -124,6 +128,10 @@ export class AuthenticationManager {
       });
       this.authenticate(token.value);
     } else {
+      this.setAuthState({
+        state: "initialRefetch",
+        config: { fetchToken, onAuthChange: onChange },
+      });
       // Try again with `forceRefreshToken: true`
       await this.refetchToken();
     }

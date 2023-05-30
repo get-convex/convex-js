@@ -14,7 +14,7 @@ import {
  * The search expression must search for text in the index's `searchField`. The
  * filter expressions can use any of the `filterFields` defined in the index.
  *
- * For all other filtering use {@link Query.filter}.
+ * For all other filtering use {@link OrderedQuery.filter}.
  *
  * To learn about full text search, see [Indexes](https://docs.convex.dev/text-search).
  * @public

@@ -1,5 +1,5 @@
 import { Command, Option } from "commander";
-import { oneoffContext } from "./lib/context.js";
+import { oneoffContext } from "../bundler/context.js";
 import { reinit as reinitLib } from "./lib/reinit.js";
 
 export const reinit = new Command("reinit")
@@ -35,5 +35,5 @@ export const reinit = new Command("reinit")
         : options.saveUrl === false
         ? "no"
         : "ask";
-    await reinitLib(ctx, options, saveUrl);
+    await reinitLib(ctx, "prod", options, saveUrl);
   });

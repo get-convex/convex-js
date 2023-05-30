@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { checkAuthorization, performLogin } from "./lib/login.js";
 import path from "path";
 import { Option } from "commander";
-import { oneoffContext } from "./lib/context.js";
+import { oneoffContext } from "../bundler/context.js";
 import { init as initLib } from "./lib/init.js";
 
 const cwd = path.basename(process.cwd());
@@ -31,7 +31,7 @@ export const init = new Command("init")
   .action(async options => {
     const ctx = oneoffContext;
 
-    if (!(await checkAuthorization(ctx))) {
+    if (!(await checkAuthorization(ctx, false))) {
       await performLogin(ctx);
     }
 
@@ -41,5 +41,5 @@ export const init = new Command("init")
         : options.saveUrl === false
         ? "no"
         : "ask";
-    await initLib(ctx, options, saveUrl);
+    await initLib(ctx, "prod", options, saveUrl);
   });

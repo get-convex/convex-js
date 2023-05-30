@@ -5,6 +5,7 @@ import { init } from "./init.js";
 import { dashboard } from "./dashboard.js";
 import { deployments } from "./deployments.js";
 import { docs } from "./docs.js";
+import { run } from "./run.js";
 import { version } from "../index.js";
 import { auth } from "./auth.js";
 import { codegen } from "./codegen.js";
@@ -46,39 +47,31 @@ async function main() {
   const nodeVersion = process.versions.node;
   const majorVersion = parseInt(nodeVersion.split(".")[0], 10);
   if (majorVersion < MINIMUM_MAJOR_VERSION) {
-    console.log(
+    console.error(
       chalk.red(
         `Your Node version ${nodeVersion} is too old. Convex requires at least Node v${MINIMUM_MAJOR_VERSION}.`
       )
     );
-    console.log(
+    console.error(
       chalk.gray(
         `You can use ${chalk.bold(
           "nvm"
         )} (https://github.com/nvm-sh/nvm#installing-and-updating) to manage different versions of Node.`
       )
     );
-    console.log(
+    console.error(
       chalk.gray(
         "After installing `nvm`, install the latest version of Node with " +
           chalk.bold("`nvm install node`.")
       )
     );
-    console.log(
+    console.error(
       chalk.gray(
         "Then, activate the installed version in your terminal with " +
           chalk.bold("`nvm use`.")
       )
     );
     process.exit(1);
-  }
-
-  if (process.platform === "win32") {
-    console.log(
-      chalk.yellow(
-        "Convex has preliminary support for development on Windows. Some functionality may be missing or broken. Please report issues at https://convex.dev/community. Read the docs for more information: https://docs.convex.dev/understanding/state#windows-development."
-      )
-    );
   }
 
   const program = new Command();
@@ -91,6 +84,7 @@ async function main() {
     .addCommand(dev)
     .addCommand(deploy)
     .addCommand(deployments, { hidden: true })
+    .addCommand(run)
     .addCommand(typecheck, { hidden: true })
     .addCommand(auth)
     .addCommand(convexImport)
@@ -111,7 +105,7 @@ async function main() {
   } catch (e) {
     Sentry.captureException(e);
     process.exitCode = 1;
-    throw e;
+    console.error(chalk.red("Unexpected Error: " + e));
   } finally {
     await Sentry.close();
   }

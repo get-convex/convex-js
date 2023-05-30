@@ -65,8 +65,10 @@ export function useQueriesGeneric(
 ): Record<string, any | undefined | Error> {
   const convex = useConvexGeneric();
   if (convex === undefined) {
+    // Error message includes `useQuery` because this hook is called by `useQuery`
+    // more often than it's called directly.
     throw new Error(
-      "Could not find Convex client! `useQueries` must be used in the React component " +
+      "Could not find Convex client! `useQuery` must be used in the React component " +
         "tree under `ConvexProvider`. Did you forget it? " +
         "See https://docs.convex.dev/quick-start#set-up-convex-in-your-react-app"
     );

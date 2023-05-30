@@ -2,8 +2,8 @@
   "include": ["."],
   "exclude": [],
   "extends": "../../tsconfig",
+  "target": "node",
   "compilerOptions": {
-    "outDir": "../../dist/types",
-    "lib": ["ES2020"]
+    "outDir": "../../dist/types"
   }
 }

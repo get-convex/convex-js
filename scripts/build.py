@@ -79,11 +79,11 @@ def main() -> None:
         # config file, see [1].
         #
         # We haven't seen it in a while, maybe it's fixed.
-        # Until this bug is resolved let's run these in series.
-        if os.getenv("CONCURRENT_CONVEX_NPM_BUILD"):
-            children.append(pool.submit(build_api_extractor, pkg))
-        else:
+        # If this bug comes back we'll go back to running these in series.
+        if os.getenv("NO_CONCURRENT_CONVEX_NPM_BUILD"):
             build_api_extractor(pkg)
+        else:
+            children.append(pool.submit(build_api_extractor, pkg))
 
     for child in as_completed(children):
         try:

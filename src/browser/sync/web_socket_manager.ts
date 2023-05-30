@@ -1,5 +1,6 @@
 import {
   ClientMessage,
+  encodeClientMessage,
   parseServerMessage,
   ServerMessage,
 } from "./protocol.js";
@@ -14,8 +15,6 @@ const CLOSE_NO_STATUS = 1005;
  */
 const CLOSE_NOT_FOUND = 4040;
 
-type PromisePair<T> = { promise: Promise<T>; resolve: (value: T) => void };
-
 /**
  * The various states our WebSocket can be in:
  *
@@ -23,12 +22,6 @@ type PromisePair<T> = { promise: Promise<T>; resolve: (value: T) => void };
  * - "connecting": We have created the WebSocket and are waiting for the
  *   `onOpen` callback.
  * - "ready": We have an open WebSocket.
- * - "closing": We called `.close()` on the WebSocket and are waiting for the
- *   `onClose` callback before we schedule a reconnect.
- * - "stopping": The application decided to totally stop the WebSocket. We are
- *    waiting for the `onClose` callback before we consider this WebSocket stopped.
- * - "pausing": The client needs to fetch some data before it makes sense to resume
- *    the WebSocket connection.
  * - "paused": The WebSocket was stopped and a new one can be created via `.resume()`.
  * - "stopped": We have stopped the WebSocket and will never create a new one.
  *
@@ -42,18 +35,12 @@ type PromisePair<T> = { promise: Promise<T>; resolve: (value: T) => void };
  *     stop() -> stopped
  *   connecting:
  *     onopen -> ready
- *     close() -> closing
- *     stop() -> stopping
+ *     close() -> disconnected
+ *     stop() -> stopped
  *   ready:
- *     close() -> closing
- *     pause() -> pausing
- *     stop() -> stopping
- *   closing:
- *     onclose -> disconnected
- *     stop() -> stopping
- *   pausing:
- *     onclose -> paused
- *     stop() -> stopping
+ *     close() -> disconnected
+ *     pause() -> paused
+ *     stop() -> stopped
  *   paused:
  *     resume() -> connecting
  *     stop() -> stopped
@@ -61,24 +48,40 @@ type PromisePair<T> = { promise: Promise<T>; resolve: (value: T) => void };
  *     onclose -> stopped
  * terminalStates:
  *   stopped
+ *
+ *
+ *
+ *                                        ┌────────────────┐
+ *                ┌─────────stop()────────│  disconnected  │◀─┐
+ *                │                       └────────────────┘  │
+ *                ▼                            │       ▲      │
+ *       ┌────────────────┐           new WebSocket()  │      │
+ *    ┌─▶│    stopped     │◀──────┐            │       │      │
+ *    │  └────────────────┘       │            │       │      │
+ *    │           ▲            stop()          │    close() close()
+ *    │         stop()            │            │       │      │
+ *    │           │               │            ▼       │      │
+ *    │  ┌────────────────┐       └───────┌────────────────┐  │
+ *    │  │     paused     │───resume()───▶│   connecting   │  │
+ *    │  └────────────────┘               └────────────────┘  │
+ *    │           ▲                                │          │
+ *    │           │                               onopen      │
+ *    │           │                                │          │
+ *    │           │                                ▼          │
+ * stop()         │                       ┌────────────────┐  │
+ *    │           └────────pause()────────│     ready      │──┘
+ *    │                                   └────────────────┘
+ *    │                                            │
+ *    │                                            │
+ *    └────────────────────────────────────────────┘
  */
+
 type Socket =
   | { state: "disconnected" }
   | { state: "connecting"; ws: WebSocket }
   | { state: "ready"; ws: WebSocket }
-  | { state: "closing"; ws: WebSocket }
-  | { state: "pausing"; promisePair: PromisePair<null> }
   | { state: "paused" }
-  | { state: "stopping"; promisePair: PromisePair<null> }
   | { state: "stopped" };
-
-function promisePair<T>(): PromisePair<T> {
-  let resolvePromise: (value: T) => void;
-  const promise = new Promise<T>(resolve => {
-    resolvePromise = resolve;
-  });
-  return { promise, resolve: resolvePromise! };
-}
 
 export type ReconnectMetadata = {
   connectionCount: number;
@@ -146,12 +149,8 @@ export class WebSocketManager {
     void this.connect();
   }
 
-  private async connect() {
-    if (
-      this.socket.state === "closing" ||
-      this.socket.state === "stopping" ||
-      this.socket.state === "stopped"
-    ) {
+  private connect() {
+    if (this.socket.state === "stopped") {
       return;
     }
     if (
@@ -192,7 +191,6 @@ export class WebSocketManager {
     ws.onerror = error => {
       const message = (error as ErrorEvent).message;
       console.log(`WebSocket error: ${message}`);
-      this.closeAndReconnect("WebSocketError");
     };
     ws.onmessage = message => {
       // TODO(CX-1498): We reset the retry counter on any successful message.
@@ -214,26 +212,14 @@ export class WebSocketManager {
         event.code !== CLOSE_NO_STATUS &&
         event.code !== CLOSE_NOT_FOUND // Note that we want to retry on a 404, as it can be transient during a push.
       ) {
-        let msg = `WebSocket closed unexpectedly with code ${event.code}`;
+        let msg = `WebSocket closed with code ${event.code}`;
         if (event.reason) {
           msg += `: ${event.reason}`;
         }
-        console.error(msg);
+        console.log(msg);
       }
-      if (this.socket.state === "stopping") {
-        this.socket.promisePair.resolve(null);
-        this.socket = { state: "stopped" };
-        return;
-      }
-      if (this.socket.state === "pausing") {
-        this.socket.promisePair.resolve(null);
-        this.socket = { state: "paused" };
-        return;
-      }
-      this.socket = { state: "disconnected" };
-      const backoff = this.nextBackoff();
-      console.log(`Attempting reconnect in ${backoff}ms`);
-      setTimeout(() => this.connect(), backoff);
+      this.scheduleReconnect();
+      return;
     };
   }
 
@@ -252,7 +238,8 @@ export class WebSocketManager {
     this._logVerbose(`sending message with type ${message.type}`);
 
     if (this.socket.state === "ready") {
-      const request = JSON.stringify(message);
+      const encodedMessage = encodeClientMessage(message);
+      const request = JSON.stringify(encodedMessage);
       try {
         this.socket.ws.send(request);
       } catch (error: any) {
@@ -277,8 +264,15 @@ export class WebSocketManager {
     }, this.serverInactivityThreshold);
   }
 
+  private scheduleReconnect() {
+    this.socket = { state: "disconnected" };
+    const backoff = this.nextBackoff();
+    console.log(`Attempting reconnect in ${backoff}ms`);
+    setTimeout(() => this.connect(), backoff);
+  }
+
   /**
-   * Close the WebSocket and schedule a reconnect when it completes closing.
+   * Close the WebSocket and schedule a reconnect.
    *
    * This should be used when we hit an error and would like to restart the session.
    */
@@ -286,23 +280,45 @@ export class WebSocketManager {
     this._logVerbose(`begin closeAndReconnect with reason ${closeReason}`);
     switch (this.socket.state) {
       case "disconnected":
-      case "closing":
-      case "stopping":
       case "stopped":
-      case "pausing":
       case "paused":
         // Nothing to do if we don't have a WebSocket.
         return;
       case "connecting":
-      case "ready":
+      case "ready": {
         this.lastCloseReason = closeReason;
-        this.socket.ws.close();
-        this.socket = {
-          state: "closing",
-          ws: this.socket.ws,
+        this.close();
+        this.scheduleReconnect();
+        return;
+      }
+      default: {
+        // Enforce that the switch-case is exhaustive.
+        // eslint-disable-next-line  @typescript-eslint/no-unused-vars
+        const _: never = this.socket;
+      }
+    }
+  }
+
+  /**
+   * Close the WebSocket, being careful to clear the onclose handler to avoid re-entrant
+   * calls. Use this instead of directly calling `ws.close()`
+   */
+  private close() {
+    switch (this.socket.state) {
+      case "disconnected":
+      case "stopped":
+      case "paused":
+        // Nothing to do if we don't have a WebSocket.
+        return;
+      case "connecting":
+      case "ready": {
+        this.socket.ws.onclose = () => {
+          // Set onclose to no-op so we don't re-entrantly call the onclose handler
         };
         this._logVerbose("ws.close called");
+        this.socket.ws.close();
         return;
+      }
       default: {
         // Enforce that the switch-case is exhaustive.
         // eslint-disable-next-line  @typescript-eslint/no-unused-vars
@@ -315,41 +331,20 @@ export class WebSocketManager {
    * Close the WebSocket and do not reconnect.
    * @returns A Promise that resolves when the WebSocket `onClose` callback is called.
    */
-  async stop(): Promise<void> {
+  stop(): void {
     if (this.reconnectDueToServerInactivityTimeout) {
       clearTimeout(this.reconnectDueToServerInactivityTimeout);
     }
     switch (this.socket.state) {
       case "stopped":
-        return;
-      case "connecting":
-      case "ready":
-        this.socket.ws.close();
-        this.socket = {
-          state: "stopping",
-          promisePair: promisePair(),
-        };
-        await this.socket.promisePair.promise;
-        return;
-      case "pausing":
-      case "closing":
-        // We're already closing the WebSocket, so just upgrade the state
-        // to "stopping" so we don't reconnect.
-        this.socket = {
-          state: "stopping",
-          promisePair: promisePair(),
-        };
-        await this.socket.promisePair.promise;
-        return;
       case "paused":
       case "disconnected":
-        // If we're disconnected so switch the state to "stopped" so the reconnect
-        // timeout doesn't create a new WebSocket.
-        // If we're paused prevent a resume.
-        this.socket = { state: "stopped" };
-        return;
-      case "stopping":
-        await this.socket.promisePair.promise;
+      case "connecting":
+      case "ready":
+        this.close();
+        this.socket = {
+          state: "stopped",
+        };
         return;
       default: {
         // Enforce that the switch-case is exhaustive.
@@ -358,39 +353,19 @@ export class WebSocketManager {
     }
   }
 
-  async pause(): Promise<void> {
+  pause(): void {
     switch (this.socket.state) {
-      case "stopping":
       case "stopped":
         // If we're stopping we ignore pause
         return;
       case "paused":
-        return;
+      case "disconnected":
       case "connecting":
       case "ready":
-        this.socket.ws.close();
+        this.close();
         this.socket = {
-          state: "pausing",
-          promisePair: promisePair(),
+          state: "paused",
         };
-        await this.socket.promisePair.promise;
-        return;
-      case "closing":
-        // We're already closing the WebSocket, so just upgrade the state
-        // to "pausing" so we don't reconnect.
-        this.socket = {
-          state: "pausing",
-          promisePair: promisePair(),
-        };
-        await this.socket.promisePair.promise;
-        return;
-      case "disconnected":
-        // We're disconnected so switch the state to "paused" so the reconnect
-        // timeout doesn't create a new WebSocket.
-        this.socket = { state: "paused" };
-        return;
-      case "pausing":
-        await this.socket.promisePair.promise;
         return;
       default: {
         // Enforce that the switch-case is exhaustive.
@@ -403,18 +378,15 @@ export class WebSocketManager {
    * Create a new WebSocket after a previous `pause()`, unless `stop()` was
    * called before.
    */
-  async resume(): Promise<void> {
+  resume(): void {
     switch (this.socket.state) {
-      case "pausing":
       case "paused":
         break;
-      case "stopping":
       case "stopped":
         // If we're stopping we ignore resume
         return;
       case "connecting":
       case "ready":
-      case "closing":
       case "disconnected":
         throw new Error("`resume()` is only valid after `pause()`");
       default: {
@@ -422,10 +394,7 @@ export class WebSocketManager {
         const _: never = this.socket;
       }
     }
-    if (this.socket.state === "pausing") {
-      await this.socket.promisePair.promise;
-    }
-    await this.connect();
+    this.connect();
   }
 
   private _logVerbose(message: string) {

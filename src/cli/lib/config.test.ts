@@ -1,22 +1,37 @@
-import { test, expect } from "@jest/globals";
+import { jest, test, expect } from "@jest/globals";
 import { parseProjectConfig } from "./config.js";
+import { oneoffContext } from "../../bundler/context.js";
 
-test("parseProjectConfig", () => {
-  const assertParses = (inp: any) => {
-    expect(parseProjectConfig(inp)).toEqual(inp);
+test("parseProjectConfig", async () => {
+  // Make a context that throws on crashes so we can detect them.
+  const ctx = {
+    ...oneoffContext,
+    crash: () => {
+      // eslint-disable-next-line no-restricted-syntax
+      throw new Error();
+    },
   };
-  const assertParseError = (inp: any, err: string) => {
-    expect(() => parseProjectConfig(inp)).toThrow(err);
+  const consoleSpy = jest
+    .spyOn(global.console, "error")
+    .mockImplementation(() => {
+      // Do nothing
+    });
+  const assertParses = async (inp: any) => {
+    expect(await parseProjectConfig(ctx, inp)).toEqual(inp);
+  };
+  const assertParseError = async (inp: any, err: string) => {
+    await expect(parseProjectConfig(ctx, inp)).rejects.toThrow();
+    expect(consoleSpy).toBeCalledWith(err);
   };
 
-  assertParses({
+  await assertParses({
     team: "team",
     project: "proj",
     prodUrl: "prodUrl",
     functions: "functions/",
   });
 
-  assertParses({
+  await assertParses({
     team: "team",
     project: "proj",
     prodUrl: "prodUrl",
@@ -24,7 +39,7 @@ test("parseProjectConfig", () => {
     authInfos: [],
   });
 
-  assertParses({
+  await assertParses({
     team: "team",
     project: "proj",
     prodUrl: "prodUrl",
@@ -37,16 +52,7 @@ test("parseProjectConfig", () => {
     ],
   });
 
-  assertParseError(
-    {
-      team: 33,
-      project: "proj",
-      prodUrl: "prodUrl",
-      functions: "functions/",
-    },
-    "Expected team to be a string"
-  );
-  assertParseError(
+  await assertParseError(
     {
       team: "team",
       project: "proj",
@@ -54,6 +60,6 @@ test("parseProjectConfig", () => {
       functions: "functions/",
       authInfo: [{}],
     },
-    "Expected authInfo to be type AuthInfo[]"
+    "Expected `authInfo` in `convex.json` to be of type AuthInfo[]"
   );
 });

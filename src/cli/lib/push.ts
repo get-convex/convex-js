@@ -6,12 +6,17 @@ import {
   readProjectConfig,
   configJSON,
   configFromProjectConfig,
+  enforceDeprecatedConfigField,
 } from "./config.js";
-import { functionsDir, ensureHasConvexDependency } from "./utils.js";
+import {
+  functionsDir,
+  ensureHasConvexDependency,
+  shouldUseNewFlow,
+} from "./utils.js";
 import { typeCheckFunctionsInMode } from "./typecheck.js";
 import { doCodegen } from "./codegen";
 import { pushSchema } from "./indexes.js";
-import { Context } from "./context.js";
+import { Context } from "../../bundler/context.js";
 
 export type PushOptions = {
   adminKey: string;
@@ -41,8 +46,7 @@ export async function runPush(ctx: Context, options: PushOptions) {
   } else {
     await doCodegen({
       ctx,
-      projectConfig,
-      configPath,
+      functionsDirectoryPath: functionsDir(configPath, projectConfig),
       typeCheckMode: options.typecheck,
       dryRun: options.dryRun,
       debug: options.debug,
@@ -76,8 +80,12 @@ export async function runPush(ctx: Context, options: PushOptions) {
 
   const remoteConfig = await pullConfig(
     ctx,
-    localConfig.projectConfig.project,
-    localConfig.projectConfig.team,
+    shouldUseNewFlow()
+      ? undefined
+      : await enforceDeprecatedConfigField(ctx, projectConfig, "project"),
+    shouldUseNewFlow()
+      ? undefined
+      : await enforceDeprecatedConfigField(ctx, projectConfig, "team"),
     origin,
     options.adminKey
   );
@@ -89,7 +97,7 @@ export async function runPush(ctx: Context, options: PushOptions) {
         localConfig.modules.length === 0
           ? `No functions found in ${localConfig.projectConfig.functions}`
           : "Config already synced";
-      console.log(
+      console.error(
         chalk.gray(
           `${
             options.dryRun
@@ -103,14 +111,14 @@ export async function runPush(ctx: Context, options: PushOptions) {
   }
 
   if (verbose) {
-    console.log(
+    console.error(
       chalk.bold(
         `Remote config ${
           options.dryRun ? "would" : "will"
         } be overwritten with the following changes:`
       )
     );
-    console.log(diff);
+    console.error(diff);
   }
 
   if (options.dryRun) {

@@ -19,7 +19,7 @@ import {
   logFailure,
   logFinishedStep,
   showSpinner,
-} from "./context.js";
+} from "../../bundler/context.js";
 import { Issuer } from "openid-client";
 import inquirer from "inquirer";
 import { hostname } from "os";
@@ -57,7 +57,10 @@ function formatPathForPrinting(path: string) {
   return path;
 }
 
-export async function checkAuthorization(ctx: Context): Promise<boolean> {
+export async function checkAuthorization(
+  ctx: Context,
+  acceptOptIns: boolean
+): Promise<boolean> {
   const header = await getAuthHeader(ctx);
   if (!header) {
     return false;
@@ -86,7 +89,7 @@ export async function checkAuthorization(ctx: Context): Promise<boolean> {
   }
 
   // Check that we have optin as well
-  const shouldContinue = await optins(ctx);
+  const shouldContinue = await optins(ctx, acceptOptIns);
   if (!shouldContinue) {
     return await ctx.crash(1, undefined);
   }
@@ -140,7 +143,7 @@ async function performDeviceAuthorization(
         type: "input",
         name: "authToken",
         message:
-          "Open https://dash.convex.dev/auth, log in and paste the token here:",
+          "Open https://dashboard.convex.dev/auth, log in and paste the token here:",
       },
     ]);
     return answers.authToken;
@@ -149,8 +152,8 @@ async function performDeviceAuthorization(
   // Device Authorization Response - https://tools.ietf.org/html/rfc8628#section-3.2
   // Open authentication URL
   const { verification_uri_complete, user_code, expires_in } = handle;
-  console.log(`Visit ${verification_uri_complete} to finish logging in.`);
-  console.log(
+  console.error(`Visit ${verification_uri_complete} to finish logging in.`);
+  console.error(
     `You should see the following code which expires in ${
       expires_in % 60 === 0
         ? `${expires_in / 60} minutes`
@@ -199,6 +202,8 @@ async function performDeviceAuthorization(
     if (typeof tokens.access_token === "string") {
       return tokens.access_token;
     } else {
+      // Unexpected error
+      // eslint-disable-next-line no-restricted-syntax
       throw Error("Access token is missing");
     }
   } catch (err: any) {
@@ -251,12 +256,14 @@ async function performPasswordAuthentication(
     if (typeof response.data.access_token === "string") {
       return response.data.access_token;
     } else {
+      // Unexpected error
+      // eslint-disable-next-line no-restricted-syntax
       throw Error("Access token is missing");
     }
   } catch (err: any) {
-    console.log(`Password flow failed: ${err}`);
+    console.error(`Password flow failed: ${err}`);
     if (err.response) {
-      console.log(`${JSON.stringify(err.response.data)}`);
+      console.error(`${JSON.stringify(err.response.data)}`);
     }
     return await ctx.crash(1, err);
   }
@@ -269,18 +276,22 @@ export async function performLogin(
     overrideAuthClient,
     overrideAuthUsername,
     overrideAuthPassword,
+    overrideAccessToken,
     open,
-    optIn,
+    acceptOptIns,
+    dumpAccessToken,
     deviceName: deviceNameOverride,
   }: {
     overrideAuthUrl?: string;
     overrideAuthClient?: string;
     overrideAuthUsername?: string;
     overrideAuthPassword?: string;
+    overrideAccessToken?: string;
     // default `true`
     open?: boolean;
     // default `true`
-    optIn?: boolean;
+    acceptOptIns?: boolean;
+    dumpAccessToken?: boolean;
     deviceName?: string;
   } = {}
 ) {
@@ -299,7 +310,7 @@ export async function performLogin(
     deviceName = hostname();
   }
   if (process.stdin.isTTY && !deviceNameOverride) {
-    console.log(
+    console.error(
       chalk.bold(`Welcome to developing with Convex, let's get you logged in.`)
     );
     const answers = await inquirer.prompt([
@@ -323,7 +334,9 @@ export async function performLogin(
   });
 
   let accessToken: string;
-  if (overrideAuthUsername && overrideAuthPassword) {
+  if (overrideAccessToken) {
+    accessToken = overrideAccessToken;
+  } else if (overrideAuthUsername && overrideAuthPassword) {
     accessToken = await performPasswordAuthentication(
       ctx,
       issuer,
@@ -338,6 +351,12 @@ export async function performLogin(
       open ?? true
     );
   }
+
+  if (dumpAccessToken) {
+    console.log(`${accessToken}`);
+    return await ctx.crash(0);
+  }
+
   interface AuthorizeArgs {
     authnToken: string;
     deviceName: string;
@@ -354,12 +373,10 @@ export async function performLogin(
     return await ctx.crash(1, "invalid filesystem data", err);
   }
 
-  if (optIn ?? true) {
-    // Do opt in to TOS and Privacy Policy stuff
-    const shouldContinue = await optins(ctx);
-    if (!shouldContinue) {
-      return await ctx.crash(1, undefined);
-    }
+  // Do opt in to TOS and Privacy Policy stuff
+  const shouldContinue = await optins(ctx, acceptOptIns ?? false);
+  if (!shouldContinue) {
+    return await ctx.crash(1, undefined);
   }
 }
 
@@ -376,24 +393,26 @@ type AcceptOptInsArgs = {
 };
 
 // Returns whether we can proceed or not.
-async function optins(ctx: Context): Promise<boolean> {
+async function optins(ctx: Context, acceptOptIns: boolean): Promise<boolean> {
   const data = await bigBrainAPI(ctx, "POST", "check_opt_ins", {});
   if (data.optInsToAccept.length === 0) {
     return true;
   }
   for (const optInToAccept of data.optInsToAccept) {
-    const confirmed = (
-      await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "confirmed",
-          message: optInToAccept.message,
-        },
-      ])
-    ).confirmed;
+    const confirmed =
+      acceptOptIns ||
+      (
+        await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "confirmed",
+            message: optInToAccept.message,
+          },
+        ])
+      ).confirmed;
 
     if (!confirmed) {
-      console.log("Please accept the Terms of Service to use Convex.");
+      console.error("Please accept the Terms of Service to use Convex.");
       return Promise.resolve(false);
     }
   }

@@ -1,4 +1,5 @@
 import { test, expect } from "@jest/globals";
+import { oneoffContext } from "./context.js";
 
 // Although these tests are run as ESM by ts-lint, this file is built as both
 // CJS and ESM by TypeScript so normal recipes like `__dirname` for getting the
@@ -7,7 +8,6 @@ const dirname = "src/bundler";
 
 import {
   bundle,
-  nodeFs,
   entryPointsByEnvironment,
   useNodeDirectiveRegex,
   mustBeIsolate,
@@ -29,13 +29,13 @@ test("bundle function is present", () => {
 
 test("bundle finds JavaScript functions", async () => {
   const entryPoints = await entryPointsByEnvironment(
-    nodeFs,
+    oneoffContext,
     dirname + "/test_fixtures/js",
     false
   );
   const bundles = sorted(
     await bundle(
-      nodeFs,
+      oneoffContext,
       dirname + "/test_fixtures/js",
       entryPoints.isolate,
       false,

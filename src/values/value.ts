@@ -41,10 +41,12 @@ export type JSONValue =
  * Using `===` will not work because two different instances of `Id` can refer
  * to the same document.
  *
- * `Id`s are 17 bytes long and consist of:
- * - A 15-byte random value.
+ * `Id`s are 16 bytes long and consist of:
+ *
+ * - A 14-byte random value.
  * - A 2-byte timestamp representing the document's creation, in days since the Unix epoch.
- * This is encoded in base 62 ([0-9A-Za-z]).
+ *
+ * This is encoded in URL-safe base 64 (uses `-` and `_`).
  *
  * If you're using code generation, use the `Id` class typed for your data model in
  * `convex/_generated/dataModel.js`.
@@ -62,7 +64,7 @@ export class Id<TableName extends string> {
   /**
    * The identifier string.
    *
-   * This contains the characters `[0-9A-Za-z]`.
+   * This is encoded in URL-safe base 64 (uses `-` and `_`).
    */
   public readonly id: string;
 

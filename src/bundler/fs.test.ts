@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax */
 import { test, expect } from "@jest/globals";
 import fs from "fs";
 import os from "os";

@@ -6,16 +6,16 @@ import {
 } from "./lib/config.js";
 import inquirer from "inquirer";
 import chalk from "chalk";
-import { oneoffContext } from "./lib/context.js";
+import { oneoffContext } from "../bundler/context.js";
 import { validateIdentityProviderURL } from "./lib/auth.js";
 
 const list = new Command("list")
   .description("List the currently-configured identity providers")
   .action(async () => {
     const { projectConfig } = await readProjectConfig(oneoffContext);
-    const auth = projectConfig.authInfo;
+    const auth = projectConfig.authInfo ?? [];
     for (let i = 0; i < auth.length; i++) {
-      console.log(
+      console.error(
         `${i + 1}. Issuer: "${auth[i].domain}", Application ID: "${
           auth[i].applicationID
         }"`
@@ -29,9 +29,9 @@ const rm = new Command("remove")
     const ctx = oneoffContext;
     const options = command.parent.opts();
     const { projectConfig } = await readProjectConfig(ctx);
-    const auth = projectConfig.authInfo;
+    const auth = projectConfig.authInfo ?? [];
     if (auth.length === 0) {
-      console.log(
+      console.error(
         chalk.yellow("No identity providers configured -- nothing to remove.")
       );
       return;
@@ -51,18 +51,18 @@ const rm = new Command("remove")
     ]);
     const toRemove: AuthInfo[] = answers.providers ?? [];
     if (toRemove.length === 0) {
-      console.log(chalk.green("No providers selected for removal."));
+      console.error(chalk.green("No providers selected for removal."));
       return;
     }
     const newAuth = auth.filter(oldInfo => toRemove.indexOf(oldInfo) < 0);
     if (options.verbose) {
-      console.log(
+      console.error(
         chalk.bold(
           `Removing ${toRemove.length} identity provider(s). After this operation, the following provider(s) will remain:`
         )
       );
       for (let i = 0; i < newAuth.length; i++) {
-        console.log(
+        console.error(
           `${i + 1}. Issuer: "${newAuth[i].domain}", Application ID: "${
             newAuth[i].applicationID
           }"`
@@ -73,7 +73,7 @@ const rm = new Command("remove")
     const newConfig = projectConfig;
     newConfig.authInfo = newAuth;
     await writeProjectConfig(ctx, newConfig);
-    console.log(
+    console.error(
       chalk.green(
         "Configuration updated. Run `npx convex dev` or `npx convex deploy` to sync these changes."
       )
@@ -139,13 +139,13 @@ const add = new Command("add")
     }
 
     if (newProviders.length === 0) {
-      console.log(chalk.yellow("No providers added; nothing to do."));
+      console.error(chalk.yellow("No providers added; nothing to do."));
       return;
     }
     if (verbose) {
-      console.log(chalk.bold("Will add the following identity providers:"));
+      console.error(chalk.bold("Will add the following identity providers:"));
       for (let i = 0; i < newProviders.length; i++) {
-        console.log(
+        console.error(
           `${i + 1}. Issuer: "${newProviders[i].domain}", Application ID: "${
             newProviders[i].applicationID
           }"`
@@ -154,9 +154,10 @@ const add = new Command("add")
       await inquirer.prompt(["Press enter to continue or ctrl-C to abort.\n"]);
     }
     const config = projectConfig;
+    config.authInfo ??= [];
     config.authInfo.push(...newProviders);
     await writeProjectConfig(ctx, config);
-    console.log(
+    console.error(
       chalk.green(
         "Configuration updated. Run `npx convex dev` or `npx convex deploy` to sync these changes."
       )

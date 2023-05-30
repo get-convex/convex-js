@@ -90,6 +90,22 @@ export interface SearchIndexConfig<
 }
 
 /**
+ * @internal
+ */
+export type Index = {
+  indexDescriptor: string;
+  fields: string[];
+};
+
+/**
+ * @internal
+ */
+export type SearchIndex = {
+  indexDescriptor: string;
+  searchField: string;
+  filterFields: string[];
+};
+/**
  * The definition of a table within a schema.
  *
  * This should be produced by using {@link defineTable}.
@@ -103,12 +119,8 @@ export class TableDefinition<
   // eslint-disable-next-line @typescript-eslint/ban-types
   SearchIndexes extends GenericTableSearchIndexes = {}
 > {
-  private indexes: { indexDescriptor: string; fields: string[] }[];
-  private searchIndexes: {
-    indexDescriptor: string;
-    searchField: string;
-    filterFields: string[];
-  }[];
+  private indexes: Index[];
+  private searchIndexes: SearchIndex[];
   // The type of documents stored in this table.
   private documentType: Validator<any, any, any>;
 

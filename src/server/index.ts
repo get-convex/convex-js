@@ -46,6 +46,20 @@
  * ```
  * @module
  */
+
+// Guard against Convex functions accidentally getting included in a browser bundle.
+// Convex functions may include secret logic or credentials that should not be
+// send to untrusted clients (browsers).
+if (
+  typeof window !== "undefined" &&
+  !(window as any).__convexAllowFunctionsInBrowser
+) {
+  throw new Error(
+    "'convex/server' package loaded in the browser. " +
+      "Convex functions should not be imported in the browser."
+  );
+}
+
 export type { Auth, UserIdentity } from "./authentication.js";
 export * from "./database.js";
 export * from "./data_model.js";
@@ -69,6 +83,7 @@ export type { OrderedQuery, Query, QueryInitializer } from "./query.js";
 export type {
   ActionBuilder,
   ActionCtx,
+  ArgsArray,
   FunctionArgs,
   HttpActionBuilderForAPI,
   MutationBuilder,

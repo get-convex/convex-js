@@ -8,7 +8,11 @@ import {
   PublicMutationNames,
   PublicQueryNames,
 } from "../api/index.js";
-import { parseArgs, STATUS_CODE_UDF_FAILED } from "../common/index.js";
+import {
+  parseArgs,
+  STATUS_CODE_UDF_FAILED,
+  validateDeploymentUrl,
+} from "../common/index.js";
 import { version } from "../index.js";
 import { convexToJson, jsonToConvex } from "../values/index.js";
 import { logToConsole } from "./logging.js";
@@ -32,14 +36,30 @@ const fetch: WindowFetch =
  * If you're building a React app, consider using
  * {@link react.ConvexReactClient} instead.
  *
+ * To {@link ConvexHttpClient} with TypeScript type specific to your API, pass
+ * in the `API` type parameter:
+ * ```typescript
+ * import { ConvexHttpClient } from "convex/browser";
+ * import { API } from "./convex/_generated/api";
  *
+ * const client = new ConvexHttpClient<API>(process.env["CONVEX_URL"]);
+ * ```
  * @public
  */
 export class ConvexHttpClient<API extends GenericAPI> {
   private readonly address: string;
   private auth?: string;
+  private adminAuth?: string;
   private debug: boolean;
+
+  /**
+   * Create a new {@link ConvexHttpClient}.
+   *
+   * @param address - The url of your Convex deployment, often provided
+   * by an environment variable. E.g. `https://small-mouse-123.convex.cloud`.
+   */
   constructor(address: string) {
+    validateDeploymentUrl(address);
     this.address = `${address}/api`;
     this.debug = true;
   }
@@ -61,7 +81,16 @@ export class ConvexHttpClient<API extends GenericAPI> {
    * @param value - JWT-encoded OpenID Connect identity token.
    */
   setAuth(value: string) {
+    this.clearAuth();
     this.auth = value;
+  }
+
+  /**
+   * @internal
+   */
+  setAdminAuth(token: string) {
+    this.clearAuth();
+    this.adminAuth = token;
   }
 
   /**
@@ -69,6 +98,7 @@ export class ConvexHttpClient<API extends GenericAPI> {
    */
   clearAuth() {
     this.auth = undefined;
+    this.adminAuth = undefined;
   }
 
   /**
@@ -102,7 +132,9 @@ export class ConvexHttpClient<API extends GenericAPI> {
       "Content-Type": "application/json",
       "Convex-Client": `npm-${version}`,
     };
-    if (this.auth) {
+    if (this.adminAuth) {
+      headers["Authorization"] = `Convex ${this.adminAuth}`;
+    } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
     const response = await fetch(`${this.address}/query`, {

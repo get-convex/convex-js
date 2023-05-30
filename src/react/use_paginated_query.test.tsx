@@ -57,7 +57,7 @@ test.each([
   expect(result.error!.toString()).toEqual(expectedError);
 });
 
-test("Initially returns LoadingMore", () => {
+test("Initially returns LoadingFirstPage", () => {
   const convexClient = new ConvexReactClient(address);
   const watchQuerySpy = jest.spyOn(convexClient, "watchQuery");
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -82,10 +82,10 @@ test("Initially returns LoadingMore", () => {
       { journal: undefined },
     ],
   ]);
-  expect(result.current).toStrictEqual({
-    loadMore: undefined,
+  expect(result.current).toMatchObject({
+    isLoading: true,
     results: [],
-    status: "LoadingMore",
+    status: "LoadingFirstPage",
   });
 });
 

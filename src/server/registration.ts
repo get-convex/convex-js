@@ -174,6 +174,8 @@ type NoArgsArray = [];
  *
  * Convex functions can take either a single {@link FunctionArgs} object or no
  * args at all.
+ *
+ * @public
  */
 export type ArgsArray = OneArgArray | NoArgsArray;
 

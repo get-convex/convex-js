@@ -1,15 +1,9 @@
-import child_process from "child_process";
 import chalk from "chalk";
 import path from "path";
-import {
-  Context,
-  logError,
-  logFailure,
-  pauseSpinner,
-  resumeSpinner,
-} from "./context";
+import { Context, logError, logFailure } from "../../bundler/context";
 import * as Sentry from "@sentry/node";
 import * as semver from "semver";
+import { spawnAsync } from "./utils";
 
 export type TypecheckResult = "cantTypeCheck" | "success" | "typecheckFailed";
 
@@ -96,9 +90,9 @@ async function runTsc(
   }
 
   // Check the TypeScript version matches the recommendation from Convex
-  const versionResult = child_process.spawnSync(tscPath, ["--version"]);
-  const version =
-    versionResult.stdout.toString("utf-8").match(/Version (.*)/)?.[1] ?? null;
+  const versionResult = await spawnAsync(ctx, tscPath, ["--version"]);
+
+  const version = versionResult.stdout.match(/Version (.*)/)?.[1] ?? null;
   const hasOlderTypeScriptVersion = version && semver.lt(version, "4.8.4");
 
   await runTscInner(ctx, tscPath, tscArgs, handleResult);
@@ -120,19 +114,11 @@ async function runTscInner(
   tscArgs: string[],
   handleResult: TypecheckResultHandler
 ) {
-  // We're letting TypeScript print errors directly to console later,
-  // and the first call below is "sync", so the spinner would stop
-  // spinning. Hide it.
-  pauseSpinner(ctx);
-
   // Run `tsc` once and have it print out the files it touched. This output won't
   // be very useful if there's an error, but we'll run it again to get a nice
   // user-facing error in this exceptional case.
   // The `--listFiles` command prints out files touched on success or error.
-  const result = child_process.spawnSync(
-    tscPath,
-    tscArgs.concat("--listFiles")
-  );
+  const result = await spawnAsync(ctx, tscPath, tscArgs.concat("--listFiles"));
   if (result.status === null) {
     return handleResult("typecheckFailed", () => {
       logError(ctx, chalk.red(`TypeScript typecheck timed out.`));
@@ -144,7 +130,6 @@ async function runTscInner(
   // Okay, we may have failed `tsc` but at least it returned. Try to parse its
   // output to discover which files it touched.
   const filesTouched = result.stdout
-    .toString("utf-8")
     .split("\n")
     .map(s => s.trim())
     .filter(s => s.length > 0);
@@ -176,16 +161,18 @@ async function runTscInner(
 
   // This is the "No inputs were found", which is fine and we shouldn't
   // report it to the user.
-  if (result.stdout.toString("utf-8").startsWith("error TS18003")) {
+  if (result.stdout.startsWith("error TS18003")) {
     return handleResult("success");
   }
 
   // At this point we know that `tsc` failed. Rerun it without `--listFiles`
   // and with stderr redirected to have it print out a nice error.
   try {
-    // prettier-ignore
-    child_process.execFileSync(tscPath, tscArgs, { stdio: "inherit" });
-    resumeSpinner(ctx);
+    // We're letting TypeScript print errors directly to console,
+    // and the spinner would stop spinning. Hide it.
+    await spawnAsync(ctx, tscPath, [...tscArgs, "--pretty", "true"], {
+      stdio: "inherit",
+    });
     // If this passes, we had a concurrent file change that'll overlap with
     // our observations in the first run. Invalidate our context's filesystem
     // but allow the rest of the system to observe the success.

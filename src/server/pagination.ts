@@ -1,3 +1,5 @@
+import { v } from "../values/validator.js";
+
 /**
  * An opaque identifier used for paginating a database query.
  *
@@ -41,6 +43,9 @@ export interface PaginationResult<T> {
 /**
  * The options passed to {@link OrderedQuery.paginate}.
  *
+ * To use this type in [argument validation](https://docs.convex.dev/functions/args-validation),
+ * use the {@link paginationOptsValidator}.
+ *
  * @public
  */
 export interface PaginationOptions {
@@ -62,14 +67,47 @@ export interface PaginationOptions {
   cursor: Cursor | null;
 
   /**
-   * What is the maximum number of rows that should be read from the database? This option
-   * is different from `numItems` in that it controls the number of rows entering a query's
+   * The maximum number of rows that should be read from the database.
+   *
+   * This option is different from `numItems` in that it controls the number of rows entering a query's
    * pipeline, where `numItems` controls the number of rows coming out. For example, a `filter`
    * may disqualify most of the rows coming in, so setting a low `numItems` would not help
    * bound its execution time. Instead, set a low `maximumRowsRead` to efficiently paginate
    * through the filter.
    *
+   * Currently this is not enforced for search queries.
+   *
    * @internal
    */
   maximumRowsRead?: number;
+
+  /**
+   * The maximum number of bytes that should be read from the database.
+   *
+   * As with {@link PaginationOptions.maximumRowsRead}, this affects the number
+   * of rows entering a query's pipeline.
+   *
+   * Once a paginated query hits it's bytes read budget, an incomplete page
+   * will be returned.
+   *
+   * Currently this is not enforced for search queries.
+   *
+   * @internal
+   */
+  maximumBytesRead?: number;
 }
+
+/**
+ * A {@link values.Validator} for {@link PaginationOptions}.
+ *
+ * This includes the standard {@link PaginationOptions.numItems} and
+ *  {@link PaginationOptions.cursor} properties along with
+ * an optional cache-busting `id` property used by {@link react.usePaginatedQueryGeneric}.
+ *
+ * @public
+ */
+export const paginationOptsValidator = v.object({
+  numItems: v.number(),
+  cursor: v.union(v.string(), v.null()),
+  id: v.optional(v.number()),
+});

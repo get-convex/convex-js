@@ -4,10 +4,11 @@
 
 import { ArgsArray } from "../server/registration.js";
 import { Expand, PickByValue, UnionToIntersection } from "../type_utils.js";
-import { Value } from "../values/value.js";
 
 /**
  * The type of a Convex function in a {@link GenericAPI}.
+ *
+ * This is used only in type parameter bounds so it has loose types with `any`.
  *
  * @public
  */
@@ -112,17 +113,21 @@ export type NamedAction<
 > = API["allActions"][Name];
 
 /**
+ * A type for the empty object `{}`.
+ *
+ * Note that we don't use `type EmptyObject = {}` because that matches every object.
+ */
+type EmptyObject = Record<string, never>;
+
+/**
  * The type of the arguments to a Convex function.
  *
  * This is represented as a single object mapping argument names to values.
  * Functions that don't need any arguments object are represented as `{}`.
  * @public
  */
-export type ArgsObject<F extends (args?: Record<string, Value>) => any> =
-  Parameters<F>["length"] extends 0
-    ? // eslint-disable-next-line @typescript-eslint/ban-types
-      {}
-    : Parameters<F>[0] & Record<string, Value>;
+export type ArgsObject<F extends ConvexFunction> =
+  Parameters<F>["length"] extends 0 ? EmptyObject : Parameters<F>[0];
 
 /**
  * An tuple type of the (maybe optional) arguments to `F`.
@@ -132,10 +137,9 @@ export type ArgsObject<F extends (args?: Record<string, Value>) => any> =
  *
  * @public
  */
-export type OptionalRestArgs<F extends (args?: Record<string, Value>) => any> =
+export type OptionalRestArgs<F extends ConvexFunction> =
   Parameters<F>["length"] extends 0
-    ? // eslint-disable-next-line @typescript-eslint/ban-types
-      [args?: {}]
+    ? [args?: EmptyObject]
     : [args: Parameters<F>[0]];
 
 /**
@@ -148,11 +152,10 @@ export type OptionalRestArgs<F extends (args?: Record<string, Value>) => any> =
  * @public
  */
 export type ArgsAndOptions<
-  F extends (args?: Record<string, Value>) => any,
+  F extends ConvexFunction,
   Options
 > = Parameters<F>["length"] extends 0
-  ? // eslint-disable-next-line @typescript-eslint/ban-types
-    [args?: {}, options?: Options]
+  ? [args?: EmptyObject, options?: Options]
   : [args: Parameters<F>[0], options?: Options];
 
 /**

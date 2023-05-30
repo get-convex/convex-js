@@ -1,3 +1,6 @@
+// Disable our restriction on `throw` because these aren't developer-facing
+// error messages.
+/* eslint-disable no-restricted-syntax */
 import chalk from "chalk";
 import stdFs, { Dirent, Mode, ReadStream, Stats } from "fs";
 import os from "os";

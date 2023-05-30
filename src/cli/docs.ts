@@ -3,7 +3,7 @@ import open from "open";
 import { configFilepath, parseProjectConfig } from "./lib/config.js";
 import chalk from "chalk";
 import { bigBrainClient, deprecationCheckWarning } from "./lib/utils.js";
-import { oneoffContext } from "./lib/context.js";
+import { oneoffContext } from "../bundler/context.js";
 
 async function openDocs(toOpen: boolean, cookie?: string) {
   let docsUrl = "https://docs.convex.dev";
@@ -27,7 +27,10 @@ export const docs = new Command("docs")
     let config;
 
     try {
-      config = parseProjectConfig(JSON.parse(ctx.fs.readUtf8File(configPath)));
+      config = await parseProjectConfig(
+        ctx,
+        JSON.parse(ctx.fs.readUtf8File(configPath))
+      );
     } catch (err) {
       await openDocs(options.open);
       return;

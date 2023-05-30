@@ -1,7 +1,7 @@
 import chokidar from "chokidar";
 import path from "path";
 import { Observations, RecordingFs, WatchEvent } from "../../bundler/fs.js";
-import { Context, ErrorType } from "./context.js";
+import { Context, ErrorType } from "../../bundler/context.js";
 import * as Sentry from "@sentry/node";
 import { Ora } from "ora";
 
@@ -109,6 +109,8 @@ export class WatchContext implements Context {
     if (err) {
       Sentry.captureException(err);
     }
+    // Okay to throw here. We've wrapped it in a Crash that we'll catch later.
+    // eslint-disable-next-line no-restricted-syntax
     throw new Crash(retry, err);
   }
 }

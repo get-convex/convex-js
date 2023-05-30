@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import { oneoffContext } from "./lib/context.js";
+import { oneoffContext } from "../bundler/context.js";
 import { loadPackageJson } from "./lib/utils.js";
 
 export const update = new Command("update")

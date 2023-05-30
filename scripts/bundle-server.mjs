@@ -1,9 +1,6 @@
 // We use an `.mjs` file instead of TypeScript so node can run the script directly.
-import {
-  bundle,
-  nodeFs,
-  entryPointsByEnvironment,
-} from "../dist/esm/bundler/index.js";
+import { bundle, entryPointsByEnvironment } from "../dist/esm/bundler/index.js";
+import { oneoffContext } from "../dist/esm/bundler/context.js";
 import path from "path";
 
 if (process.argv.length < 3) {
@@ -18,7 +15,7 @@ const out = [];
 const udfDir = process.argv[2];
 const setupPath = path.join(udfDir, "setup.ts");
 const setupBundles = await bundle(
-  nodeFs,
+  oneoffContext,
   process.argv[2],
   [setupPath],
   true,
@@ -33,9 +30,13 @@ for (const systemDir of systemDirs) {
   if (path.basename(systemDir) !== "_system") {
     throw new Error(`Refusing to bundle non-system directory ${systemDir}`);
   }
-  const entryPoints = await entryPointsByEnvironment(nodeFs, systemDir, false);
+  const entryPoints = await entryPointsByEnvironment(
+    oneoffContext,
+    systemDir,
+    false
+  );
   const bundles = await bundle(
-    nodeFs,
+    oneoffContext,
     systemDir,
     entryPoints.isolate,
     false,

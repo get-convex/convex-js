@@ -27,6 +27,32 @@ export function parseArgs(
   return args;
 }
 
+export function validateDeploymentUrl(deploymentUrl: string) {
+  // Don't use things like `new URL(deploymentUrl).hostname` since these aren't
+  // supported by React Native's JS environment
+  if (
+    !(deploymentUrl.startsWith("http:") || deploymentUrl.startsWith("https:"))
+  ) {
+    throw new Error(
+      `Invalid deployment address: Must start with "https://" or "http://". Found "${deploymentUrl}".`
+    );
+  }
+
+  // Skip validation on localhost because it's for internal Convex development.
+  if (
+    deploymentUrl.indexOf("127.0.0.1") !== -1 ||
+    deploymentUrl.indexOf("localhost") !== -1
+  ) {
+    return;
+  }
+
+  if (!deploymentUrl.endsWith(".convex.cloud")) {
+    throw new Error(
+      `Invalid deployment address: Must end with ".convex.cloud". Found "${deploymentUrl}".`
+    );
+  }
+}
+
 /**
  * Check whether a value is a plain old JavaScript object.
  */
