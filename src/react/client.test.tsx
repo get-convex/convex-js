@@ -92,18 +92,4 @@ describe("useQueryGeneric", () => {
     });
     expect(result.current).toStrictEqual("queryResult");
   });
-
-  test("returns undefined when skipped", () => {
-    const client = createClientWithQuery();
-    const wrapper = ({ children }: any) => (
-      <ConvexProvider client={client}>{children}</ConvexProvider>
-    );
-    const { result } = renderHook(
-      () => useQueryGeneric("myQuery", {}, { skip: true }),
-      {
-        wrapper,
-      }
-    );
-    expect(result.current).toStrictEqual(undefined);
-  });
 });

@@ -30,7 +30,7 @@ export const dashboard = new Command("dashboard")
     }
   });
 
-async function dashboardUrlForConfiguredDeployment(
+export async function dashboardUrlForConfiguredDeployment(
   ctx: Context
 ): Promise<string> {
   const configuredDeployment = await getConfiguredDeploymentOrCrashIfNoConfig(
@@ -47,7 +47,7 @@ async function dashboardUrlForConfiguredDeployment(
   return dashboardUrlForConfig(ctx, projectConfig);
 }
 
-export async function dashboardUrlForConfig(
+async function dashboardUrlForConfig(
   ctx: Context,
   projectConfig: ProjectConfig
 ): Promise<string> {

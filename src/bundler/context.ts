@@ -3,21 +3,19 @@ import chalk from "chalk";
 import ora, { Ora } from "ora";
 import { Filesystem, nodeFs } from "./fs.js";
 
-/**
- * How the error should be handled when running `npx convex dev`.
- *
- * "invalid filesystem data": The error was likely caused by a developer's local
- * file system (e.g. `tsc` fails due to a syntax error). The `convex dev`
- * command will then print out the error and wait for the file to change before
- * retrying.
- *
- * "transient": The error was some transient issue (e.g. a network
- * error). This will then cause a retry after an exponential backoff.
- *
- * "fatal": This error is truly permanent. Exit `npx convex dev` because the
- * developer will need to take a manual commandline action.
- */
-export type ErrorType = "invalid filesystem data" | "transient" | "fatal";
+// How the error should be handled when running `npx convex dev`.
+export type ErrorType =
+  // The error was likely caused by the state of the developer's local
+  // file system (e.g. `tsc` fails due to a syntax error). The `convex dev`
+  // command will then print out the error and wait for the file to change before
+  // retrying.
+  | "invalid filesystem data"
+  // The error was some transient issue (e.g. a network
+  // error). This will then cause a retry after an exponential backoff.
+  | "transient"
+  // This error is truly permanent. Exit `npx convex dev` because the
+  // developer will need to take a manual commandline action.
+  | "fatal";
 
 export interface Context {
   fs: Filesystem;

@@ -22,7 +22,7 @@ import {
   ConnectionState,
 } from "../browser/sync/client.js";
 import type { UserIdentityAttributes } from "../browser/sync/protocol.js";
-import { RequestForQueries, useQueriesGeneric } from "./use_queries.js";
+import { useQueriesGeneric } from "./use_queries.js";
 import { parseArgs } from "../common/index.js";
 
 if (typeof React === "undefined") {
@@ -536,17 +536,8 @@ export const ConvexProvider: React.FC<{
  *
  * @public
  */
-export interface UseQueryOptions {
-  /**
-   * If `true`, skip loading this query and return `undefined`.
-   *
-   * Defaults to `false`.
-   *
-   * This can be used for dependent queries, where the arguments to one query
-   * depend on the result from another.
-   */
-  skip?: boolean;
-}
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface UseQueryOptions {}
 
 /**
  * Load a reactive query within a React component.
@@ -562,32 +553,26 @@ export interface UseQueryOptions {
  * @param name - The name of the query function.
  * @param args - The arguments to the query function.
  * @param options - [Optional] The {@link UseQueryOptions} options object.
- * @returns the result of the query. If the query is loading or skipped,
- * returns `undefined`.
+ * @returns the result of the query. If the query is loading returns `undefined`.
  *
  * @public
  */
 export function useQueryGeneric(
   name: string,
   args?: Record<string, Value>,
-  options?: UseQueryOptions
+  _options?: UseQueryOptions
 ): unknown | undefined {
-  const skip = options?.skip === undefined ? false : options.skip;
   const argsObject = parseArgs(args);
 
   const queries = useMemo(
-    () =>
-      skip ? ({} as RequestForQueries) : { query: { name, args: argsObject } },
+    () => ({ query: { name, args: argsObject } }),
     // Stringify args so args that are semantically the same don't trigger a
     // rerender. Saves developers from adding `useMemo` on every args usage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(convexToJson(argsObject)), skip, name]
+    [JSON.stringify(convexToJson(argsObject)), name]
   );
 
   const results = useQueriesGeneric(queries);
-  if (skip) {
-    return undefined;
-  }
   const result = results["query"];
   if (result instanceof Error) {
     throw result;
@@ -666,12 +651,6 @@ export function useActionGeneric<
   return useMemo(() => createAction(name, convex), [convex, name]);
 }
 
-type UseQueryArgsAndOptions<F extends (args?: Record<string, Value>) => any> =
-  // If `skip: true`, be permissive and allow any objects as `args` because
-  // we're not using it anyway.
-  | [args: object, options: UseQueryOptions & { skip: true }]
-  | ArgsAndOptions<F, UseQueryOptions>;
-
 /**
  * Internal type helper used by Convex code generation.
  *
@@ -682,7 +661,7 @@ export type UseQueryForAPI<API extends GenericAPI> = <
   Name extends PublicQueryNames<API>
 >(
   name: Name,
-  ...argsAndOptions: UseQueryArgsAndOptions<NamedQuery<API, Name>>
+  ...argsAndOptions: ArgsAndOptions<NamedQuery<API, Name>, UseQueryOptions>
 ) => ReturnType<NamedQuery<API, Name>> | undefined;
 
 /**

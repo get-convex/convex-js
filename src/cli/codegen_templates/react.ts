@@ -23,8 +23,8 @@ export function reactCodegen(): GeneratedJsWithTypes {
    * @param name - The name of the query function.
    * @param args - The arguments to the query function.
    * @param options - [Optional] The {@link UseQueryOptions} options object.
-   * @returns the result of the query. If the query is loading or skipped,
-   * returns \`undefined\`.
+   * @returns the result of the query. If the query is loading returns
+   * \`undefined\`.
    */
   export const useQuery = useQueryGeneric;
   
@@ -197,9 +197,8 @@ export function reactCodegen(): GeneratedJsWithTypes {
    *
    * @param name - The name of the query function.
    * @param args - The arguments to the query function.
-   * @param options - [Optional] The {@link UseQueryOptions} options object.
-   * @returns the result of the query. If the query is loading or skipped,
-   * returns \`undefined\`.
+   * @returns the result of the query. If the query is loading returns
+   * \`undefined\`.
    */
   export declare const useQuery: UseQueryForAPI<API>;
   

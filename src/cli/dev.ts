@@ -383,9 +383,12 @@ export async function watchAndPush(
       );
     } catch (e: any) {
       // Crash the app on unexpected errors.
-      if (!(e instanceof Crash) || !e.errorType || e.errorType === "fatal") {
+      if (!(e instanceof Crash) || !e.errorType) {
         // eslint-disable-next-line no-restricted-syntax
         throw e;
+      }
+      if (e.errorType === "fatal") {
+        break;
       }
       // Retry after an exponential backoff if we hit a transient error.
       if (e.errorType === "transient") {

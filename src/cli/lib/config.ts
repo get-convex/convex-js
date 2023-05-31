@@ -26,6 +26,7 @@ import {
   logMessage,
 } from "../../bundler/context.js";
 import { EOL } from "os";
+import { dashboardUrlForConfiguredDeployment } from "../dashboard.js";
 
 /** Type representing auth configuration. */
 export interface AuthInfo {
@@ -519,9 +520,23 @@ export async function pushConfig(
         "Convex-Client": `npm-cli-${version}`,
       },
     });
-  } catch (err) {
+  } catch (error) {
+    if (
+      (error as any).response?.data?.code ===
+      "AuthConfigMissingEnvironmentVariable"
+    ) {
+      (error as any).wasExpected = true;
+      const dashboardUrl = await dashboardUrlForConfiguredDeployment(ctx);
+      logFailure(
+        ctx,
+        `Go to ${dashboardUrl}/settings to setup your environment variable, then rerun this command.`
+      );
+      logError(ctx, chalk.red((error as any).response.data.message));
+      await ctx.crash(1, "fatal", error);
+    }
+
     logFailure(ctx, "Error: Unable to push deployment config to " + url);
-    return await logAndHandleAxiosError(ctx, err);
+    return await logAndHandleAxiosError(ctx, error);
   }
 }
 
