@@ -1,9 +1,8 @@
-import { Command } from "commander";
-import { checkAuthorization, performLogin } from "./lib/login.js";
+import { Command, Option } from "commander";
 import path from "path";
-import { Option } from "commander";
 import { oneoffContext } from "../bundler/context.js";
-import { init as initLib } from "./lib/init.js";
+import { initOrReinitForDeprecatedCommands } from "./lib/init.js";
+import { checkAuthorization, performLogin } from "./lib/login.js";
 
 const cwd = path.basename(process.cwd());
 
@@ -35,11 +34,5 @@ export const init = new Command("init")
       await performLogin(ctx);
     }
 
-    const saveUrl =
-      options.saveUrl === true
-        ? "yes"
-        : options.saveUrl === false
-        ? "no"
-        : "ask";
-    await initLib(ctx, "prod", options, saveUrl);
+    await initOrReinitForDeprecatedCommands(ctx, options);
   });

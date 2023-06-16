@@ -1,23 +1,9 @@
-import chalk from "chalk";
 import axios from "axios";
-import equal from "deep-equal";
-import path from "path";
-import {
-  Bundle,
-  bundle,
-  bundleAuthConfig,
-  entryPointsByEnvironment,
-} from "../../bundler/index.js";
-import { version } from "../../index.js";
 import axiosRetry from "axios-retry";
-import {
-  deprecationCheckWarning,
-  formatSize,
-  functionsDir,
-  logAndHandleAxiosError,
-  shouldUseNewFlow,
-} from "./utils.js";
-export { provisionHost, productionProvisionHost } from "./utils.js";
+import chalk from "chalk";
+import equal from "deep-equal";
+import { EOL } from "os";
+import path from "path";
 import {
   Context,
   logError,
@@ -25,8 +11,22 @@ import {
   logFinishedStep,
   logMessage,
 } from "../../bundler/context.js";
-import { EOL } from "os";
+import {
+  Bundle,
+  bundle,
+  bundleAuthConfig,
+  entryPointsByEnvironment,
+} from "../../bundler/index.js";
+import { version } from "../../index.js";
 import { dashboardUrlForConfiguredDeployment } from "../dashboard.js";
+import {
+  deprecationCheckWarning,
+  formatSize,
+  functionsDir,
+  getConfiguredDeployment,
+  logAndHandleAxiosError,
+} from "./utils.js";
+export { productionProvisionHost, provisionHost } from "./utils.js";
 
 /** Type representing auth configuration. */
 export interface AuthInfo {
@@ -187,13 +187,11 @@ export async function readProjectConfig(ctx: Context): Promise<{
   projectConfig: ProjectConfig;
   configPath: string;
 }> {
-  if (shouldUseNewFlow()) {
-    if (!ctx.fs.exists("convex.json")) {
-      return {
-        projectConfig: { functions: DEFAULT_FUNCTIONS_PATH },
-        configPath: configName(),
-      };
-    }
+  if (!ctx.fs.exists("convex.json")) {
+    return {
+      projectConfig: { functions: DEFAULT_FUNCTIONS_PATH },
+      configPath: configName(),
+    };
   }
   let projectConfig;
   const configPath = await configFilepath(ctx);
@@ -336,25 +334,29 @@ export async function upgradeOldAuthInfoToAuthConfig(
       );
       await ctx.crash(1, "invalid filesystem data");
     }
-    const providersStringLines = JSON.stringify(config.authInfo, null, 2).split(
-      EOL
-    );
-    const indentedProvidersString = [providersStringLines[0]]
-      .concat(providersStringLines.slice(1).map(line => `  ${line}`))
-      .join(EOL);
-    ctx.fs.writeUtf8File(
-      authConfigPath,
-      `\
-export default {
-  providers: ${indentedProvidersString},
-};`
-    );
-    logMessage(
-      ctx,
-      chalk.yellowBright(
-        `Moved auth config from config.json to \`${authConfigRelativePath}\``
-      )
-    );
+    if (config.authInfo.length > 0) {
+      const providersStringLines = JSON.stringify(
+        config.authInfo,
+        null,
+        2
+      ).split(EOL);
+      const indentedProvidersString = [providersStringLines[0]]
+        .concat(providersStringLines.slice(1).map(line => `  ${line}`))
+        .join(EOL);
+      ctx.fs.writeUtf8File(
+        authConfigPath,
+        `\
+  export default {
+    providers: ${indentedProvidersString},
+  };`
+      );
+      logMessage(
+        ctx,
+        chalk.yellowBright(
+          `Moved auth config from config.json to \`${authConfigRelativePath}\``
+        )
+      );
+    }
     delete config.authInfo;
   }
   return config;
@@ -385,7 +387,7 @@ export async function writeProjectConfig(
       );
       return await ctx.crash(1, "invalid filesystem data", err);
     }
-  } else if (deleteIfAllDefault) {
+  } else if (deleteIfAllDefault && ctx.fs.exists(configPath)) {
     ctx.fs.unlink(configPath);
     logMessage(
       ctx,
@@ -404,21 +406,17 @@ function stripDefaults(projectConfig: ProjectConfig): any {
   if (stripped.functions === DEFAULT_FUNCTIONS_PATH) {
     delete stripped.functions;
   }
-  if (shouldUseNewFlow()) {
-    if (Array.isArray(stripped.authInfo) && stripped.authInfo.length === 0) {
-      delete stripped.authInfo;
-    }
+  if (Array.isArray(stripped.authInfo) && stripped.authInfo.length === 0) {
+    delete stripped.authInfo;
   }
   return stripped;
 }
 
 function filterWriteableConfig(projectConfig: any) {
   const writeable: any = { ...projectConfig };
-  if (shouldUseNewFlow()) {
-    delete writeable.project;
-    delete writeable.team;
-    delete writeable.prodUrl;
-  }
+  delete writeable.project;
+  delete writeable.team;
+  delete writeable.prodUrl;
   return writeable;
 }
 
@@ -526,11 +524,20 @@ export async function pushConfig(
       "AuthConfigMissingEnvironmentVariable"
     ) {
       (error as any).wasExpected = true;
-      const dashboardUrl = await dashboardUrlForConfiguredDeployment(ctx);
-      logFailure(
-        ctx,
-        `Go to ${dashboardUrl}/settings to setup your environment variable, then rerun this command.`
-      );
+      // If `npx convex dev` is running using --url there might not be a configured deployment
+      const configuredDeployment = await getConfiguredDeployment(ctx);
+      if (configuredDeployment !== null) {
+        const dashboardUrl = await dashboardUrlForConfiguredDeployment(
+          ctx,
+          configuredDeployment
+        );
+        logFailure(
+          ctx,
+          `Go to ${dashboardUrl}/settings to setup your environment variable, then rerun this command.`
+        );
+      } else {
+        logFailure(ctx, `Fix your auth.config.js, then rerun this command.`);
+      }
       logError(ctx, chalk.red((error as any).response.data.message));
       await ctx.crash(1, "fatal", error);
     }

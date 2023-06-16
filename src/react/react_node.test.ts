@@ -13,6 +13,7 @@ import {
   nodeWebSocket,
   withInMemoryWebSocket,
 } from "../browser/sync/client_node_test_helpers.js";
+import { anyApi } from "../server/api.js";
 
 const testReactClient = (address: string) =>
   new ConvexReactClient(address, {
@@ -23,7 +24,7 @@ const testReactClient = (address: string) =>
 test("ConvexReactClient ends subscriptions on close", async () => {
   await withInMemoryWebSocket(async ({ address, receive, send }) => {
     const client = testReactClient(address);
-    const watch = client.watchQuery("myQuery", {});
+    const watch = client.watchQuery(anyApi.myQuery.default, {});
     let timesCallbackRan = 0;
     let timesReactScheduled = 0;
     watch.onUpdate(() => timesCallbackRan++);

@@ -9,7 +9,6 @@ import {
   dataModel,
   dataModelWithoutSchema,
 } from "../codegen_templates/dataModel.js";
-import { reactCodegen } from "../codegen_templates/react.js";
 import { readmeCodegen } from "../codegen_templates/readme.js";
 import { serverCodegen } from "../codegen_templates/server.js";
 import { tsconfigCodegen } from "../codegen_templates/tsconfig.js";
@@ -164,26 +163,6 @@ async function doApiCodegen(
   );
 }
 
-async function doReactCodegen(
-  ctx: Context,
-  codegenDir: TempDir,
-  dryRun: boolean,
-  debug: boolean,
-  quiet = false,
-  commonjs = false
-) {
-  await writeJsWithTypes(
-    ctx,
-    "react",
-    reactCodegen(),
-    codegenDir,
-    dryRun,
-    debug,
-    quiet,
-    commonjs
-  );
-}
-
 export async function doCodegen({
   ctx,
   functionsDirectoryPath,
@@ -232,7 +211,7 @@ export async function doCodegen({
     // the end.
     //
     // The dependency chain is:
-    // _generated/react.js
+    // _generated/api.js
     // -> query and mutation functions
     // -> _generated/server.js
     // -> schema.ts
@@ -256,11 +235,9 @@ export async function doCodegen({
       tempCodegenDir,
       dryRun,
       debug,
-      quiet
+      quiet,
+      commonjs
     );
-
-    // 3. Generate the React code
-    await doReactCodegen(ctx, tempCodegenDir, dryRun, debug, quiet, commonjs);
 
     // Replace the codegen directory with its new contents
     if (!debug && !dryRun) {

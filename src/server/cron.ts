@@ -1,15 +1,7 @@
-import {
-  GenericAPI,
-  OptionalRestArgs,
-  //  NamedAction,
-  //  NamedMutation,
-} from "../browser/index.js";
+import { getFunctionName, OptionalRestArgs } from "../server/api.js";
 import { parseArgs } from "../common/index.js";
 import { convexToJson, JSONValue, Value } from "../values/index.js";
-import {
-  SchedulableFunctionNames,
-  NamedSchedulableFunction,
-} from "./scheduler.js";
+import { SchedulableFunctionReference } from "./scheduler.js";
 
 type CronSchedule = {
   type: "cron";
@@ -164,15 +156,12 @@ export interface CronJob {
 }
 
 /**
- * Internal type helper used by Convex code generation.
- *
- * If you're using code generation, use the `cronJobs` function in
- * `convex/_generated/server.js` which is typed for your API.
- *
+ * Create a CronJobs object to schedule recurring tasks.
  *
  * ```js
  * // convex/crons.js
  * import { cronJobs } from 'convex/server';
+ * import { api } from "./_generated/api";
  *
  * const crons = cronJobs();
  * crons.weekly(
@@ -181,14 +170,14 @@ export interface CronJob {
  *     hourUTC: 17, // (9:30am Pacific/10:30am Daylight Savings Pacific)
  *     minuteUTC: 30,
  *   },
- *   "sendEmails"
+ *   api.emails.send
  * )
  * export default crons;
  * ```
  *
  * @public
  */
-export const cronJobsGeneric = <API extends GenericAPI>() => new Crons<API>();
+export const cronJobs = () => new Crons();
 
 /**
  * @public
@@ -196,11 +185,6 @@ export const cronJobsGeneric = <API extends GenericAPI>() => new Crons<API>();
  * This is a cron string. They're complicated!
  */
 type CronString = string;
-
-/**
- * @public
- */
-export type CronJobsForAPI<API extends GenericAPI> = () => Crons<API>;
 
 function validateIntervalNumber(n: number) {
   if (!Number.isInteger(n) || n <= 0) {
@@ -256,7 +240,7 @@ function validatedCronIdentifier(s: string) {
  *
  * @public
  */
-export class Crons<API extends GenericAPI> {
+export class Crons {
   crons: Record<string, CronJob>;
   isCrons: true;
   constructor() {
@@ -268,7 +252,7 @@ export class Crons<API extends GenericAPI> {
   schedule(
     cronIdentifier: string,
     schedule: Schedule,
-    name: string,
+    functionReference: SchedulableFunctionReference,
     args?: Record<string, Value>
   ) {
     const cronArgs = parseArgs(args);
@@ -277,7 +261,7 @@ export class Crons<API extends GenericAPI> {
       throw new Error(`Cron identifier registered twice: ${cronIdentifier}`);
     }
     this.crons[cronIdentifier] = {
-      name,
+      name: getFunctionName(functionReference),
       args: [convexToJson(cronArgs)],
       schedule: schedule,
     };
@@ -287,19 +271,20 @@ export class Crons<API extends GenericAPI> {
    * Schedule a mutation or action to run on an hourly basis.
    *
    * ```js
-   * crons.interval("Clear presence data", {seconds: 30}, "clearPresence");
+   * crons.interval("Clear presence data", {seconds: 30}, api.presence.clear);
    * ```
    *
    * @param identifier - A unique name for this scheduled job.
    * @param schedule - The time between runs for this scheduled job.
-   * @param functionName - The name of the function to schedule.
+   * @param functionReference - A {@link FunctionReference} for the function
+   * to schedule.
    * @param args - The arguments to the function.
    */
-  interval<Name extends SchedulableFunctionNames<API>>(
+  interval<FuncRef extends SchedulableFunctionReference>(
     cronIdentifier: string,
     schedule: Interval,
-    functionName: Name,
-    ...args: OptionalRestArgs<NamedSchedulableFunction<API, Name>>
+    functionReference: FuncRef,
+    ...args: OptionalRestArgs<FuncRef>
   ) {
     const s = schedule;
     const hasSeconds = +("seconds" in s && s.seconds !== undefined);
@@ -319,7 +304,7 @@ export class Crons<API extends GenericAPI> {
     this.schedule(
       cronIdentifier,
       { ...schedule, type: "interval" },
-      functionName,
+      functionReference,
       ...args
     );
   }
@@ -334,26 +319,27 @@ export class Crons<API extends GenericAPI> {
    *     hourUTC: 17, // (9:30am Pacific/10:30am Daylight Savings Pacific)
    *     minuteUTC: 30,
    *   },
-   *   "resetHighScores"
+   *   api.scores.reset
    * )
    * ```
    *
    * @param cronIdentifier - A unique name for this scheduled job.
    * @param schedule - What time (UTC) each day to run this function.
-   * @param functionName - The name of the function to schedule.
+   * @param functionReference - A {@link FunctionReference} for the function
+   * to schedule.
    * @param args - The arguments to the function.
    */
-  hourly<Name extends SchedulableFunctionNames<API>>(
+  hourly<FuncRef extends SchedulableFunctionReference>(
     cronIdentifier: string,
     schedule: Hourly,
-    functionName: Name,
-    ...args: OptionalRestArgs<NamedSchedulableFunction<API, Name>>
+    functionReference: FuncRef,
+    ...args: OptionalRestArgs<FuncRef>
   ) {
     const minuteUTC = validatedMinuteOfHour(schedule.minuteUTC);
     this.schedule(
       cronIdentifier,
       { minuteUTC, type: "hourly" },
-      functionName,
+      functionReference,
       ...args
     );
   }
@@ -368,27 +354,28 @@ export class Crons<API extends GenericAPI> {
    *     hourUTC: 17, // (9:30am Pacific/10:30am Daylight Savings Pacific)
    *     minuteUTC: 30,
    *   },
-   *   "resetHighScores"
+   *   api.scores.reset
    * )
    * ```
    *
    * @param cronIdentifier - A unique name for this scheduled job.
    * @param schedule - What time (UTC) each day to run this function.
-   * @param functionName - The name of the function to schedule.
+   * @param functionReference - A {@link FunctionReference} for the function
+   * to schedule.
    * @param args - The arguments to the function.
    */
-  daily<Name extends SchedulableFunctionNames<API>>(
+  daily<FuncRef extends SchedulableFunctionReference>(
     cronIdentifier: string,
     schedule: Daily,
-    functionName: Name,
-    ...args: OptionalRestArgs<NamedSchedulableFunction<API, Name>>
+    functionReference: FuncRef,
+    ...args: OptionalRestArgs<FuncRef>
   ) {
     const hourUTC = validatedHourOfDay(schedule.hourUTC);
     const minuteUTC = validatedMinuteOfHour(schedule.minuteUTC);
     this.schedule(
       cronIdentifier,
       { hourUTC, minuteUTC, type: "daily" },
-      functionName,
+      functionReference,
       ...args
     );
   }
@@ -403,19 +390,20 @@ export class Crons<API extends GenericAPI> {
    *     hourUTC: 17, // (9:30am Pacific/10:30am Daylight Savings Pacific)
    *     minuteUTC: 30,
    *   },
-   *   "sendExpiringMessage"
+   *   api.emails.send
    * )
    * ```
    *
    * @param cronIdentifier - A unique name for this scheduled job.
    * @param schedule - What day and time (UTC) each week to run this function.
-   * @param functionName - The name of the function to schedule.
+   * @param functionReference - A {@link FunctionReference} for the function
+   * to schedule.
    */
-  weekly<Name extends SchedulableFunctionNames<API>>(
+  weekly<FuncRef extends SchedulableFunctionReference>(
     cronIdentifier: string,
     schedule: Weekly,
-    functionName: Name,
-    ...args: OptionalRestArgs<NamedSchedulableFunction<API, Name>>
+    functionReference: FuncRef,
+    ...args: OptionalRestArgs<FuncRef>
   ) {
     const dayOfWeek = validatedDayOfWeek(schedule.dayOfWeek);
     const hourUTC = validatedHourOfDay(schedule.hourUTC);
@@ -423,7 +411,7 @@ export class Crons<API extends GenericAPI> {
     this.schedule(
       cronIdentifier,
       { dayOfWeek, hourUTC, minuteUTC, type: "weekly" },
-      functionName,
+      functionReference,
       ...args
     );
   }
@@ -442,20 +430,21 @@ export class Crons<API extends GenericAPI> {
    *     minuteUTC: 30,
    *     day: 1,
    *   },
-   *   "billCustomers"
+   *   api.billing.billCustomers
    * )
    * ```
    *
    * @param cronIdentifier - A unique name for this scheduled job.
    * @param schedule - What day and time (UTC) each month to run this function.
-   * @param functionName - The name of the function to schedule.
+   * @param functionReference - A {@link FunctionReference} for the function
+   * to schedule.
    * @param args - The arguments to the function.
    */
-  monthly<Name extends SchedulableFunctionNames<API>>(
+  monthly<FuncRef extends SchedulableFunctionReference>(
     cronIdentifier: string,
     schedule: Monthly,
-    functionName: Name,
-    ...args: OptionalRestArgs<NamedSchedulableFunction<API, Name>>
+    functionReference: FuncRef,
+    ...args: OptionalRestArgs<FuncRef>
   ) {
     const day = validatedDayOfMonth(schedule.day);
     const hourUTC = validatedHourOfDay(schedule.hourUTC);
@@ -463,7 +452,7 @@ export class Crons<API extends GenericAPI> {
     this.schedule(
       cronIdentifier,
       { day, hourUTC, minuteUTC, type: "monthly" },
-      functionName,
+      functionReference,
       ...args
     );
   }
@@ -484,20 +473,21 @@ export class Crons<API extends GenericAPI> {
    *
    * @param cronIdentifier - A unique name for this scheduled job.
    * @param cron - Cron string like `"15 7 * * *"` (Every day at 7:15 UTC)
-   * @param functionName - The name of the function to schedule.
+   * @param functionReference - A {@link FunctionReference} for the function
+   * to schedule.
    * @param args - The arguments to the function.
    */
-  cron<Name extends SchedulableFunctionNames<API>>(
+  cron<FuncRef extends SchedulableFunctionReference>(
     cronIdentifier: string,
     cron: CronString,
-    functionName: Name,
-    ...args: OptionalRestArgs<NamedSchedulableFunction<API, Name>>
+    functionReference: FuncRef,
+    ...args: OptionalRestArgs<FuncRef>
   ) {
     const c = validatedCronString(cron);
     this.schedule(
       cronIdentifier,
       { cron: c, type: "cron" },
-      functionName,
+      functionReference,
       ...args
     );
   }

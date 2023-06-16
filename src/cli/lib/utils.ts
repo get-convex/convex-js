@@ -255,10 +255,16 @@ export async function validateOrSelectProject(
     throw new Error("No projects found");
   }
   if (!projectSlug) {
+    const nonDemoProjects = projects.filter(project => !project.is_demo);
+    if (nonDemoProjects.length === 0) {
+      // Unexpected error
+      // eslint-disable-next-line no-restricted-syntax
+      throw new Error("No projects found");
+    }
     // Prompt the user to select project.
-    switch (projects.length) {
+    switch (nonDemoProjects.length) {
       case 1: {
-        const project = projects[0];
+        const project = nonDemoProjects[0];
         const confirmed = (
           await inquirer.prompt([
             {
@@ -272,7 +278,7 @@ export async function validateOrSelectProject(
         if (!confirmed) {
           return null;
         }
-        return projects[0].slug;
+        return nonDemoProjects[0].slug;
       }
       default:
         return (
@@ -281,7 +287,7 @@ export async function validateOrSelectProject(
               name: "project",
               message: multiProjectPrompt,
               type: "list",
-              choices: projects.map((project: Project) => ({
+              choices: nonDemoProjects.map((project: Project) => ({
                 name: `${project.name} (${project.slug})`,
                 value: project.slug,
               })),
@@ -601,7 +607,7 @@ export async function isInExistingProject(ctx: Context) {
 
 export async function getConfiguredDeploymentOrCrashIfNoConfig(ctx: Context) {
   const configuredDeployment = await getConfiguredDeployment(ctx);
-  if (shouldUseNewFlow() && configuredDeployment === null) {
+  if (configuredDeployment === null) {
     const { projectConfig } = await readProjectConfig(ctx);
     if (projectConfig.team === undefined || projectConfig.team === undefined) {
       logFailure(
@@ -627,11 +633,6 @@ export async function getConfiguredDeployment(ctx: Context) {
     return await ctx.crash(1, "invalid filesystem data");
   }
   return readDeploymentEnvVar();
-}
-
-// Gates the new dev/prod flow behind an env var
-export function shouldUseNewFlow() {
-  return (process.env.CONVEX_NEW_FLOW ?? undefined) !== undefined;
 }
 
 // `spawnAsync` is the async version of Node's `spawnSync` (and `spawn`).

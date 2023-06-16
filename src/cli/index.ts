@@ -86,7 +86,7 @@ async function main() {
     .addCommand(deployments, { hidden: true })
     .addCommand(run)
     .addCommand(typecheck, { hidden: true })
-    .addCommand(auth)
+    .addCommand(auth, { hidden: true })
     .addCommand(convexImport)
     .addCommand(codegen)
     .addCommand(dashboard)

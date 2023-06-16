@@ -15,8 +15,8 @@ export function moduleIdentifier(modulePath: string) {
 }
 
 export function apiCodegen(modulePaths: string[]): GeneratedJsWithTypes {
-  const reactDTS = `${header("Generated API.")}
-  import type { ApiFromModules } from "convex/api";
+  const apiDTS = `${header("Generated `api` utility.")}
+  import type { ApiFromModules } from "convex/server";
   ${modulePaths
     .map(
       modulePath =>
@@ -27,15 +27,14 @@ export function apiCodegen(modulePaths: string[]): GeneratedJsWithTypes {
     .join("\n")}
 
   /**
-   * A type describing your app's public Convex API.
-   *
-   * This \`API\` type includes information about the arguments and return
-   * types of your app's query and mutation functions.
-   *
-   * This type should be used with type-parameterized classes like
-   * \`ConvexReactClient\` to create app-specific types.
+   * A utility for referencing Convex functions in your app's API.
+   * 
+   * Usage:
+   * \`\`\`js
+   * const myFunctionReference = api.myModule.myFunction;
+   * \`\`\`
    */
-  export type API = ApiFromModules<{
+  export declare const api: ApiFromModules<{
     ${modulePaths
       .map(
         modulePath =>
@@ -44,7 +43,22 @@ export function apiCodegen(modulePaths: string[]): GeneratedJsWithTypes {
       .join("\n")}
   }>;
   `;
+
+  const apiJS = `${header("Generated `api` utility.")}
+  import { anyApi } from "convex/server";
+
+  /**
+   * A utility for referencing Convex functions in your app's API.
+   * 
+   * Usage:
+   * \`\`\`js
+   * const myFunctionReference = api.myModule.myFunction;
+   * \`\`\`
+   */
+  export const api = anyApi;
+  `;
   return {
-    DTS: reactDTS,
+    DTS: apiDTS,
+    JS: apiJS,
   };
 }

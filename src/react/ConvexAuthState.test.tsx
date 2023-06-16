@@ -155,7 +155,7 @@ test("Tokens must be valid JWT", async () => {
   // Server confirms it
   mockServerConfirmsAuth(client, 1);
 
-  expect(consoleSpy).toBeCalledWith(
+  expect(consoleSpy).toHaveBeenCalledWith(
     "Auth token is not a valid JWT, cannot refetch the token"
   );
 });
@@ -194,7 +194,7 @@ test("Tokens are used to schedule refetch", async () => {
 });
 
 function mockServerConfirmsAuth(
-  client: ConvexReactClient<any>,
+  client: ConvexReactClient,
   oldIdentityVersion: number
 ) {
   act(() => {

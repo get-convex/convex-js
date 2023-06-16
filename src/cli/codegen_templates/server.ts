@@ -7,10 +7,9 @@ export function serverCodegen(): GeneratedJsWithTypes {
     )}
     import {
       ActionBuilder,
-      HttpActionBuilderForAPI,
+      HttpActionBuilder,
       MutationBuilder,
       QueryBuilder,
-      CronJobsForAPI,
       ActionCtx as GenericActionCtx,
       MutationCtx as GenericMutationCtx,
       QueryCtx as GenericQueryCtx,
@@ -18,31 +17,6 @@ export function serverCodegen(): GeneratedJsWithTypes {
       DatabaseWriter as GenericDatabaseWriter,
     } from "convex/server";
     import type { DataModel } from "./dataModel.js";
-    import type { API } from "./api.js";
-
-    /**
-     * Returns a cron job scheduler, used to schedule Convex functions to run on a recurring basis.
-     *
-     * \`\`\`js
-     * // convex/crons.js
-     * import { cronJobs } from './_generated/server';
-     *
-     * const crons = cronJobs();
-     * crons.weekly(
-     *   "weekly re-engagement email",
-     *   {
-     *     hourUTC: 17, // (9:30am Pacific/10:30am Daylight Savings Pacific)
-     *     minuteUTC: 30,
-     *   },
-     *   "sendEmails"
-     * )
-     * export default crons;
-     * \`\`\`
-     *
-     * @returns The cron job scheduler object. Create this object in \`convex/crons.js\` and export it
-     * as the default export.
-     */
-    export declare const cronJobs: CronJobsForAPI<API>;
 
     /**
      * Define a query in this Convex app's public API.
@@ -72,7 +46,7 @@ export function serverCodegen(): GeneratedJsWithTypes {
      * @param func - The mutation function. It receives a {@link MutationCtx} as its first argument.
      * @returns The wrapped mutation. Include this as an \`export\` to name it and make it accessible.
      */
-    export declare const mutation: MutationBuilder<DataModel, API, "public">;
+    export declare const mutation: MutationBuilder<DataModel, "public">;
 
     /**
      * Define a mutation that is only accessible from other Convex functions (but not from the client).
@@ -82,7 +56,7 @@ export function serverCodegen(): GeneratedJsWithTypes {
      * @param func - The mutation function. It receives a {@link MutationCtx} as its first argument.
      * @returns The wrapped mutation. Include this as an \`export\` to name it and make it accessible.
      */
-    export declare const internalMutation: MutationBuilder<DataModel, API, "internal">;
+    export declare const internalMutation: MutationBuilder<DataModel, "internal">;
 
     /**
      * Define an action in this Convex app's public API.
@@ -95,7 +69,7 @@ export function serverCodegen(): GeneratedJsWithTypes {
      * @param func - The action. It receives an {@link ActionCtx} as its first argument.
      * @returns The wrapped action. Include this as an \`export\` to name it and make it accessible.
      */
-    export declare const action: ActionBuilder<API, "public">;
+    export declare const action: ActionBuilder<"public">;
 
     /**
      * Define an action that is only accessible from other Convex functions (but not from the client).
@@ -103,7 +77,7 @@ export function serverCodegen(): GeneratedJsWithTypes {
      * @param func - The function. It receives an {@link ActionCtx} as its first argument.
      * @returns The wrapped function. Include this as an \`export\` to name it and make it accessible.
      */
-    export declare const internalAction: ActionBuilder<API, "internal">;
+    export declare const internalAction: ActionBuilder<"internal">;
 
     /**
      * Define an HTTP action.
@@ -115,7 +89,7 @@ export function serverCodegen(): GeneratedJsWithTypes {
      * @param func - The function. It receives an {@link ActionCtx} as its first argument.
      * @returns The wrapped function. Import this function from \`convex/http.js\` and route it to hook it up.
      */
-    export declare const httpAction: HttpActionBuilderForAPI<API>;
+    export declare const httpAction: HttpActionBuilder;
 
     /**
      * A set of services for use within Convex query functions.
@@ -134,7 +108,7 @@ export function serverCodegen(): GeneratedJsWithTypes {
      * The mutation context is passed as the first argument to any Convex mutation
      * function run on the server.
      */
-    export type MutationCtx = GenericMutationCtx<DataModel, API>;
+    export type MutationCtx = GenericMutationCtx<DataModel>;
 
     /**
      * A set of services for use within Convex action functions.
@@ -142,7 +116,7 @@ export function serverCodegen(): GeneratedJsWithTypes {
      * The action context is passed as the first argument to any Convex action
      * function run on the server.
      */
-    export type ActionCtx = GenericActionCtx<API>;
+    export type ActionCtx = GenericActionCtx;
 
     /**
      * An interface to read from the database within Convex query functions.
@@ -176,7 +150,6 @@ export function serverCodegen(): GeneratedJsWithTypes {
       internalActionGeneric,
       internalMutationGeneric,
       internalQueryGeneric,
-      cronJobsGeneric,
     } from "convex/server";
 
     /**
@@ -248,30 +221,6 @@ export function serverCodegen(): GeneratedJsWithTypes {
      * @returns The wrapped endpoint function. Route a URL path to this function in \`convex/http.js\`.
      */
     export const httpAction = httpActionGeneric;
-
-    /**
-     * Returns a cron job scheduler, used to schedule Convex functions to run on a recurring basis.
-     *
-     * \`\`\`js
-     * // convex/crons.js
-     * import { cronJobs } from './_generated/server';
-     *
-     * const crons = cronJobs();
-     * crons.weekly(
-     *   "weekly re-engagement email",
-     *   {
-     *     hourUTC: 17, // (9:30am Pacific/10:30am Daylight Savings Pacific)
-     *     minuteUTC: 30,
-     *   },
-     *   "sendEmails"
-     * )
-     * export default crons;
-     * \`\`\`
-     *
-     * @returns The cron job scheduler object. Create this object in \`convex/crons.js\` and export it
-     * as the default export.
-     */
-    export const cronJobs = cronJobsGeneric;
     `;
 
   return {

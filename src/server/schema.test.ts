@@ -2,12 +2,12 @@
 import { GenericId } from "../values/index.js";
 import { describe, expect, test } from "@jest/globals";
 import { assert, Equals } from "../test/type_testing.js";
-import { SystemIndexes } from "../server/system_fields.js";
+import { SystemIndexes } from "./system_fields.js";
 import {
   defineSchema,
   defineTable,
   DataModelFromSchemaDefinition,
-} from "./index.js";
+} from "./schema.js";
 import { v, Infer } from "../values/validator.js";
 
 describe("DataModelFromSchemaDefinition", () => {

@@ -2,13 +2,15 @@ import { convexToJson, jsonToConvex, Value } from "../../values/index.js";
 import { version } from "../../index.js";
 import { performAsyncSyscall } from "./syscall.js";
 import { parseArgs } from "../../common/index.js";
+import { FunctionReference, getFunctionName } from "../../server/api.js";
 
 export function setupActionCalls(requestId: string) {
   return {
     runQuery: async (
-      name: string,
+      query: FunctionReference<"query", "public" | "internal">,
       args?: Record<string, Value>
     ): Promise<any> => {
+      const name = getFunctionName(query);
       const queryArgs = parseArgs(args);
       const syscallArgs = {
         name,
@@ -16,13 +18,17 @@ export function setupActionCalls(requestId: string) {
         version,
         requestId,
       };
-      const result = await performAsyncSyscall("actions/query", syscallArgs);
+      const result = await performAsyncSyscall(
+        "1.0/actions/query",
+        syscallArgs
+      );
       return jsonToConvex(result);
     },
     runMutation: async (
-      name: string,
+      mutation: FunctionReference<"mutation", "public" | "internal">,
       args?: Record<string, Value>
     ): Promise<any> => {
+      const name = getFunctionName(mutation);
       const mutationArgs = parseArgs(args);
       const syscallArgs = {
         name,
@@ -30,13 +36,17 @@ export function setupActionCalls(requestId: string) {
         version,
         requestId,
       };
-      const result = await performAsyncSyscall("actions/mutation", syscallArgs);
+      const result = await performAsyncSyscall(
+        "1.0/actions/mutation",
+        syscallArgs
+      );
       return jsonToConvex(result);
     },
     runAction: async (
-      name: string,
+      action: FunctionReference<"action", "public" | "internal">,
       args?: Record<string, Value>
     ): Promise<any> => {
+      const name = getFunctionName(action);
       const actionArgs = parseArgs(args);
       const syscallArgs = {
         name,
@@ -44,7 +54,10 @@ export function setupActionCalls(requestId: string) {
         version,
         requestId,
       };
-      const result = await performAsyncSyscall("actions/action", syscallArgs);
+      const result = await performAsyncSyscall(
+        "1.0/actions/action",
+        syscallArgs
+      );
       return jsonToConvex(result);
     },
   };

@@ -168,13 +168,20 @@ export class WebSocketManager {
       state: "connecting",
       ws,
     };
+
+    // Kick off server inactivity timer before WebSocket connection is established
+    // so we can detect cases where handshake fails.
+    // The `onopen` event only fires after the connection is established:
+    // Source: https://datatracker.ietf.org/doc/html/rfc6455#page-19:~:text=_The%20WebSocket%20Connection%20is%20Established_,-and
+    this.resetServerInactivityTimeout();
+
     ws.onopen = () => {
       this._logVerbose("begin ws.onopen");
       if (this.socket.state !== "connecting") {
         throw new Error("onopen called with socket not in connecting state");
       }
       this.socket = { state: "ready", ws };
-      this.onServerActivity();
+      this.resetServerInactivityTimeout();
       this.onOpen({
         connectionCount: this.connectionCount,
         lastCloseReason: this.lastCloseReason,
@@ -196,7 +203,7 @@ export class WebSocketManager {
       // TODO(CX-1498): We reset the retry counter on any successful message.
       // This is not ideal and we should improve this further.
       this.retries = 0;
-      this.onServerActivity();
+      this.resetServerInactivityTimeout();
       const serverMessage = parseServerMessage(JSON.parse(message.data));
       this._logVerbose(`received ws message with type ${serverMessage.type}`);
       this.onMessage(serverMessage);
@@ -254,7 +261,7 @@ export class WebSocketManager {
     return false;
   }
 
-  private onServerActivity() {
+  private resetServerInactivityTimeout() {
     if (this.reconnectDueToServerInactivityTimeout !== null) {
       clearTimeout(this.reconnectDueToServerInactivityTimeout);
       this.reconnectDueToServerInactivityTimeout = null;

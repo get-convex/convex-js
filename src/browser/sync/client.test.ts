@@ -5,6 +5,7 @@
 import { test, expect } from "@jest/globals";
 
 import { BaseConvexClient } from "./client.js";
+import { anyApi } from "../../server/api.js";
 
 test("localQueryResult reflects optimistic results", async () => {
   const client = new BaseConvexClient("http://127.0.0.1:8000", () => {
@@ -19,7 +20,7 @@ test("localQueryResult reflects optimistic results", async () => {
     {},
     {
       optimisticUpdate: localQueryStore => {
-        localQueryStore.setQuery("myUdf", {}, true);
+        localQueryStore.setQuery(anyApi.myUdf.default, {}, true);
       },
     }
   );

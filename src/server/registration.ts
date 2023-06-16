@@ -7,15 +7,10 @@ import {
   StorageWriter,
 } from ".";
 import {
-  ActionNames,
-  GenericAPI,
-  MutationNames,
-  NamedAction,
-  NamedMutation,
-  NamedQuery,
+  FunctionReference,
+  FunctionReturnType,
   OptionalRestArgs,
-  QueryNames,
-} from "../browser";
+} from "../server/api.js";
 import { ObjectType, PropertyValidators } from "../values/validator";
 import { GenericDataModel } from "./data_model.js";
 import { Scheduler } from "./scheduler";
@@ -30,10 +25,7 @@ import { Scheduler } from "./scheduler";
  *
  * @public
  */
-export interface MutationCtx<
-  DataModel extends GenericDataModel,
-  API extends GenericAPI
-> {
+export interface MutationCtx<DataModel extends GenericDataModel> {
   /**
    * A utility for reading and writing data in the database.
    */
@@ -52,7 +44,7 @@ export interface MutationCtx<
   /**
    * A utility for scheduling Convex functions to run in the future.
    */
-  scheduler: Scheduler<API>;
+  scheduler: Scheduler;
 }
 
 /**
@@ -97,44 +89,58 @@ export interface QueryCtx<DataModel extends GenericDataModel> {
  *
  * @public
  */
-export interface ActionCtx<API extends GenericAPI> {
+export interface ActionCtx {
   /**
-   * Runs the Convex query with the given name and arguments.
+   * Run the Convex query with the given name and arguments.
    *
    * Consider using an {@link internalQuery} to prevent users from calling the
    * query directly.
+   *
+   * @param query - A {@link FunctionReference} for the query to run.
+   * @param args - The arguments to the query function.
+   * @returns A promise of the query's result.
    */
-  runQuery<Name extends QueryNames<API>>(
-    name: Name,
-    ...args: OptionalRestArgs<NamedQuery<API, Name>>
-  ): Promise<ReturnType<NamedQuery<API, Name>>>;
+  runQuery<Query extends FunctionReference<"query", "public" | "internal">>(
+    query: Query,
+    ...args: OptionalRestArgs<Query>
+  ): Promise<FunctionReturnType<Query>>;
 
   /**
-   * Runs the Convex mutation with the given name and arguments.
+   * Run the Convex mutation with the given name and arguments.
    *
    * Consider using an {@link internalMutation} to prevent users from calling
    * the mutation directly.
+   *
+   * @param mutation - A {@link FunctionReference} for the mutation to run.
+   * @param args - The arguments to the mutation function.
+   * @returns A promise of the mutation's result.
    */
-  runMutation<Name extends MutationNames<API>>(
-    name: Name,
-    ...args: OptionalRestArgs<NamedMutation<API, Name>>
-  ): Promise<ReturnType<NamedMutation<API, Name>>>;
+  runMutation<
+    Mutation extends FunctionReference<"mutation", "public" | "internal">
+  >(
+    mutation: Mutation,
+    ...args: OptionalRestArgs<Mutation>
+  ): Promise<FunctionReturnType<Mutation>>;
 
   /**
-   * Runs the Convex action with the given name and arguments.
+   * Run the Convex action with the given name and arguments.
    *
    * Consider using an {@link internalAction} to prevent users from calling the
    * action directly.
+   *
+   * @param action - A {@link FunctionReference} for the action to run.
+   * @param args - The arguments to the action function.
+   * @returns A promise of the action's result.
    */
-  runAction<Name extends ActionNames<API>>(
-    name: Name,
-    ...args: OptionalRestArgs<NamedAction<API, Name>>
-  ): Promise<ReturnType<NamedAction<API, Name>>>;
+  runAction<Action extends FunctionReference<"action", "public" | "internal">>(
+    action: Action,
+    ...args: OptionalRestArgs<Action>
+  ): Promise<FunctionReturnType<Action>>;
 
   /**
    * A utility for scheduling Convex functions to run in the future.
    */
-  scheduler: Scheduler<API>;
+  scheduler: Scheduler;
 
   /**
    * Information about the currently authenticated user.
@@ -148,21 +154,22 @@ export interface ActionCtx<API extends GenericAPI> {
 }
 
 /**
- * The arguments to a Convex query, mutation, or action function.
+ * The default arguments type for a Convex query, mutation, or action function.
  *
  * Convex functions always take an arguments object that maps the argument
  * names to their values.
  *
  * @public
  */
-export type FunctionArgs = Record<string, unknown>;
+export type DefaultFunctionArgs = Record<string, unknown>;
 
 /**
  * The arguments array for a function that takes arguments.
  *
- * This is an array of a single {@link FunctionArgs} element.
+ * This is an array of a single {@link DefaultFunctionArgs} element.
  */
-type OneArgArray = [FunctionArgs];
+type OneArgArray<ArgsObject extends DefaultFunctionArgs = DefaultFunctionArgs> =
+  [ArgsObject];
 
 /**
  * The arguments to a function that takes no arguments (just an empty array).
@@ -172,7 +179,7 @@ type NoArgsArray = [];
 /**
  * An array of arguments to a Convex function.
  *
- * Convex functions can take either a single {@link FunctionArgs} object or no
+ * Convex functions can take either a single {@link DefaultFunctionArgs} object or no
  * args at all.
  *
  * @public
@@ -180,9 +187,29 @@ type NoArgsArray = [];
 export type ArgsArray = OneArgArray | NoArgsArray;
 
 /**
- * A type representing the visibility of a Convex function.
+ * A type for the empty object `{}`.
+ *
+ * Note that we don't use `type EmptyObject = {}` because that matches every object.
  */
-type FunctionVisibility = "public" | "internal";
+export type EmptyObject = Record<string, never>;
+
+/**
+ * Convert an {@link ArgsArray} into a single object type.
+ *
+ * Empty arguments arrays are converted to {@link EmptyObject}.
+ */
+type ArgsArrayToObject<Args extends ArgsArray> = Args extends OneArgArray<
+  infer ArgsObject
+>
+  ? ArgsObject
+  : EmptyObject;
+
+/**
+ * A type representing the visibility of a Convex function.
+ *
+ * @public
+ */
+export type FunctionVisibility = "public" | "internal";
 
 /**
  * Given a {@link FunctionVisibility}, should this function have `isPublic: true`
@@ -207,14 +234,12 @@ type VisibilityProperties<Visiblity extends FunctionVisibility> =
  */
 export type RegisteredMutation<
   Visibility extends FunctionVisibility,
-  Args extends ArgsArray,
+  Args extends DefaultFunctionArgs,
   Output
 > = {
-  (ctx: MutationCtx<any, any>, ...args: Args): Output;
+  (ctx: MutationCtx<any>, args: Args): Output;
 
-  args: Args;
-  output: Output;
-
+  isConvexFunction: true;
   isMutation: true;
   isRegistered?: true;
 
@@ -235,14 +260,12 @@ export type RegisteredMutation<
  */
 export type RegisteredQuery<
   Visibility extends FunctionVisibility,
-  Args extends ArgsArray,
+  Args extends DefaultFunctionArgs,
   Output
 > = {
-  (ctx: QueryCtx<any>, ...args: Args): Output;
+  (ctx: QueryCtx<any>, args: Args): Output;
 
-  args: Args;
-  output: Output;
-
+  isConvexFunction: true;
   isQuery: true;
   isRegistered?: true;
 
@@ -263,14 +286,12 @@ export type RegisteredQuery<
  */
 export type RegisteredAction<
   Visibility extends FunctionVisibility,
-  Args extends ArgsArray,
+  Args extends DefaultFunctionArgs,
   Output
 > = {
-  (ctx: ActionCtx<any>, ...args: Args): Output;
+  (ctx: ActionCtx, args: Args): Output;
 
-  args: Args;
-  output: Output;
-
+  isConvexFunction: true;
   isAction: true;
   isRegistered?: true;
 
@@ -290,7 +311,7 @@ export type RegisteredAction<
  * @public
  */
 export type PublicHttpAction = {
-  (ctx: ActionCtx<any>, request: Request): Response;
+  (ctx: ActionCtx, request: Request): Response;
   isHttp: true;
   isRegistered?: true;
 
@@ -402,16 +423,15 @@ export interface ValidatedFunction<
  */
 export type MutationBuilder<
   DataModel extends GenericDataModel,
-  API extends GenericAPI,
   Visibility extends FunctionVisibility
 > = {
   <Output, ArgsValidator extends PropertyValidators>(
-    func: ValidatedFunction<MutationCtx<DataModel, API>, ArgsValidator, Output>
-  ): RegisteredMutation<Visibility, [ObjectType<ArgsValidator>], Output>;
+    func: ValidatedFunction<MutationCtx<DataModel>, ArgsValidator, Output>
+  ): RegisteredMutation<Visibility, ObjectType<ArgsValidator>, Output>;
 
   <Output, Args extends ArgsArray = OneArgArray>(
-    func: UnvalidatedFunction<MutationCtx<DataModel, API>, Args, Output>
-  ): RegisteredMutation<Visibility, Args, Output>;
+    func: UnvalidatedFunction<MutationCtx<DataModel>, Args, Output>
+  ): RegisteredMutation<Visibility, ArgsArrayToObject<Args>, Output>;
 };
 
 /**
@@ -426,11 +446,11 @@ export type QueryBuilder<
 > = {
   <Output, ArgsValidator extends PropertyValidators>(
     func: ValidatedFunction<QueryCtx<DataModel>, ArgsValidator, Output>
-  ): RegisteredQuery<Visibility, [ObjectType<ArgsValidator>], Output>;
+  ): RegisteredQuery<Visibility, ObjectType<ArgsValidator>, Output>;
 
   <Output, Args extends ArgsArray = OneArgArray>(
     func: UnvalidatedFunction<QueryCtx<DataModel>, Args, Output>
-  ): RegisteredQuery<Visibility, Args, Output>;
+  ): RegisteredQuery<Visibility, ArgsArrayToObject<Args>, Output>;
 };
 
 /**
@@ -439,17 +459,14 @@ export type QueryBuilder<
  * Used to give {@link actionGeneric} a type specific to your data model.
  * @public
  */
-export type ActionBuilder<
-  API extends GenericAPI,
-  Visibility extends FunctionVisibility
-> = {
+export type ActionBuilder<Visibility extends FunctionVisibility> = {
   <Output, ArgsValidator extends PropertyValidators>(
-    func: ValidatedFunction<ActionCtx<API>, ArgsValidator, Output>
-  ): RegisteredAction<Visibility, [ObjectType<ArgsValidator>], Output>;
+    func: ValidatedFunction<ActionCtx, ArgsValidator, Output>
+  ): RegisteredAction<Visibility, ObjectType<ArgsValidator>, Output>;
 
   <Output, Args extends ArgsArray = OneArgArray>(
-    func: UnvalidatedFunction<ActionCtx<API>, Args, Output>
-  ): RegisteredAction<Visibility, Args, Output>;
+    func: UnvalidatedFunction<ActionCtx, Args, Output>
+  ): RegisteredAction<Visibility, ArgsArrayToObject<Args>, Output>;
 };
 
 /**
@@ -459,6 +476,6 @@ export type ActionBuilder<
  * and functions.
  * @public
  */
-export type HttpActionBuilderForAPI<API extends GenericAPI> = (
-  func: (ctx: ActionCtx<API>, request: Request) => Promise<Response>
+export type HttpActionBuilder = (
+  func: (ctx: ActionCtx, request: Request) => Promise<Response>
 ) => PublicHttpAction;

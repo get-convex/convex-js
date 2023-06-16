@@ -2,10 +2,14 @@ import { Value } from "../values/index.js";
 import { test, beforeEach, afterEach, expect, jest } from "@jest/globals";
 import FakeWatch from "../test/fake_watch";
 import { QueriesObserver } from "./queries_observer";
+import { FunctionReference, anyApi } from "../server/api.js";
 
 let queriesObserver: QueriesObserver;
 let createWatch: jest.MockedFunction<
-  (name: string, args: Record<string, Value>) => FakeWatch<any>
+  (
+    query: FunctionReference<"query">,
+    args: Record<string, Value>
+  ) => FakeWatch<any>
 >;
 let listener: jest.MockedFunction<() => void>;
 
@@ -24,7 +28,7 @@ test("setting queries updates `getCurrentQueries`", () => {
   // Adding a query changes the current queries.
   queriesObserver.setQueries({
     query: {
-      name: "myQuery",
+      query: anyApi.myQuery.default,
       args: {},
     },
   });
@@ -43,17 +47,17 @@ test("setting queries updates `getCurrentQueries`", () => {
   });
 });
 
-test("If the query name changes, only stay subscribed to the second name", () => {
+test("If the query changes, only stay subscribed to the second query", () => {
   queriesObserver.setQueries({
     query: {
-      name: "myQuery",
+      query: anyApi.myQuery.default,
       args: {},
     },
   });
 
   queriesObserver.setQueries({
     query: {
-      name: "myQuery2",
+      query: anyApi.myQuery2.default,
       args: {},
     },
   });
@@ -70,14 +74,14 @@ test("If the query name changes, only stay subscribed to the second name", () =>
 test("If the query args change, only stay subscribed to the second args", () => {
   queriesObserver.setQueries({
     query: {
-      name: "myQuery",
+      query: anyApi.myQuery.default,
       args: { arg: "first arg" },
     },
   });
 
   queriesObserver.setQueries({
     query: {
-      name: "myQuery",
+      query: anyApi.myQuery.default,
       args: { arg: "new arg" },
     },
   });
@@ -94,7 +98,7 @@ test("If the query args change, only stay subscribed to the second args", () => 
 test("If the query doesn't change, we only have one subscription", () => {
   queriesObserver.setQueries({
     query: {
-      name: "myQuery",
+      query: anyApi.myQuery.default,
       args: { arg1: "arg1", arg2: 1, arg3: {} },
     },
   });
@@ -104,7 +108,7 @@ test("If the query doesn't change, we only have one subscription", () => {
   // Re-adding the same query doesn't create a new watch.
   queriesObserver.setQueries({
     query: {
-      name: "myQuery",
+      query: anyApi.myQuery.default,
       args: { arg1: "arg1", arg2: 1, arg3: {} },
     },
   });
@@ -115,7 +119,7 @@ test("If the query doesn't change, we only have one subscription", () => {
 test("destroy unsubscribes from all queries", async () => {
   queriesObserver.setQueries({
     query: {
-      name: "myQuery",
+      query: anyApi.myQuery.default,
       args: {},
     },
   });
@@ -130,7 +134,7 @@ test("destroy unsubscribes from all queries", async () => {
 test("swapping createWatch recreates subscriptions", async () => {
   queriesObserver.setQueries({
     query: {
-      name: "myQuery",
+      query: anyApi.myQuery.default,
       args: {},
     },
   });
@@ -152,5 +156,9 @@ test("swapping createWatch recreates subscriptions", async () => {
   // journal was passed through!
   expect(createWatch2.mock.calls.length).toBe(1);
   expect(createWatch2.mock.results[0].value.numCallbacks()).toBe(1);
-  expect(createWatch2.mock.calls[0]).toEqual(["myQuery", {}, "query journal"]);
+  expect(createWatch2.mock.calls[0]).toEqual([
+    anyApi.myQuery.default,
+    {},
+    "query journal",
+  ]);
 });

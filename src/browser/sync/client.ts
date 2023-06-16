@@ -109,7 +109,7 @@ export interface MutationOptions {
    * An optimistic update locally updates queries while a mutation is pending.
    * Once the mutation completes, the update will be rolled back.
    */
-  optimisticUpdate?: OptimisticUpdate<any, any>;
+  optimisticUpdate?: OptimisticUpdate<any>;
 }
 
 /**

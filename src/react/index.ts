@@ -46,45 +46,22 @@
  * </AuthLoading>
  * ```
  *
- * ### Generating typed hooks
- *
- * This module is typically used alongside generated hooks.
- *
- * To generate the hooks, run `npx convex dev` in your Convex project. This
- * will create a `convex/_generated/react.js` file with the following React
- * hooks, typed for your queries and mutations:
- * - [useQuery](https://docs.convex.dev/generated-api/react#usequery)
- * - [useMutation](https://docs.convex.dev/generated-api/react#usemutation)
- * - [useConvex](https://docs.convex.dev/generated-api/react#useconvex)
- * - [usePaginatedQuery](https://docs.convex.dev/generated-api/react#usepaginatedquery)
- * - [useQueries](https://docs.convex.dev/generated-api/react#usequeries)
- *
- * If you aren't using code generation, you can use these untyped hooks instead:
- * - {@link useQueryGeneric}
- * - {@link useMutationGeneric}
- * - {@link useConvexGeneric}
- * - {@link usePaginatedQueryGeneric}
- * - {@link useQueriesGeneric}
- *
- * ### Using the hooks
+ * ### Using React hooks
  *
  * ```typescript
- * import { useQuery, useMutation } from "../convex/_generated/react";
+ * import { useQuery, useMutation } from "convex/react";
+ * import { api } from "../convex/_generated/api";
  *
  * function App() {
- *   const counter = useQuery("getCounter");
- *   const increment = useMutation("incrementCounter");
+ *   const counter = useQuery(api.getCounter.default);
+ *   const increment = useMutation(api.incrementCounter.default);
  *   // Your component here!
  * }
  * ```
  * @module
  */
 export * from "./use_paginated_query.js";
-export {
-  useQueriesGeneric,
-  type RequestForQueries,
-  type UseQueriesForAPI,
-} from "./use_queries.js";
+export { useQueries, type RequestForQueries } from "./use_queries.js";
 export type { AuthTokenFetcher } from "../browser/sync/client.js";
 export * from "./auth_helpers.js";
 export * from "./ConvexAuthState.js";
@@ -97,14 +74,10 @@ export {
   type WatchQueryOptions,
   type MutationOptions,
   ConvexReactClient,
-  useConvexGeneric,
+  useConvex,
   ConvexProvider,
   type UseQueryOptions,
-  useQueryGeneric,
-  useMutationGeneric,
-  useActionGeneric,
-  type UseQueryForAPI,
-  type UseMutationForAPI,
-  type UseActionForAPI,
-  type UseConvexForAPI,
+  useQuery,
+  useMutation,
+  useAction,
 } from "./client.js";

@@ -108,7 +108,7 @@ describe("RecordingFs", () => {
       const nonexistentFile = path.join(tmpDir, "nonexistent_file");
       expect(() => {
         recordingFs.rm(nonexistentFile);
-      }).toThrowError("ENOENT: no such file or directory");
+      }).toThrow("ENOENT: no such file or directory");
     });
 
     test("does not throw error if `force` is used", () => {

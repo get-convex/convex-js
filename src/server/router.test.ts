@@ -1,8 +1,8 @@
 import { httpActionGeneric } from "./impl/registration_impl";
-import { HttpActionBuilderForAPI } from "./registration";
+import { HttpActionBuilder } from "./registration";
 import { httpRouter } from "./router";
 
-const httpAction = httpActionGeneric as HttpActionBuilderForAPI<any>;
+const httpAction = httpActionGeneric as HttpActionBuilder;
 
 // Note that `Request`/`Response` are in Node.js 18; while we still run our
 // tests with Node.js 16 these endpoints can't actually be called.

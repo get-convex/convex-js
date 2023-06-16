@@ -1,21 +1,8 @@
-import inquirer from "inquirer";
 import chalk from "chalk";
 import { Command, Option } from "commander";
+import inquirer from "inquirer";
 import path from "path";
 import { performance } from "perf_hooks";
-import {
-  deploymentName,
-  DeploymentType,
-  getDevDeploymentMaybeThrows,
-  getUrlAndAdminKeyByDeploymentType,
-  getUrlAndAdminKeyFromSlug,
-} from "./lib/api";
-import {
-  ProjectConfig,
-  enforceDeprecatedConfigField,
-  readProjectConfig,
-  upgradeOldAuthInfoToAuthConfig,
-} from "./lib/config";
 import {
   Context,
   logError,
@@ -27,31 +14,35 @@ import {
   stopSpinner,
 } from "../bundler/context";
 import {
-  askAboutWritingToEnv,
-  logConfiguration,
-  logProvisioning,
-  offerToWriteToEnv,
-  writeToEnv,
-} from "./lib/envvars";
+  DeploymentType,
+  deploymentName,
+  getDevDeploymentMaybeThrows,
+  getUrlAndAdminKeyByDeploymentType,
+  getUrlAndAdminKeyFromSlug,
+} from "./lib/api";
+import {
+  ProjectConfig,
+  enforceDeprecatedConfigField,
+  readProjectConfig,
+  upgradeOldAuthInfoToAuthConfig,
+  writeProjectConfig,
+} from "./lib/config";
+import { writeDeploymentEnvVar } from "./lib/deployment";
+import { init } from "./lib/init";
 import { checkAuthorization, performLogin } from "./lib/login";
 import { PushOptions, runPush } from "./lib/push";
+import { reinit } from "./lib/reinit";
 import {
-  logAndHandleAxiosError,
   formatDuration,
+  functionsDir,
+  getConfiguredDeployment,
   getCurrentTimeString,
   hasProject,
   hasProjects,
   hasTeam,
-  isInExistingProject as isInExistingProject,
-  shouldUseNewFlow,
-  getConfiguredDeployment,
-  functionsDir,
+  logAndHandleAxiosError,
 } from "./lib/utils";
 import { Crash, WatchContext, Watcher } from "./lib/watch";
-import { init } from "./lib/init";
-import { reinit } from "./lib/reinit";
-import { writeDeploymentEnvVar } from "./lib/deployment";
-import { writeProjectConfig } from "./lib/config";
 
 export const dev = new Command("dev")
   .summary("Develop against a dev deployment, watching for changes")
@@ -82,9 +73,7 @@ export const dev = new Command("dev")
     new Option(
       "--configure <choice>",
       "Choose whether to configure new or existing project"
-    )
-      .choices(["new", "existing", "ask"])
-      .default("ask")
+    ).choices(["new", "existing", "ask"])
   )
   .option("--team <team_slug>", "The team you'd like to use for this project")
   .option(
@@ -115,128 +104,26 @@ export const dev = new Command("dev")
       }
     }
 
-    const chosenConfiguration: "new" | "existing" | null =
-      cmdOptions.configure === "ask" ? null : cmdOptions.configure ?? null;
+    const chosenConfiguration: "new" | "existing" | "ask" | null =
+      cmdOptions.configure ?? null;
 
-    if (shouldUseNewFlow()) {
-      const credentials = await deploymentCredentialsOrConfigure(
-        ctx,
-        chosenConfiguration,
-        cmdOptions
-      );
-      await watchAndPush(
-        ctx,
-        {
-          ...credentials,
-          verbose: !!cmdOptions.verbose,
-          dryRun: false,
-          typecheck: cmdOptions.typecheck,
-          debug: false,
-          codegen: cmdOptions.codegen === "enable",
-        },
-        cmdOptions
-      );
-      return;
-    }
-
-    const saveUrl =
-      cmdOptions.saveUrl === true
-        ? "yes"
-        : cmdOptions.saveUrl === false
-        ? "no"
-        : "ask";
-
-    let projectConfig: ProjectConfig | null = null;
-    let options: PushOptions;
-
-    const promptForDevDeployment = (isInit: boolean) => async () => {
-      const devEnvVarWrite = await askAboutWritingToEnv(
-        ctx,
-        "dev",
-        null,
-        saveUrl
-      );
-      return async () => {
-        projectConfig = (await readProjectConfig(ctx)).projectConfig;
-        options = await getDevDeploymentOptions(ctx, projectConfig, cmdOptions);
-        await writeToEnv(ctx, devEnvVarWrite, options.url);
-        if (isInit) {
-          logProvisioning(ctx, devEnvVarWrite, "dev", options.url);
-        } else {
-          logConfiguration(ctx, devEnvVarWrite, "dev", options.url);
-        }
-      };
-    };
-
-    const { team, project } = cmdOptions;
-
-    if (!(await isInExistingProject(ctx))) {
-      const choice = chosenConfiguration ?? (await askToConfigure(ctx));
-      switch (choice) {
-        case "new":
-          await init(
-            ctx,
-            "prod",
-            { team, project },
-            saveUrl,
-            promptForDevDeployment(true)
-          );
-          break;
-        case "existing":
-          await reinit(
-            ctx,
-            "prod",
-            { team, project },
-            saveUrl,
-            promptForDevDeployment(false)
-          );
-          break;
-        default: {
-          const _exhaustivenessCheck: never = choice;
-        }
-      }
-    } else {
-      projectConfig = (await readProjectConfig(ctx)).projectConfig;
-      try {
-        options = await getDevDeploymentOptionsMaybeThrows(
-          ctx,
-          projectConfig,
-          cmdOptions
-        );
-        await offerToWriteToEnv(ctx, "dev", options.url, saveUrl);
-      } catch (error) {
-        const choice =
-          chosenConfiguration ??
-          (await askToReconfigure(ctx, projectConfig, error));
-        switch (choice) {
-          case "new":
-            await init(
-              ctx,
-              "prod",
-              { team, project },
-              saveUrl,
-              promptForDevDeployment(true),
-              { allowExistingConfig: true }
-            );
-            break;
-          case "existing":
-            await reinit(
-              ctx,
-              "prod",
-              { team, project },
-              saveUrl,
-              promptForDevDeployment(false),
-              { allowExistingConfig: true }
-            );
-            break;
-          default: {
-            const _exhaustivenessCheck: never = choice;
-          }
-        }
-      }
-    }
-
-    await watchAndPush(ctx, options!, cmdOptions, projectConfig!);
+    const credentials = await deploymentCredentialsOrConfigure(
+      ctx,
+      chosenConfiguration,
+      cmdOptions
+    );
+    await watchAndPush(
+      ctx,
+      {
+        ...credentials,
+        verbose: !!cmdOptions.verbose,
+        dryRun: false,
+        typecheck: cmdOptions.typecheck,
+        debug: false,
+        codegen: cmdOptions.codegen === "enable",
+      },
+      cmdOptions
+    );
   });
 
 type DeploymentCredentials = {
@@ -244,9 +131,9 @@ type DeploymentCredentials = {
   adminKey: string;
 };
 
-async function deploymentCredentialsOrConfigure(
+export async function deploymentCredentialsOrConfigure(
   ctx: Context,
-  chosenConfiguration: "new" | "existing" | null,
+  chosenConfiguration: "new" | "existing" | "ask" | null,
   cmdOptions: {
     prod: boolean;
     team: string | null;
@@ -266,7 +153,10 @@ async function deploymentCredentialsOrConfigure(
       : null;
   // No configured deployment NOR existing config
   if (configuredDeployment === null) {
-    const choice = chosenConfiguration ?? (await askToConfigure(ctx));
+    const choice =
+      chosenConfiguration === "new" || chosenConfiguration === "existing"
+        ? chosenConfiguration
+        : await askToConfigure(ctx);
     return await initOrReinit(ctx, choice, deploymentType, cmdOptions);
   }
   // Existing config but user doesn't have access to it
@@ -295,8 +185,7 @@ async function deploymentCredentialsOrConfigure(
   );
 
   // Configured deployment and user doesn't has access to it
-  const choice =
-    chosenConfiguration ?? (await askToReconfigureNew(ctx, deploymentName));
+  const choice = await askToReconfigureNew(ctx, deploymentName);
   return initOrReinit(ctx, choice, deploymentType, cmdOptions);
 }
 
@@ -558,15 +447,6 @@ async function askToConfigure(ctx: Context): Promise<"new" | "existing"> {
   return await promptToInitWithProjects();
 }
 
-type DevDeploymentCmdOptions = {
-  url?: string;
-  adminKey?: string;
-  prod?: boolean;
-  verbose?: boolean;
-  typecheck: "enable" | "try" | "disable";
-  codegen: "enable" | "disable";
-};
-
 async function askToReconfigure(
   ctx: Context,
   projectConfig: ProjectConfig,
@@ -658,71 +538,6 @@ async function askToReconfigureNew(
   }
 
   return await promptToReconfigure();
-}
-
-async function getDevDeploymentOptions(
-  ctx: Context,
-  projectConfig: ProjectConfig,
-  cmdOptions: DevDeploymentCmdOptions
-): Promise<PushOptions> {
-  try {
-    return await getDevDeploymentOptionsMaybeThrows(
-      ctx,
-      projectConfig,
-      cmdOptions
-    );
-  } catch (error) {
-    return await logAndHandleAxiosError(ctx, error);
-  }
-}
-
-async function getDevDeploymentOptionsMaybeThrows(
-  ctx: Context,
-  projectConfig: ProjectConfig,
-  cmdOptions: DevDeploymentCmdOptions
-): Promise<PushOptions> {
-  const teamSlug = await enforceDeprecatedConfigField(
-    ctx,
-    projectConfig,
-    "team"
-  );
-  const projectSlug = await enforceDeprecatedConfigField(
-    ctx,
-    projectConfig,
-    "project"
-  );
-
-  let deployment: {
-    url: string;
-    adminKey: string;
-  };
-  if (!cmdOptions.url || !cmdOptions.adminKey) {
-    if (cmdOptions.prod) {
-      deployment = await getUrlAndAdminKeyByDeploymentType(
-        ctx,
-        projectSlug,
-        teamSlug,
-        "prod"
-      );
-      console.error("Found deployment ready");
-    } else {
-      deployment = await getDevDeploymentMaybeThrows(ctx, {
-        projectSlug,
-        teamSlug,
-      });
-    }
-  }
-  const adminKey = cmdOptions.adminKey ?? deployment!.adminKey;
-  const url = cmdOptions.url ?? deployment!.url;
-  return {
-    adminKey,
-    verbose: !!cmdOptions.verbose,
-    dryRun: false,
-    typecheck: cmdOptions.typecheck,
-    debug: false,
-    codegen: cmdOptions.codegen === "enable",
-    url,
-  };
 }
 
 const initialBackoff = 500;

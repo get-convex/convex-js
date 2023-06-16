@@ -21,7 +21,7 @@ test("parseProjectConfig", async () => {
   };
   const assertParseError = async (inp: any, err: string) => {
     await expect(parseProjectConfig(ctx, inp)).rejects.toThrow();
-    expect(consoleSpy).toBeCalledWith(err);
+    expect(consoleSpy).toHaveBeenCalledWith(err);
   };
 
   await assertParses({

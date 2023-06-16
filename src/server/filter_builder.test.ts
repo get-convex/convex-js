@@ -77,6 +77,7 @@ test("neg returns bigint when bigint is passed in", () => {
   assert<Equals<Result, Expected>>();
 });
 
+// eslint-disable-next-line jest/expect-expect
 test("field doesn't compile on invalid field paths", () => {
   function broken(q: FB) {
     // @ts-expect-error Using this directive to assert this is an error.

@@ -121,29 +121,14 @@ async function runFunction(
   const client = new ConvexHttpClient(deploymentUrl);
   client.setAdminAuth(adminKey);
 
-  // TODO replace with new endpoint that runs whichever
-  const responses = await Promise.allSettled<Value>([
-    client.mutation(functionName, args),
-    client.query(functionName, args),
-    client.action(functionName, args),
-  ]);
-  const successes = responses.filter(
-    result => result.status === "fulfilled"
-  ) as PromiseFulfilledResult<Value>[];
-  const failures = responses.filter(
-    result => result.status === "rejected"
-  ) as PromiseRejectedResult[];
-  if (successes.length === 0) {
-    const err: Error = failures[0].reason;
-    if (err.message.includes("Could not find public function")) {
-      logFailure(ctx, `No function found for identifier "${functionName}"`);
-    } else {
-      logFailure(ctx, `Failed to run function "${functionName}":`);
-      logError(ctx, chalk.red(err));
-    }
+  let result: Value;
+  try {
+    result = await client.function(functionName, args);
+  } catch (err) {
+    logFailure(ctx, `Failed to run function "${functionName}":`);
+    logError(ctx, chalk.red(err));
     return await ctx.crash(1);
   }
-  const result = successes[0].value;
 
   // `null` is the default return type
   if (result !== null) {

@@ -1,34 +1,16 @@
-import {
-  ActionNames,
-  GenericAPI,
-  MutationNames,
-  NamedAction,
-  NamedMutation,
-  OptionalRestArgs,
-} from "../browser";
+import { FunctionReference, OptionalRestArgs } from "../server/api.js";
 
 /**
- * The names of all of the schedulable in a Convex API.
+ * A {@link FunctionReference} that can be scheduled to run in the future.
  *
- * These are all of the mutations and actions.
+ * Schedulable functions are mutations and actions that are public or internal.
  *
  * @public
  */
-export type SchedulableFunctionNames<API extends GenericAPI> =
-  | ActionNames<API>
-  | MutationNames<API>;
-
-/**
- * The type of a schedulable function in a Convex API.
- *
- * @public
- */
-export type NamedSchedulableFunction<
-  API extends GenericAPI,
-  Name extends SchedulableFunctionNames<API>
-> = Name extends ActionNames<API>
-  ? NamedAction<API, Name>
-  : NamedMutation<API, Name>;
+export type SchedulableFunctionReference = FunctionReference<
+  "mutation" | "action",
+  "public" | "internal"
+>;
 
 /**
  * An interface to schedule Convex functions.
@@ -44,35 +26,37 @@ export type NamedSchedulableFunction<
  *
  * @public
  */
-export interface Scheduler<API extends GenericAPI> {
+export interface Scheduler {
   /**
    * Schedule a function to execute after a delay.
    *
-   * @param delayMs - delay in milliseconds. Must be non-negative. If the delay
+   * @param delayMs - Delay in milliseconds. Must be non-negative. If the delay
    * is zero, the scheduled function will be due to execute immediately after the
    * scheduling one completes.
-   * @param name - the name of the function to schedule.
-   * @param args - arguments to call the scheduled functions with.
+   * @param functionReference - A {@link FunctionReference} for the function
+   * to schedule.
+   * @param args - Arguments to call the scheduled functions with.
    **/
-  runAfter<Name extends SchedulableFunctionNames<API>>(
+  runAfter<FuncRef extends SchedulableFunctionReference>(
     delayMs: number,
-    name: Name,
-    ...args: OptionalRestArgs<NamedSchedulableFunction<API, Name>>
+    functionReference: FuncRef,
+    ...args: OptionalRestArgs<FuncRef>
   ): Promise<void>;
 
   /**
    * Schedule a function to execute at a given timestamp.
    *
-   * @param timestamp - a Date or a timestamp (milliseconds since the epoch).
+   * @param timestamp - A Date or a timestamp (milliseconds since the epoch).
    * If the timestamp is in the past, the scheduled function will be due to
    * execute immediately after the scheduling one completes. The timestamp can't
    * be more than five years in the past or more than five years in the future.
-   * @param name - the name of the function to schedule.
+   * @param functionReference - A {@link FunctionReference} for the function
+   * to schedule.
    * @param args - arguments to call the scheduled functions with.
    **/
-  runAt<Name extends SchedulableFunctionNames<API>>(
+  runAt<FuncRef extends SchedulableFunctionReference>(
     timestamp: number | Date,
-    name: Name,
-    ...args: OptionalRestArgs<NamedSchedulableFunction<API, Name>>
+    functionReference: FuncRef,
+    ...args: OptionalRestArgs<FuncRef>
   ): Promise<void>;
 }

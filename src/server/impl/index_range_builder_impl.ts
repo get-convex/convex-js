@@ -1,4 +1,5 @@
 import { convexToJson, JSONValue, Value } from "../../values/index.js";
+import { convexOrUndefinedToJson } from "../../values/value.js";
 import { GenericDocument, GenericIndexFields } from "../data_model.js";
 import {
   IndexRange,
@@ -6,7 +7,6 @@ import {
   LowerBoundIndexRangeBuilder,
   UpperBoundIndexRangeBuilder,
 } from "../index_range_builder.js";
-import { convexOrUndefinedToJson } from "./filter_builder_impl.js";
 
 export type SerializedRangeExpression = {
   type: "Eq" | "Gt" | "Gte" | "Lt" | "Lte";

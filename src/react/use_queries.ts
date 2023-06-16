@@ -1,10 +1,10 @@
 import { Value } from "../values/index.js";
 import { useEffect, useMemo, useState } from "react";
-import { useConvexGeneric } from "./client.js";
-import { GenericAPI, NamedQuery, PublicQueryNames } from "../api/index.js";
+import { useConvex } from "./client.js";
 import { CreateWatch, QueriesObserver } from "./queries_observer.js";
 import { useSubscription } from "./use_subscription.js";
-import { ArgsObject, QueryJournal } from "../browser/index.js";
+import { QueryJournal } from "../browser/index.js";
+import { FunctionReference } from "../server/api.js";
 
 /**
  * Load a variable number of reactive Convex queries.
@@ -14,8 +14,8 @@ import { ArgsObject, QueryJournal } from "../browser/index.js";
  * of queries without violating the rules of React hooks.
  *
  * This hook accepts an object whose keys are identifiers for each query and the
- * values are objects of `{ name: string, args: Record<string, Value> }`. The
- * `name` is the name of the Convex query function to load, and the `args` are
+ * values are objects of `{ query: FunctionReference, args: Record<string, Value> }`. The
+ * `query` is a FunctionReference for the Convex query function to load, and the `args` are
  * the arguments to that function.
  *
  * The hook returns an object that maps each identifier to the result of the query,
@@ -26,7 +26,7 @@ import { ArgsObject, QueryJournal } from "../browser/index.js";
  * ```typescript
  * const results = useQueriesGeneric({
  *   messagesInGeneral: {
- *     name: "listMessages",
+ *     query: "listMessages",
  *     args: { channel: "#general" }
  *   }
  * });
@@ -48,11 +48,8 @@ import { ArgsObject, QueryJournal } from "../browser/index.js";
  *
  * Throws an error if not used under {@link ConvexProvider}.
  *
- * If you're using code generation, use the `useQueries` function in
- * `convex/_generated/react.js` which is typed for your API.
- *
  * @param queries - An object mapping identifiers to objects of
- * `{name: string, args: Record<string, Value> }` describing which query
+ * `{query: string, args: Record<string, Value> }` describing which query
  * functions to fetch.
  * @returns An object with the same keys as the input. The values are the result
  * of the query function, `undefined` if it's still loading, or an `Error` if
@@ -60,10 +57,10 @@ import { ArgsObject, QueryJournal } from "../browser/index.js";
  *
  * @public
  */
-export function useQueriesGeneric(
+export function useQueries(
   queries: RequestForQueries
 ): Record<string, any | undefined | Error> {
-  const convex = useConvexGeneric();
+  const convex = useConvex();
   if (convex === undefined) {
     // Error message includes `useQuery` because this hook is called by `useQuery`
     // more often than it's called directly.
@@ -75,11 +72,11 @@ export function useQueriesGeneric(
   }
   const createWatch = useMemo(() => {
     return (
-      name: string,
+      query: FunctionReference<"query">,
       args: Record<string, Value>,
       journal?: QueryJournal
     ) => {
-      return convex.watchQuery(name, args, { journal });
+      return convex.watchQuery(query, args, { journal });
     };
   }, [convex]);
   return useQueriesHelper(queries, createWatch);
@@ -151,7 +148,7 @@ export function useQueriesHelper(
  * An object representing a request to load multiple queries.
  *
  * The keys of this object are identifiers and the values are objects containing
- * the name of the query function and the arguments to pass to it.
+ * the query function and the arguments to pass to it.
  *
  * This is used as an argument to {@link useQueriesGeneric}.
  * @public
@@ -159,28 +156,7 @@ export function useQueriesHelper(
 export type RequestForQueries = Record<
   string,
   {
-    name: string;
+    query: FunctionReference<"query">;
     args: Record<string, Value>;
   }
 >;
-
-/**
- * Internal type helper used by Convex code generation.
- *
- * Used to give {@link useQueriesGeneric} a type specific to your API.
- *
- * @public
- */
-export type UseQueriesForAPI<API extends GenericAPI> = <
-  QueryNameMap extends Record<string, PublicQueryNames<API>>
->(queries: {
-  [Identifier in keyof QueryNameMap]: {
-    name: QueryNameMap[Identifier];
-    args: ArgsObject<NamedQuery<API, QueryNameMap[Identifier]>>;
-  };
-}) => {
-  [Identifier in keyof QueryNameMap]:
-    | ReturnType<NamedQuery<API, QueryNameMap[Identifier]>>
-    | undefined
-    | Error;
-};

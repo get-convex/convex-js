@@ -66,13 +66,11 @@ def main() -> None:
 
     for pkg in [
         "browser",
-        "schema",
         "server",
         "react",
         "values",
         "react-auth0",
         "react-clerk",
-        "api",
     ]:
         # There's some concurrency bug with api-extractor!
         # It shouldn't be run multiple times at once because it may use the wrong

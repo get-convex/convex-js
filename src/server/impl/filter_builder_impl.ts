@@ -1,9 +1,5 @@
-import {
-  JSONValue,
-  Value,
-  NumericValue,
-  convexToJson,
-} from "../../values/index.js";
+import { JSONValue, Value, NumericValue } from "../../values/index.js";
+import { convexOrUndefinedToJson } from "../../values/value.js";
 import { GenericTableInfo } from "../data_model.js";
 import {
   Expression,
@@ -23,12 +19,6 @@ export class ExpressionImpl extends Expression<any> {
   serialize(): JSONValue {
     return this.inner;
   }
-}
-
-// Convert a Convex value or `undefined` into its JSON representation.
-// `undefined` is used in filters to represent a missing object field.
-export function convexOrUndefinedToJson(value: Value | undefined): JSONValue {
-  return value === undefined ? { $undefined: null } : convexToJson(value);
 }
 
 export function serializeExpression(

@@ -47,19 +47,6 @@
  * @module
  */
 
-// Guard against Convex functions accidentally getting included in a browser bundle.
-// Convex functions may include secret logic or credentials that should not be
-// send to untrusted clients (browsers).
-if (
-  typeof window !== "undefined" &&
-  !(window as any).__convexAllowFunctionsInBrowser
-) {
-  throw new Error(
-    "'convex/server' package loaded in the browser. " +
-      "Convex functions should not be imported in the browser."
-  );
-}
-
 export type { Auth, UserIdentity } from "./authentication.js";
 export * from "./database.js";
 export * from "./data_model.js";
@@ -84,8 +71,9 @@ export type {
   ActionBuilder,
   ActionCtx,
   ArgsArray,
-  FunctionArgs,
-  HttpActionBuilderForAPI,
+  DefaultFunctionArgs,
+  HttpActionBuilder,
+  FunctionVisibility,
   MutationBuilder,
   PublicHttpAction,
   MutationCtx,
@@ -99,13 +87,42 @@ export type {
 } from "./registration.js";
 export * from "./search_filter_builder.js";
 export * from "./storage.js";
-export type {
-  Scheduler,
-  SchedulableFunctionNames,
-  NamedSchedulableFunction,
-} from "./scheduler.js";
-export { cronJobsGeneric } from "./cron.js";
-export type { CronJob, CronJobsForAPI, Crons } from "./cron.js";
+export type { Scheduler, SchedulableFunctionReference } from "./scheduler.js";
+export { cronJobs } from "./cron.js";
+export type { CronJob, Crons } from "./cron.js";
 export type { WithoutSystemFields } from "./system_fields";
 export { httpRouter, HttpRouter, ROUTABLE_HTTP_METHODS } from "./router.js";
 export type { RoutableMethod } from "./router.js";
+export {
+  anyApi,
+  getFunctionName,
+  makeFunctionReference,
+  filterApi,
+} from "./api.js";
+export type {
+  ApiFromModules,
+  AnyApi,
+  FilterApi,
+  FunctionType,
+  FunctionReference,
+  FunctionArgs,
+  OptionalRestArgs,
+  PartialApi,
+  ArgsAndOptions,
+  FunctionReturnType,
+} from "./api.js";
+
+/**
+ * @internal
+ */
+export type { Index, SearchIndex } from "./schema.js";
+
+export type {
+  SearchIndexConfig,
+  TableDefinition,
+  SchemaDefinition,
+  DefineSchemaOptions,
+  GenericSchema,
+  DataModelFromSchemaDefinition,
+} from "./schema.js";
+export { defineTable, defineSchema } from "./schema.js";

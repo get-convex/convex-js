@@ -26,16 +26,6 @@ export type BetterOmit<T, K extends keyof T> = {
 };
 
 /**
- * From ObjectType, pick the properties that are assignable to T.
- */
-export type PickByValue<ObjectType, T> = Pick<
-  ObjectType,
-  {
-    [Key in keyof ObjectType]: ObjectType[Key] extends T ? Key : never;
-  }[keyof ObjectType]
->;
-
-/**
  * Convert a union type like `A | B | C` into an intersection type like
  * `A & B & C`.
  */

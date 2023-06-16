@@ -6,9 +6,9 @@
  * @module
  */
 
-export { Id as GenericId, convexToJson, jsonToConvex } from "./value.js";
+export { IdClass, convexToJson, jsonToConvex } from "./value.js";
 export type {
-  GenericIdConstructor,
+  Id as GenericId,
   JSONValue,
   Value,
   NumericValue,

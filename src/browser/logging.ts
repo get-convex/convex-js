@@ -2,7 +2,7 @@
 // It must look good in both light and dark mode.
 const INFO_COLOR = "color:rgb(0, 145, 255)";
 
-export type UdfType = "query" | "mutation" | "action";
+export type UdfType = "query" | "mutation" | "action" | "any";
 
 function prefix_for_source(source: UdfType) {
   switch (source) {
@@ -12,6 +12,8 @@ function prefix_for_source(source: UdfType) {
       return "M";
     case "action":
       return "A";
+    case "any":
+      return "?";
   }
 }
 

@@ -1,14 +1,5 @@
 import type { Value } from "../values/value.js";
 
-export const STATUS_CODE_OK = 200;
-
-export const STATUS_CODE_BAD_REQUEST = 400;
-
-// Special custom 5xx HTTP status code to mean that the UDF returned an error.
-//
-// Must match the constant of the same name in Rust.
-export const STATUS_CODE_UDF_FAILED = 560;
-
 /**
  * Validate that the arguments to a Convex function are an object, defaulting
  * `undefined` to `{}`.

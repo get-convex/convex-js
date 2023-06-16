@@ -21,15 +21,13 @@ in the [Convex Discord Community](https://convex.dev/community).
 This package includes several entry points for building apps on Convex:
 
 - [`convex/server`](https://docs.convex.dev/api/modules/server): Helpers for
-  implementing Convex functions.
+  implementing Convex functions and defining a database schema.
 - [`convex/react`](https://docs.convex.dev/api/modules/react): Hooks and a
   `ConvexReactClient` for integrating Convex into React applications.
 - [`convex/browser`](https://docs.convex.dev/api/modules/browser): A
   `ConvexHttpClient` for using Convex in other browser environments.
 - [`convex/values`](https://docs.convex.dev/api/modules/values): Utilities for
   working with values stored in Convex.
-- [`convex/schema`](https://docs.convex.dev/api/modules/schema): Utilities for
-  defining the schema of your Convex project.
 - [`convex/react-auth0`](https://docs.convex.dev/api/modules/react_auth0): A
   React component for authenticating users with Auth0.
 - [`convex/react-clerk`](https://docs.convex.dev/api/modules/react_clerk): A

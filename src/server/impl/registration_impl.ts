@@ -1,4 +1,3 @@
-import { GenericAPI } from "../../api/index.js";
 import {
   convexToJson,
   jsonToConvex,
@@ -14,7 +13,7 @@ import {
   RegisteredMutation,
   RegisteredQuery,
   QueryCtx,
-  FunctionArgs,
+  DefaultFunctionArgs,
   MutationBuilder,
   QueryBuilder,
   ActionBuilder,
@@ -34,10 +33,7 @@ import {
 } from "./storage_impl.js";
 
 async function invokeMutation<
-  F extends (
-    ctx: MutationCtx<GenericDataModel, GenericAPI>,
-    ...args: any
-  ) => any
+  F extends (ctx: MutationCtx<GenericDataModel>, ...args: any) => any
 >(func: F, argsStr: string) {
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since queries are only running in V8.
@@ -62,11 +58,25 @@ function validateReturnValue(v: any) {
   }
 }
 
+/**
+ * Guard against Convex functions accidentally getting included in a browser bundle.
+ * Convex functions may include secret logic or credentials that should not be
+ * send to untrusted clients (browsers).
+ */
+function assertNotBrowser() {
+  if (
+    typeof window !== "undefined" &&
+    !(window as any).__convexAllowFunctionsInBrowser
+  ) {
+    throw new Error("Convex functions should not be imported in the browser.");
+  }
+}
+
 type FunctionDefinition =
-  | ((ctx: any, args: FunctionArgs) => any)
+  | ((ctx: any, args: DefaultFunctionArgs) => any)
   | {
       args?: Record<string, Validator<any, boolean>>;
-      handler: (ctx: any, args: FunctionArgs) => any;
+      handler: (ctx: any, args: DefaultFunctionArgs) => any;
     };
 
 function exportArgs(functionDefinition: FunctionDefinition) {
@@ -94,7 +104,7 @@ function exportArgs(functionDefinition: FunctionDefinition) {
  *
  * @public
  */
-export const mutationGeneric: MutationBuilder<any, any, "public"> = (
+export const mutationGeneric: MutationBuilder<any, "public"> = (
   functionDefinition: FunctionDefinition
 ) => {
   const func = (
@@ -107,6 +117,7 @@ export const mutationGeneric: MutationBuilder<any, any, "public"> = (
   if (func.isRegistered) {
     throw new Error("Function registered twice " + func);
   }
+  assertNotBrowser();
   func.isRegistered = true;
   func.isMutation = true;
   func.isPublic = true;
@@ -128,7 +139,7 @@ export const mutationGeneric: MutationBuilder<any, any, "public"> = (
  *
  * @public
  */
-export const internalMutationGeneric: MutationBuilder<any, any, "internal"> = (
+export const internalMutationGeneric: MutationBuilder<any, "internal"> = (
   functionDefinition: FunctionDefinition
 ) => {
   const func = (
@@ -141,6 +152,7 @@ export const internalMutationGeneric: MutationBuilder<any, any, "internal"> = (
   if (func.isRegistered) {
     throw new Error("Function registered twice " + func);
   }
+  assertNotBrowser();
   func.isRegistered = true;
   func.isMutation = true;
   func.isInternal = true;
@@ -192,6 +204,7 @@ export const queryGeneric: QueryBuilder<any, "public"> = (
   if (func.isRegistered) {
     throw new Error("Function registered twice " + func);
   }
+  assertNotBrowser();
   func.isRegistered = true;
   func.isQuery = true;
   func.isPublic = true;
@@ -226,6 +239,7 @@ export const internalQueryGeneric: QueryBuilder<any, "internal"> = (
   if (func.isRegistered) {
     throw new Error("Function registered twice " + func);
   }
+  assertNotBrowser();
   func.isRegistered = true;
   func.isQuery = true;
   func.isInternal = true;
@@ -234,10 +248,11 @@ export const internalQueryGeneric: QueryBuilder<any, "internal"> = (
   return func;
 };
 
-async function invokeAction<
-  API extends GenericAPI,
-  F extends (ctx: ActionCtx<API>, ...args: any) => any
->(func: F, requestId: string, argsStr: string) {
+async function invokeAction<F extends (ctx: ActionCtx, ...args: any) => any>(
+  func: F,
+  requestId: string,
+  argsStr: string
+) {
   const args = jsonToConvex(JSON.parse(argsStr));
   const calls = setupActionCalls(requestId);
   const ctx = {
@@ -261,7 +276,7 @@ async function invokeAction<
  *
  * @public
  */
-export const actionGeneric: ActionBuilder<any, "public"> = (
+export const actionGeneric: ActionBuilder<"public"> = (
   functionDefinition: FunctionDefinition
 ) => {
   const func = (
@@ -274,6 +289,7 @@ export const actionGeneric: ActionBuilder<any, "public"> = (
   if (func.isRegistered) {
     throw new Error("Function registered twice " + func);
   }
+  assertNotBrowser();
   func.isRegistered = true;
   func.isAction = true;
   func.isPublic = true;
@@ -294,7 +310,7 @@ export const actionGeneric: ActionBuilder<any, "public"> = (
  *
  * @public
  */
-export const internalActionGeneric: ActionBuilder<any, "internal"> = (
+export const internalActionGeneric: ActionBuilder<"internal"> = (
   functionDefinition: FunctionDefinition
 ) => {
   const func = (
@@ -307,6 +323,7 @@ export const internalActionGeneric: ActionBuilder<any, "internal"> = (
   if (func.isRegistered) {
     throw new Error("Function registered twice " + func);
   }
+  assertNotBrowser();
   func.isRegistered = true;
   func.isAction = true;
   func.isInternal = true;
@@ -317,8 +334,7 @@ export const internalActionGeneric: ActionBuilder<any, "internal"> = (
 };
 
 async function invokeHttpAction<
-  API extends GenericAPI,
-  F extends (ctx: ActionCtx<API>, request: Request) => any
+  F extends (ctx: ActionCtx, request: Request) => any
 >(func: F, request: Request) {
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since http endpoints are only running in V8.
@@ -342,14 +358,15 @@ async function invokeHttpAction<
  *
  * @public
  */
-export const httpActionGeneric = <API extends GenericAPI>(
-  func: (ctx: ActionCtx<API>, request: Request) => Promise<Response>
+export const httpActionGeneric = (
+  func: (ctx: ActionCtx, request: Request) => Promise<Response>
 ): PublicHttpAction => {
   const q = func as unknown as PublicHttpAction;
   // Helpful runtime check that functions are only be registered once
   if (q.isRegistered) {
     throw new Error("Function registered twice " + func);
   }
+  assertNotBrowser();
   q.isRegistered = true;
   q.isHttp = true;
   q.invokeHttpAction = request => invokeHttpAction(func as any, request);

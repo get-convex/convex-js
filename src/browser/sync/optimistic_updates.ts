@@ -1,11 +1,10 @@
 import { Value } from "../../values";
 import {
-  ArgsObject,
-  GenericAPI,
-  NamedQuery,
-  PublicQueryNames,
+  FunctionArgs,
+  FunctionReference,
+  FunctionReturnType,
   OptionalRestArgs,
-} from "../../api";
+} from "../../server/api.js";
 
 /**
  * A view of the query results currently in the Convex client for use within
@@ -13,7 +12,7 @@ import {
  *
  * @public
  */
-export interface OptimisticLocalStore<API extends GenericAPI = GenericAPI> {
+export interface OptimisticLocalStore {
   /**
    * Retrieve the result of a query from the client.
    *
@@ -21,15 +20,15 @@ export interface OptimisticLocalStore<API extends GenericAPI = GenericAPI> {
    * Always make new copies of structures within query results to avoid
    * corrupting data within the client.
    *
-   * @param name - The name of the query.
+   * @param query - A {@link FunctionReference} for the query to get.
    * @param args - The arguments object for this query.
    * @returns The query result or `undefined` if the query is not currently
    * in the client.
    */
-  getQuery<Name extends PublicQueryNames<API>>(
-    name: Name,
-    ...args: OptionalRestArgs<NamedQuery<API, Name>>
-  ): undefined | ReturnType<NamedQuery<API, Name>>;
+  getQuery<Query extends FunctionReference<"query">>(
+    query: Query,
+    ...args: OptionalRestArgs<Query>
+  ): undefined | FunctionReturnType<Query>;
 
   /**
    * Retrieve the results are arguments of all queries with a given name.
@@ -40,17 +39,18 @@ export interface OptimisticLocalStore<API extends GenericAPI = GenericAPI> {
    * Important: Query results should be treated as immutable!
    * Always make new copies of structures within query results to avoid
    * corrupting data within the client.
-   * @param name - The name of the query.
+   *
+   * @param query - A {@link FunctionReference} for the query to get.
    * @returns An array of objects, one for each query of the given name.
    * Each object includes:
    *   - `args` - The arguments object for the query.
    *   - `value` The query result or `undefined` if the query is loading.
    */
-  getAllQueries<Name extends PublicQueryNames<API>>(
-    name: Name
+  getAllQueries<Query extends FunctionReference<"query">>(
+    query: Query
   ): {
-    args: ArgsObject<NamedQuery<API, Name>>;
-    value: undefined | ReturnType<NamedQuery<API, Name>>;
+    args: FunctionArgs<Query>;
+    value: undefined | FunctionReturnType<Query>;
   }[];
 
   /**
@@ -61,15 +61,15 @@ export interface OptimisticLocalStore<API extends GenericAPI = GenericAPI> {
    * Removing a query is useful to create loading states while Convex recomputes
    * the query results.
    *
-   * @param name - The name of the query.
+   * @param query - A {@link FunctionReference} for the query to set.
    * @param args - The arguments object for this query.
    * @param value - The new value to set the query to or `undefined` to remove
    * it from the client.
    */
-  setQuery<Name extends PublicQueryNames<API>>(
-    name: Name,
-    args: ArgsObject<NamedQuery<API, Name>>,
-    value: undefined | ReturnType<NamedQuery<API, Name>>
+  setQuery<Query extends FunctionReference<"query">>(
+    query: Query,
+    args: FunctionArgs<Query>,
+    value: undefined | FunctionReturnType<Query>
   ): void;
 }
 /**
@@ -87,7 +87,7 @@ export interface OptimisticLocalStore<API extends GenericAPI = GenericAPI> {
  *
  * @public
  */
-export type OptimisticUpdate<
-  API extends GenericAPI,
-  Args extends Record<string, Value>
-> = (localQueryStore: OptimisticLocalStore<API>, args: Args) => void;
+export type OptimisticUpdate<Args extends Record<string, Value>> = (
+  localQueryStore: OptimisticLocalStore,
+  args: Args
+) => void;

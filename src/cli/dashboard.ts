@@ -18,7 +18,13 @@ export const dashboard = new Command("dashboard")
   )
   .action(async options => {
     const ctx = oneoffContext;
-    const loginUrl = await dashboardUrlForConfiguredDeployment(ctx);
+    const configuredDeployment = await getConfiguredDeploymentOrCrashIfNoConfig(
+      ctx
+    );
+    const loginUrl = await dashboardUrlForConfiguredDeployment(
+      ctx,
+      configuredDeployment
+    );
 
     if (options.open) {
       console.error(
@@ -31,11 +37,9 @@ export const dashboard = new Command("dashboard")
   });
 
 export async function dashboardUrlForConfiguredDeployment(
-  ctx: Context
+  ctx: Context,
+  configuredDeployment: string | null
 ): Promise<string> {
-  const configuredDeployment = await getConfiguredDeploymentOrCrashIfNoConfig(
-    ctx
-  );
   if (configuredDeployment !== null) {
     const { team, project } = await fetchTeamAndProject(
       ctx,

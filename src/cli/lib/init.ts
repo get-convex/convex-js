@@ -1,23 +1,6 @@
 import chalk from "chalk";
-import {
-  pullConfig,
-  writeProjectConfig,
-  configFilepath,
-  removedExistingConfig,
-  getFunctionsDirectoryPath,
-  upgradeOldAuthInfoToAuthConfig,
-} from "./config.js";
-import {
-  logAndHandleAxiosError,
-  functionsDir,
-  validateOrSelectTeam,
-  bigBrainAPI,
-  loadPackageJson,
-  shouldUseNewFlow,
-} from "./utils.js";
 import inquirer from "inquirer";
 import path from "path";
-import { doCodegen, doInitCodegen } from "./codegen";
 import {
   Context,
   logFailure,
@@ -26,14 +9,25 @@ import {
   showSpinner,
 } from "../../bundler/context.js";
 import { dashboardUrl } from "../dashboard.js";
-import {
-  WriteConfig,
-  askAboutWritingToEnv,
-  logProvisioning,
-  writeToEnv,
-} from "./envvars.js";
-import { writeDeploymentEnvVar } from "./deployment.js";
+import { deploymentCredentialsOrConfigure } from "../dev.js";
 import { DeploymentType } from "./api.js";
+import { doCodegen, doInitCodegen } from "./codegen";
+import {
+  configFilepath,
+  getFunctionsDirectoryPath,
+  pullConfig,
+  upgradeOldAuthInfoToAuthConfig,
+  writeProjectConfig,
+} from "./config.js";
+import { writeDeploymentEnvVar } from "./deployment.js";
+import { askAboutWritingToEnv, writeToEnv } from "./envvars.js";
+import {
+  bigBrainAPI,
+  functionsDir,
+  loadPackageJson,
+  logAndHandleAxiosError,
+  validateOrSelectTeam,
+} from "./utils.js";
 
 const cwd = path.basename(process.cwd());
 
@@ -43,22 +37,9 @@ export async function init(
   config: {
     team: string | null;
     project: string | null;
-  },
-  saveUrl: "yes" | "no" | "ask" = "ask",
-  promptForAdditionalSteps?: () => Promise<() => Promise<void>>,
-  options: {
-    allowExistingConfig?: boolean;
-  } = {}
+  }
 ) {
   const configPath = await configFilepath(ctx);
-  if (!shouldUseNewFlow() && ctx.fs.exists(configPath)) {
-    if (!removedExistingConfig(ctx, configPath, options)) {
-      console.error(
-        chalk.green(`Found existing project config "${configPath}"`)
-      );
-      return;
-    }
-  }
 
   const { teamSlug: selectedTeam, chosen: didChooseBetweenTeams } =
     await validateOrSelectTeam(ctx, config.team, "Team:");
@@ -76,12 +57,6 @@ export async function init(
       ])
     ).project;
   }
-
-  const prodEnvVarWrite = shouldUseNewFlow()
-    ? null
-    : await askAboutWritingToEnv(ctx, "prod", null, saveUrl);
-
-  const executeAdditionalSteps = await promptForAdditionalSteps?.();
 
   showSpinner(ctx, "Creating new Convex project...");
 
@@ -151,17 +126,21 @@ export async function init(
   }
   const functionsPath = functionsDir(configPath, projectConfig);
 
-  const { wroteToGitIgnore } = shouldUseNewFlow()
-    ? await writeDeploymentEnvVar(ctx, deploymentType, {
-        team: teamSlug,
-        project: projectSlug,
-        deploymentName,
-      })
-    : { wroteToGitIgnore: false };
+  const { wroteToGitIgnore } = await writeDeploymentEnvVar(
+    ctx,
+    deploymentType,
+    {
+      team: teamSlug,
+      project: projectSlug,
+      deploymentName,
+    }
+  );
 
-  const projectConfigWithoutAuthInfo = shouldUseNewFlow()
-    ? await upgradeOldAuthInfoToAuthConfig(ctx, projectConfig, functionsPath)
-    : projectConfig;
+  const projectConfigWithoutAuthInfo = await upgradeOldAuthInfoToAuthConfig(
+    ctx,
+    projectConfig,
+    functionsPath
+  );
   await writeProjectConfig(ctx, projectConfigWithoutAuthInfo);
 
   await doInitCodegen(
@@ -183,52 +162,70 @@ export async function init(
 
   await finalizeConfiguration(
     ctx,
-    configPath,
     functionsPath,
     deploymentType,
-    prodEnvVarWrite,
     url,
-    wroteToGitIgnore,
-    executeAdditionalSteps
+    wroteToGitIgnore
   );
 
   return { deploymentName, adminKey, url };
 }
 
+// This works like running `dev --once` for the first time
+// but without a push.
+// It only exists for backwards compatibility with existing
+// scripts that used `convex init` or `convex reinit`.
+export async function initOrReinitForDeprecatedCommands(
+  ctx: Context,
+  cmdOptions: {
+    team: string | null;
+    project: string | null;
+    url?: string | undefined;
+    adminKey?: string | undefined;
+  }
+) {
+  const { url } = await deploymentCredentialsOrConfigure(ctx, null, {
+    ...cmdOptions,
+    prod: false,
+  });
+  // Try the CONVEX_URL write again in case the user had an existing
+  // convex.json but didn't have CONVEX_URL in .env.local.
+  const envVarWrite = await askAboutWritingToEnv(ctx, "dev", url, "yes");
+  await writeToEnv(ctx, envVarWrite, url);
+  if (envVarWrite !== null) {
+    logMessage(
+      ctx,
+      chalk.green(
+        `Saved the dev deployment URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`
+      )
+    );
+  }
+}
+
 export async function finalizeConfiguration(
   ctx: Context,
-  configPath: string,
   functionsPath: string,
   deploymentType: DeploymentType,
-  prodEnvVarWrite: WriteConfig,
   url: string,
-  wroteToGitIgnore: boolean,
-  executeAdditionalSteps: (() => Promise<void>) | undefined
+  wroteToGitIgnore: boolean
 ) {
-  if (shouldUseNewFlow()) {
-    const envVarWrite = await askAboutWritingToEnv(ctx, "dev", url, "yes");
-    await writeToEnv(ctx, envVarWrite, url);
-    if (envVarWrite !== null) {
-      logFinishedStep(
-        ctx,
-        `Provisioned a ${deploymentType} deployment and saved its:\n` +
-          `    name as CONVEX_DEPLOYMENT to .env.local\n` +
-          `    URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`
-      );
-    } else {
-      logFinishedStep(
-        ctx,
-        `Provisioned ${deploymentType} deployment and saved its name as CONVEX_DEPLOYMENT to .env.local`
-      );
-    }
-    if (wroteToGitIgnore) {
-      logMessage(ctx, chalk.gray(`  Added ".env.local" to .gitignore`));
-    }
+  const envVarWrite = await askAboutWritingToEnv(ctx, "dev", url, "yes");
+  await writeToEnv(ctx, envVarWrite, url);
+  if (envVarWrite !== null) {
+    logFinishedStep(
+      ctx,
+      `Provisioned a ${deploymentType} deployment and saved its:\n` +
+        `    name as CONVEX_DEPLOYMENT to .env.local\n` +
+        `    URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`
+    );
   } else {
-    logFinishedStep(ctx, `Convex configuration written to ${configPath}`);
-    await writeToEnv(ctx, prodEnvVarWrite, url);
-    logProvisioning(ctx, prodEnvVarWrite, "prod", url);
-    await executeAdditionalSteps?.();
+    logFinishedStep(
+      ctx,
+      `Provisioned ${deploymentType} deployment and saved its name as CONVEX_DEPLOYMENT to .env.local`
+    );
+  }
+  if (wroteToGitIgnore) {
+    logMessage(ctx, chalk.gray(`  Added ".env.local" to .gitignore`));
   }
 
   console.error(

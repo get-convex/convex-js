@@ -2,58 +2,64 @@ import { convexToJson, Value } from "../../values/index.js";
 import { version } from "../../index.js";
 import { performAsyncSyscall } from "./syscall.js";
 import { parseArgs } from "../../common/index.js";
+import { SchedulableFunctionReference, Scheduler } from "../scheduler.js";
+import { getFunctionName } from "../../server/api.js";
 
-export function setupMutationScheduler() {
+export function setupMutationScheduler(): Scheduler {
   return {
     runAfter: async (
       delayMs: number,
-      name: string,
+      functionReference: SchedulableFunctionReference,
       args?: Record<string, Value>
     ) => {
-      const syscallArgs = runAfterSyscallArgs(delayMs, name, args);
-      return await performAsyncSyscall("schedule", syscallArgs);
+      const syscallArgs = runAfterSyscallArgs(delayMs, functionReference, args);
+      return await performAsyncSyscall("1.0/schedule", syscallArgs);
     },
     runAt: async (
       ms_since_epoch_or_date: number | Date,
-      name: string,
+      functionReference: SchedulableFunctionReference,
       args?: Record<string, Value>
     ) => {
-      const syscallArgs = runAtSyscallArgs(ms_since_epoch_or_date, name, args);
-      return await performAsyncSyscall("schedule", syscallArgs);
+      const syscallArgs = runAtSyscallArgs(
+        ms_since_epoch_or_date,
+        functionReference,
+        args
+      );
+      return await performAsyncSyscall("1.0/schedule", syscallArgs);
     },
   };
 }
 
-export function setupActionScheduler(requestId: string) {
+export function setupActionScheduler(requestId: string): Scheduler {
   return {
     runAfter: async (
       delayMs: number,
-      name: string,
+      functionReference: SchedulableFunctionReference,
       args?: Record<string, Value>
     ) => {
       const syscallArgs = {
         requestId,
-        ...runAfterSyscallArgs(delayMs, name, args),
+        ...runAfterSyscallArgs(delayMs, functionReference, args),
       };
-      return await performAsyncSyscall("actions/schedule", syscallArgs);
+      return await performAsyncSyscall("1.0/actions/schedule", syscallArgs);
     },
     runAt: async (
       ms_since_epoch_or_date: number | Date,
-      name: string,
+      functionReference: SchedulableFunctionReference,
       args?: Record<string, Value>
     ) => {
       const syscallArgs = {
         requestId,
-        ...runAtSyscallArgs(ms_since_epoch_or_date, name, args),
+        ...runAtSyscallArgs(ms_since_epoch_or_date, functionReference, args),
       };
-      return await performAsyncSyscall("actions/schedule", syscallArgs);
+      return await performAsyncSyscall("1.0/actions/schedule", syscallArgs);
     },
   };
 }
 
 function runAfterSyscallArgs(
   delayMs: number,
-  name: string,
+  functionReference: SchedulableFunctionReference,
   args?: Record<string, Value>
 ) {
   if (typeof delayMs !== "number") {
@@ -66,6 +72,7 @@ function runAfterSyscallArgs(
     throw new Error("`delayMs` must be non-negative");
   }
   const functionArgs = parseArgs(args);
+  const name = getFunctionName(functionReference);
   // Note the syscall expects a unix timestamp, measured in seconds.
   const ts = (Date.now() + delayMs) / 1000.0;
   return {
@@ -78,7 +85,7 @@ function runAfterSyscallArgs(
 
 function runAtSyscallArgs(
   ms_since_epoch_or_date: number | Date,
-  name: string,
+  functionReference: SchedulableFunctionReference,
   args?: Record<string, Value>
 ) {
   let ts;
@@ -91,6 +98,7 @@ function runAtSyscallArgs(
   } else {
     throw new Error("The invoke time must a Date or a timestamp");
   }
+  const name = getFunctionName(functionReference);
   const functionArgs = parseArgs(args);
   return {
     name,

@@ -1,55 +1,66 @@
 import { useMemo, useState } from "react";
 
-import { GenericAPI, NamedQuery } from "../api/index.js";
+import { OptimisticLocalStore } from "../browser/index.js";
 import {
-  ConvexFunction,
-  OptimisticLocalStore,
-  PublicQueryNames,
-} from "../browser/index.js";
-import {
+  FunctionReturnType,
   PaginationOptions,
   paginationOptsValidator,
   PaginationResult,
 } from "../server/index.js";
-import { BetterOmit, Expand } from "../type_utils.js";
 import { convexToJson, Infer, Value } from "../values/index.js";
-import { useQueriesGeneric } from "./use_queries.js";
+import { useQueries } from "./use_queries.js";
+import {
+  FunctionArgs,
+  FunctionReference,
+  getFunctionName,
+} from "../server/api.js";
+import { BetterOmit, Expand } from "../type_utils.js";
+
+/**
+ * A {@link server.FunctionReference} that is usable with {@link usePaginatedQuery}.
+ *
+ * This function reference must:
+ * - Refer to a public query
+ * - Have an argument named "paginationOpts" of type {@link server.PaginationOptions}
+ * - Have a return type of {@link server.PaginationResult}.
+ *
+ * @public
+ */
+export type PaginatedQueryReference = FunctionReference<
+  "query",
+  "public",
+  { paginationOpts: PaginationOptions },
+  PaginationResult<any>
+>;
 
 /**
  * Load data reactively from a paginated query to a create a growing list.
  *
  * This can be used to power "infinite scroll" UIs.
  *
- * This hook must be used with Convex query functions that match
- * {@link PaginatedQueryFunction}. This means they must:
- * 1. Have a single arguments object with a `paginationOpts` property
- * of type {@link server.PaginationOptions}.
- * 2. Return a {@link server.PaginationResult}.
+ * This hook must be used with public query references that match
+ * {@link PaginatedQueryReference}.
  *
- * `usePaginatedQueryGeneric` concatenates all the pages
- * of results into a single list and manages the continuation cursors when
- * requesting more items.
+ * `usePaginatedQuery` concatenates all the pages of results into a single list
+ * and manages the continuation cursors when requesting more items.
  *
  * Example usage:
  * ```typescript
- * const { results, status, isLoading, loadMore } = usePaginatedQueryGeneric(
- *   "listMessages",
+ * const { results, status, isLoading, loadMore } = usePaginatedQuery(
+ *   api.messages.list,
  *   { channel: "#general" },
  *   { initialNumItems: 5 }
  * );
  * ```
  *
- * If the query `name` or `args` change, the pagination state will be reset
+ * If the query reference or arguments change, the pagination state will be reset
  * to the first page. Similarly, if any of the pages result in an InvalidCursor
  * error or an error associated with too much data, the pagination state will also
  * reset to the first page.
  *
  * To learn more about pagination, see [Paginated Queries](https://docs.convex.dev/database/pagination).
  *
- * If you're using code generation, use the `usePaginatedQuery` function in
- * `convex/_generated/react.js` which is typed for your API.
- *
- * @param name - The name of the query function.
+ * @param query - A FunctionReference to the public query function to run.
  * @param args - The arguments object for the query function, excluding
  * the `paginationOpts` property. That property is injected by this hook.
  * @param options - An object specifying the `initialNumItems` to be loaded in
@@ -59,11 +70,11 @@ import { useQueriesGeneric } from "./use_queries.js";
  *
  * @public
  */
-export function usePaginatedQueryGeneric(
-  name: string,
-  args: Record<string, Value>,
+export function usePaginatedQuery<Query extends PaginatedQueryReference>(
+  query: Query,
+  args: PaginatedQueryArgs<Query>,
   options: { initialNumItems: number }
-): UsePaginatedQueryResult<any> {
+): UsePaginatedQueryReturnType<Query> {
   if (
     typeof options?.initialNumItems !== "number" ||
     options.initialNumItems < 0
@@ -72,18 +83,17 @@ export function usePaginatedQueryGeneric(
       `\`options.initialNumItems\` must be a positive number. Received \`${options?.initialNumItems}\`.`
     );
   }
-
   const createInitialState = useMemo(() => {
     return () => {
       const id = nextPaginationId();
       return {
-        name,
-        args,
+        query,
+        args: args as Record<string, Value>,
         id,
         maxQueryIndex: 0,
         queries: {
           0: {
-            name,
+            query,
             args: {
               ...args,
               paginationOpts: {
@@ -100,17 +110,23 @@ export function usePaginatedQueryGeneric(
     // we want to avoid rerendering if the args are a different
     // object that serializes to the same result.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(convexToJson(args)), name, options.initialNumItems]);
+  }, [
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    JSON.stringify(convexToJson(args as Value)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    getFunctionName(query),
+    options.initialNumItems,
+  ]);
 
   const [state, setState] = useState<{
-    name: string;
+    query: FunctionReference<"query">;
     args: Record<string, Value>;
     id: number;
     maxQueryIndex: number;
     queries: Record<
       number,
       {
-        name: string;
+        query: FunctionReference<"query">;
         // Use the validator type as a test that it matches the args
         // we generate.
         args: { paginationOpts: Infer<typeof paginationOptsValidator> };
@@ -121,15 +137,15 @@ export function usePaginatedQueryGeneric(
   // `currState` is the state that we'll render based on.
   let currState = state;
   if (
-    name !== state.name ||
-    JSON.stringify(convexToJson(args)) !==
+    getFunctionName(query) !== getFunctionName(state.query) ||
+    JSON.stringify(convexToJson(args as Value)) !==
       JSON.stringify(convexToJson(state.args))
   ) {
     currState = createInitialState();
     setState(currState);
   }
 
-  const resultsObject = useQueriesGeneric(currState.queries);
+  const resultsObject = useQueries(currState.queries);
 
   const [results, maybeLastResult]: [
     Value[],
@@ -219,7 +235,7 @@ export function usePaginatedQueryGeneric(
             const maxQueryIndex = prevState.maxQueryIndex + 1;
             const queries = { ...prevState.queries };
             queries[maxQueryIndex] = {
-              name: prevState.name,
+              query: prevState.query,
               args: {
                 ...prevState.args,
                 paginationOpts: {
@@ -293,8 +309,8 @@ function nextPaginationId(): number {
  *
  * @public
  */
-export type UsePaginatedQueryResult<T> = {
-  results: T[];
+export type UsePaginatedQueryResult<Item> = {
+  results: Item[];
   loadMore: (numItems: number) => void;
 } & (
   | {
@@ -324,89 +340,30 @@ export type UsePaginatedQueryResult<T> = {
 export type PaginationStatus = UsePaginatedQueryResult<any>["status"];
 
 /**
- * A query function that is usable with {@link usePaginatedQueryGeneric}.
- *
- * The function's argument must be an object with a
- * `paginationOpts` property of type {@link server.PaginationOptions}.
- *
- * The function must return a {@link server.PaginationResult}.
+ * Given a {@link PaginatedQueryReference}, get the type of the arguments
+ * object for the query, excluding the `paginationOpts` argument.
  *
  * @public
  */
-export type PaginatedQueryFunction<Args extends object, ReturnType> = (
-  args: {
-    paginationOpts: PaginationOptions;
-  } & Args
-) => PaginationResult<ReturnType>;
+export type PaginatedQueryArgs<Query extends PaginatedQueryReference> = Expand<
+  BetterOmit<FunctionArgs<Query>, "paginationOpts">
+>;
 
 /**
- * Test whether a function matches the signature of {@link PaginatedQueryFunction}.
+ * Given a {@link PaginatedQueryReference}, get the type of the item being
+ * paginated over.
+ * @public
  */
-type IsPaginatedQueryFunction<Func extends ConvexFunction> =
-  Parameters<Func> extends [
-    args: {
-      paginationOpts: PaginationOptions;
-    }
-  ]
-    ? ReturnType<Func> extends PaginationResult<any>
-      ? true
-      : false
-    : false;
+export type PaginatedQueryItem<Query extends PaginatedQueryReference> =
+  FunctionReturnType<Query>["page"][number];
 
 /**
- * The names of the paginated query functions in a Convex API.
- *
- * These are normal query functions that match {@link PaginatedQueryFunction}.
+ * The return type of {@link usePaginatedQuery}.
  *
  * @public
  */
-export type PaginatedQueryNames<API extends GenericAPI> = {
-  [QueryName in PublicQueryNames<API>]: IsPaginatedQueryFunction<
-    NamedQuery<API, QueryName>
-  > extends true
-    ? QueryName
-    : never;
-}[PublicQueryNames<API>];
-
-/**
- * The type of the arguments to a {@link PaginatedQueryFunction}.
- *
- * This type includes the entire arguments object except the `paginationOpts`
- * property.
- *
- * @public
- */
-export type PaginatedQueryArgs<Query extends PaginatedQueryFunction<any, any>> =
-  Expand<BetterOmit<Parameters<Query>[0], "paginationOpts">>;
-
-/**
- * The return type of a {@link PaginatedQueryFunction}.
- *
- * This is the type of the inner document or object within the
- * {@link server.PaginationResult} that a paginated query function returns.
- *
- * @public
- */
-export type PaginatedQueryReturnType<
-  Query extends PaginatedQueryFunction<any, any>
-> = Query extends PaginatedQueryFunction<any, infer ReturnType>
-  ? ReturnType
-  : never;
-
-/**
- * Internal type helper used by Convex code generation.
- *
- * Used to give {@link usePaginatedQueryGeneric} a type specific to your API.
- *
- * @public
- */
-export type UsePaginatedQueryForAPI<API extends GenericAPI> = <
-  Name extends PaginatedQueryNames<API>
->(
-  name: Name,
-  args: PaginatedQueryArgs<NamedQuery<API, Name>>,
-  options: { initialNumItems: number }
-) => UsePaginatedQueryResult<PaginatedQueryReturnType<NamedQuery<API, Name>>>;
+export type UsePaginatedQueryReturnType<Query extends PaginatedQueryReference> =
+  UsePaginatedQueryResult<PaginatedQueryItem<Query>>;
 
 /**
  * Optimistically update the values in a paginated list.
@@ -419,7 +376,7 @@ export type UsePaginatedQueryForAPI<API extends GenericAPI> = <
  *
  * Example usage:
  * ```ts
- * const myMutation = useMutation("myMutationName")
+ * const myMutation = useMutation(api.myModule.myMutation)
  * .withOptimisticUpdate((localStore, mutationArg) => {
  *
  *   // Optimistically update the document with ID `mutationArg`
@@ -427,10 +384,10 @@ export type UsePaginatedQueryForAPI<API extends GenericAPI> = <
  *
  *   optimisticallyUpdateValueInPaginatedQuery(
  *     localStore,
- *     "paginatedQueryName",
+ *     api.myModule.paginatedQuery
  *     {},
  *     currentValue => {
- *       if (mutationArg.equals(currentValue._id)) {
+ *       if (mutationArg === currentValue._id) {
  *         return {
  *           ...currentValue,
  *           "newProperty": "newValue",
@@ -443,7 +400,8 @@ export type UsePaginatedQueryForAPI<API extends GenericAPI> = <
  * });
  * ```
  *
- * @param name - The name of the paginated query function.
+ * @param localStore - An {@link OptimisticLocalStore} to update.
+ * @param query - A {@link FunctionReference} for the paginated query to update.
  * @param args - The arguments object to the query function, excluding the
  * `paginationOpts` property.
  * @param updateValue - A function to produce the new values.
@@ -451,34 +409,33 @@ export type UsePaginatedQueryForAPI<API extends GenericAPI> = <
  * @public
  */
 export function optimisticallyUpdateValueInPaginatedQuery<
-  API extends GenericAPI,
-  Name extends PaginatedQueryNames<API>
+  Query extends PaginatedQueryReference
 >(
-  localStore: OptimisticLocalStore<API>,
-  name: Name,
-  args: PaginatedQueryArgs<NamedQuery<API, Name>>,
+  localStore: OptimisticLocalStore,
+  query: Query,
+  args: PaginatedQueryArgs<Query>,
   updateValue: (
-    currentValue: PaginatedQueryReturnType<NamedQuery<API, Name>>
-  ) => PaginatedQueryReturnType<NamedQuery<API, Name>>
+    currentValue: PaginatedQueryItem<Query>
+  ) => PaginatedQueryItem<Query>
 ): void {
   // TODO: This should really be sorted JSON or an `equals` method
   // so that the order of properties in sets, maps, and objects doesn't break
   // our comparison.
   const expectedArgs = JSON.stringify(convexToJson(args as Value));
 
-  for (const query of localStore.getAllQueries(name)) {
-    if (query.value !== undefined) {
-      const { paginationOpts: _, ...innerArgs } = query.args as {
+  for (const queryResult of localStore.getAllQueries(query)) {
+    if (queryResult.value !== undefined) {
+      const { paginationOpts: _, ...innerArgs } = queryResult.args as {
         paginationOpts: PaginationOptions;
       };
       if (JSON.stringify(convexToJson(innerArgs as Value)) === expectedArgs) {
-        const value = query.value;
+        const value = queryResult.value;
         if (
           typeof value === "object" &&
           value !== null &&
           Array.isArray(value.page)
         ) {
-          localStore.setQuery(name, query.args, {
+          localStore.setQuery(query, queryResult.args, {
             ...value,
             page: value.page.map(updateValue),
           });

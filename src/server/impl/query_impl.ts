@@ -101,7 +101,7 @@ export class QueryInitializerImpl
 
   // This is internal API and should not be exposed to developers yet.
   async count(): Promise<number> {
-    const syscallJSON = await performAsyncSyscall("count", {
+    const syscallJSON = await performAsyncSyscall("1.0/count", {
       table: this.tableName,
     });
     const syscallResult = jsonToConvex(syscallJSON) as number;
@@ -187,7 +187,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
       throwClosedError(this.state.type);
     }
     const query = this.state.query;
-    const { queryId } = performSyscall("queryStream", { query });
+    const { queryId } = performSyscall("1.0/queryStream", { query });
     this.state = { type: "executing", queryId };
     return queryId;
   }
@@ -195,7 +195,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
   private closeQuery() {
     if (this.state.type === "executing") {
       const queryId = this.state.queryId;
-      performSyscall("queryCleanup", { queryId });
+      performSyscall("1.0/queryCleanup", { queryId });
     }
     this.state = { type: "consumed" };
   }
@@ -249,7 +249,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
     // a `for await` statement.
     const queryId =
       this.state.type === "preparing" ? this.startQuery() : this.state.queryId;
-    const { value, done } = await performAsyncSyscall("queryStreamNext", {
+    const { value, done } = await performAsyncSyscall("1.0/queryStreamNext", {
       queryId,
     });
     if (done) {
@@ -281,7 +281,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
     const cursor = paginationOpts.cursor;
     const maximumRowsRead = paginationOpts.maximumRowsRead ?? null;
     const { page, isDone, continueCursor } = await performAsyncSyscall(
-      "queryPage",
+      "1.0/queryPage",
       {
         query,
         cursor,

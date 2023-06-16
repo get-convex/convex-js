@@ -13,14 +13,14 @@ export function setupStorageReader(requestId: string): StorageReader {
   return {
     getUrl: async (storageId: StorageId) => {
       validateArg(storageId, 1, "getUrl", "storageId");
-      return await performAsyncSyscall("storageGetUrl", {
+      return await performAsyncSyscall("1.0/storageGetUrl", {
         requestId,
         version,
         storageId,
       });
     },
     getMetadata: async (storageId: StorageId): Promise<FileMetadata> => {
-      return await performAsyncSyscall("storageGetMetadata", {
+      return await performAsyncSyscall("1.0/storageGetMetadata", {
         requestId,
         version,
         storageId,
@@ -33,13 +33,13 @@ export function setupStorageWriter(requestId: string): StorageWriter {
   const reader = setupStorageReader(requestId);
   return {
     generateUploadUrl: async () => {
-      return await performAsyncSyscall("storageGenerateUploadUrl", {
+      return await performAsyncSyscall("1.0/storageGenerateUploadUrl", {
         requestId,
         version,
       });
     },
     delete: async (storageId: StorageId) => {
-      await performAsyncSyscall("storageDelete", {
+      await performAsyncSyscall("1.0/storageDelete", {
         requestId,
         version,
         storageId,

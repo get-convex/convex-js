@@ -4,14 +4,19 @@ module.exports = {
   root: true,
   parser: "@typescript-eslint/parser",
   parserOptions: {
-    project: ["./tsconfig.json", "./src/cli/tsconfig.json"],
+    project: [
+      "./tsconfig.json",
+      "./src/cli/tsconfig.json",
+      "./post_build_tests/tsconfig.json",
+    ],
     tsconfigRootDir: __dirname,
   },
-  plugins: ["@typescript-eslint", "react-hooks", "react"],
+  plugins: ["@typescript-eslint", "react-hooks", "react", "jest"],
   extends: [
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
     "prettier",
+    "plugin:jest/recommended",
   ],
   env: {
     amd: true,
@@ -62,6 +67,8 @@ module.exports = {
       },
     ],
     eqeqeq: ["error", "always"],
+    "jest/expect-expect": "off",
+    "jest/no-conditional-expect": "off",
   },
   ignorePatterns: ["node_modules", "dist", "*.js"],
 };

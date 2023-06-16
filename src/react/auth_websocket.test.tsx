@@ -235,7 +235,7 @@ async function testRauthenticationFails(
 
     expect(onAuthChange).toHaveBeenCalledTimes(1);
     expect(onAuthChange).toHaveBeenCalledWith(false);
-    expect(consoleSpy).toBeCalledWith(
+    expect(consoleSpy).toHaveBeenCalledWith(
       `Failed to authenticate: "${AUTH_ERROR_MESSAGE}", check your server auth config`
     );
   });

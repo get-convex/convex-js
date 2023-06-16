@@ -3,7 +3,11 @@ import {
   getProdUrlAndAdminKey,
   getUrlAndAdminKeyByDeploymentType,
 } from "./lib/api";
-import { enforceDeprecatedConfigField, readProjectConfig } from "./lib/config";
+import {
+  ProjectConfig,
+  enforceDeprecatedConfigField,
+  readProjectConfig,
+} from "./lib/config";
 import {
   logFailure,
   logFinishedStep,
@@ -61,7 +65,9 @@ export const deploy = new Command("deploy")
 
     let adminKey =
       cmdOptions.adminKey ?? process.env.CONVEX_DEPLOY_KEY ?? undefined;
-    let url = cmdOptions.url ?? deriveUrlFromAdminKey(adminKey);
+    let url =
+      cmdOptions.url ??
+      (await deriveUrlFromAdminKey(ctx, projectConfig, adminKey));
 
     const configuredDeployment = readDeploymentEnvVar();
 
@@ -167,11 +173,22 @@ export const deploy = new Command("deploy")
 // This returns the the url of the deployment if the admin key is in the new format
 // like "tall-forest-1234|1235123541527341273541"
 //   or "prod:tall-forest-1234|1235123541527341273541"
-function deriveUrlFromAdminKey(adminKey: string | undefined) {
+async function deriveUrlFromAdminKey(
+  ctx: Context,
+  projectConfig: ProjectConfig,
+  adminKey: string | undefined
+) {
   if (adminKey) {
     const parts = adminKey.split("|");
     if (parts.length === 1) {
-      return undefined;
+      if (projectConfig.prodUrl) {
+        return projectConfig.prodUrl;
+      }
+      logFailure(
+        ctx,
+        "Please set CONVEX_DEPLOY_KEY to a new key which you can find on your Convex dashboard."
+      );
+      await ctx.crash(1);
     }
     const deploymentName = stripDeploymentTypePrefix(parts[0]);
     return `https://${deploymentName}.convex.cloud`;

@@ -143,7 +143,7 @@ test("maxObservedTimestamp is updated on mutation and transition", async () => {
     const requestId = (mutationRequest as MutationRequest).requestId;
 
     // Send a mutation, should update the max observed timestamp.
-    await send({
+    send({
       type: "MutationResponse",
       requestId: requestId,
       success: true,
@@ -158,11 +158,11 @@ test("maxObservedTimestamp is updated on mutation and transition", async () => {
       }
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-    expect(client.getMaxObservedTimestamp()?.equals(Long.fromNumber(1000)));
+    expect(client.getMaxObservedTimestamp()).toEqual(Long.fromNumber(1000));
 
     // Send a transition from before the mutation. Should not update the max
     // observed timestamp nor resolve the mutation.
-    await send({
+    send({
       type: "Transition",
       startVersion: {
         querySet: 0,
@@ -179,11 +179,11 @@ test("maxObservedTimestamp is updated on mutation and transition", async () => {
 
     // Wait a bit and confirm the max timestamp has not been updated.
     await new Promise(resolve => setTimeout(resolve, 200));
-    expect(client.getMaxObservedTimestamp()?.equals(Long.fromNumber(1000)));
+    expect(client.getMaxObservedTimestamp()).toEqual(Long.fromNumber(1000));
 
     // Send another transition with higher timestamp. This should resolve the
     // transition and advanced the max observable timestamp.
-    await send({
+    send({
       type: "Transition",
       startVersion: {
         querySet: 0,
@@ -199,7 +199,7 @@ test("maxObservedTimestamp is updated on mutation and transition", async () => {
     });
     // Wait until the mutation is resolved.
     expect(await mutationP).toBe(42);
-    expect(client.getMaxObservedTimestamp()?.equals(Long.fromNumber(2000)));
+    expect(client.getMaxObservedTimestamp()).toEqual(Long.fromNumber(2000));
 
     await client.close();
   });

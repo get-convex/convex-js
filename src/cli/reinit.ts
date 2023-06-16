@@ -1,6 +1,6 @@
 import { Command, Option } from "commander";
 import { oneoffContext } from "../bundler/context.js";
-import { reinit as reinitLib } from "./lib/reinit.js";
+import { initOrReinitForDeprecatedCommands } from "./lib/init.js";
 
 export const reinit = new Command("reinit")
   .description(
@@ -29,11 +29,5 @@ export const reinit = new Command("reinit")
   .action(async options => {
     const ctx = oneoffContext;
 
-    const saveUrl =
-      options.saveUrl === true
-        ? "yes"
-        : options.saveUrl === false
-        ? "no"
-        : "ask";
-    await reinitLib(ctx, "prod", options, saveUrl);
+    await initOrReinitForDeprecatedCommands(ctx, options);
   });

@@ -6,6 +6,7 @@ import { RequestForQueries, useQueriesHelper } from "./use_queries";
 import { test, expect, jest } from "@jest/globals";
 import FakeWatch from "../test/fake_watch";
 import { act, renderHook } from "@testing-library/react-hooks";
+import { anyApi } from "../server/api.js";
 
 test("Adding a new query", () => {
   const createWatch = jest.fn(() => new FakeWatch<any>()) as any;
@@ -13,7 +14,7 @@ test("Adding a new query", () => {
   // Request 1 query.
   let queries: RequestForQueries = {
     query1: {
-      name: "query1",
+      query: anyApi.query1.default,
       args: {},
     },
   };
@@ -38,11 +39,11 @@ test("Adding a new query", () => {
   // Add a second query, it's initially loading.
   queries = {
     query1: {
-      name: "query1",
+      query: anyApi.query1.default,
       args: {},
     },
     query2: {
-      name: "query2",
+      query: anyApi.query2.default,
       args: {},
     },
   };
@@ -69,7 +70,7 @@ test("Swapping queries and unsubscribing", () => {
   // Request 1 query.
   let queries: RequestForQueries = {
     query: {
-      name: "query1",
+      query: anyApi.query1.default,
       args: {},
     },
   };
@@ -84,7 +85,7 @@ test("Swapping queries and unsubscribing", () => {
   // Switch to a different query.
   queries = {
     query1: {
-      name: "query2",
+      query: anyApi.query2.default,
       args: {},
     },
   };

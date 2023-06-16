@@ -1,18 +1,19 @@
 import { convexToJson, Value } from "../values/index.js";
 import { Watch } from "./client";
 import { QueryJournal } from "../browser/sync/protocol.js";
+import { FunctionReference, getFunctionName } from "../server/api.js";
 
 type Identifier = string;
 
 type QueryInfo = {
-  name: string;
+  query: FunctionReference<"query">;
   args: Record<string, Value>;
   watch: Watch<Value>;
   unsubscribe: () => void;
 };
 
 export type CreateWatch = (
-  name: string,
+  query: FunctionReference<"query">,
   args: Record<string, Value>,
   journal?: QueryJournal
 ) => Watch<Value>;
@@ -36,27 +37,30 @@ export class QueriesObserver {
   setQueries(
     newQueries: Record<
       Identifier,
-      { name: string; args: Record<string, Value> }
+      { query: FunctionReference<"query">; args: Record<string, Value> }
     >
   ) {
     // Add the new queries before unsubscribing from the old ones so that
     // the deduping in the `ConvexReactClient` can help if there are duplicates.
     for (const identifier of Object.keys(newQueries)) {
-      const { name, args } = newQueries[identifier];
+      const { query, args } = newQueries[identifier];
+      if (!getFunctionName(query)) {
+        throw new Error(`query ${name} is not a FunctionReference`);
+      }
 
       if (this.queries[identifier] === undefined) {
         // No existing query => add it.
-        this.addQuery(identifier, name, args);
+        this.addQuery(identifier, query, args);
       } else {
         const existingInfo = this.queries[identifier];
         if (
-          name !== existingInfo.name ||
+          getFunctionName(query) !== getFunctionName(existingInfo.query) ||
           JSON.stringify(convexToJson(args)) !==
             JSON.stringify(convexToJson(existingInfo.args))
         ) {
           // Existing query that doesn't match => remove the old and add the new.
           this.removeQuery(identifier);
-          this.addQuery(identifier, name, args);
+          this.addQuery(identifier, query, args);
         }
       }
     }
@@ -101,10 +105,10 @@ export class QueriesObserver {
     // If we have a new watch, we might be using a new Convex client.
     // Recreate all the watches being careful to preserve the journals.
     for (const identifier of Object.keys(this.queries)) {
-      const { name, args, watch } = this.queries[identifier];
+      const { query, args, watch } = this.queries[identifier];
       const journal = watch.journal();
       this.removeQuery(identifier);
-      this.addQuery(identifier, name, args, journal);
+      this.addQuery(identifier, query, args, journal);
     }
   }
 
@@ -117,7 +121,7 @@ export class QueriesObserver {
 
   private addQuery(
     identifier: Identifier,
-    name: string,
+    query: FunctionReference<"query">,
     args: Record<string, Value>,
     journal?: QueryJournal
   ) {
@@ -126,10 +130,10 @@ export class QueriesObserver {
         `Tried to add a new query with identifier ${identifier} when it already exists.`
       );
     }
-    const watch = this.createWatch(name, args, journal);
+    const watch = this.createWatch(query, args, journal);
     const unsubscribe = watch.onUpdate(() => this.notifyListeners());
     this.queries[identifier] = {
-      name,
+      query,
       args,
       watch,
       unsubscribe,

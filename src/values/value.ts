@@ -33,7 +33,31 @@ export type JSONValue =
  * An identifier for a document in Convex.
  *
  * Convex documents are uniquely identified by their `Id`, which is accessible
- * on the `_id` field. To learn more, see [Data Modeling](https://docs.convex.dev/using/data-modeling).
+ * on the `_id` field. To learn more, see [Document IDs](https://docs.convex.dev/database/document-ids).
+ *
+ * Documents can be loaded using `db.get(id)` in query and mutation functions.
+ *
+ * IDs are base 32 encoded strings which are URL safe.
+ *
+ * IDs are just strings at runtime, but this type can be used to distinguish them from other
+ * strings at compile time.
+ *
+ * If you're using code generation, use the `Id` type generated for your data model in
+ * `convex/_generated/dataModel.d.ts`.
+ *
+ * @typeParam TableName - A string literal type of the table name (like "users").
+ *
+ * @public
+ */
+export type Id<TableName extends string> = string & { __tableName: TableName };
+
+/**
+ * !!!! DEPRECATED !!!!
+ *
+ * An identifier for a document in Convex in the legacy class format.
+ *
+ * Convex documents are uniquely identified by their `Id`, which is accessible
+ * on the `_id` field. To learn more, see [Document IDs](https://docs.convex.dev/database/document-ids).
  *
  * Documents can be loaded using `db.get(id)` in query and mutation functions.
  *
@@ -41,21 +65,13 @@ export type JSONValue =
  * Using `===` will not work because two different instances of `Id` can refer
  * to the same document.
  *
- * `Id`s are 16 bytes long and consist of:
- *
- * - A 14-byte random value.
- * - A 2-byte timestamp representing the document's creation, in days since the Unix epoch.
- *
- * This is encoded in URL-safe base 64 (uses `-` and `_`).
- *
- * If you're using code generation, use the `Id` class typed for your data model in
- * `convex/_generated/dataModel.js`.
- *
  * @typeParam TableName - A string literal type of the table name (like "users").
  *
+ * @deprecated - IDs should be strings, and use the `Id<"myTable">` type. This class
+ * still exists to help transition older code using class IDs to using string IDs.
  * @public
  */
-export class Id<TableName extends string> {
+export class IdClass<TableName extends string> {
   /**
    * The table name this {@link GenericId} references.
    */
@@ -80,7 +96,7 @@ export class Id<TableName extends string> {
    * @returns `true` if the objects refer to the same document.
    */
   equals(other: unknown): boolean {
-    if (other instanceof Id) {
+    if (other instanceof IdClass) {
       return this.tableName === other.tableName && this.id === other.id;
     }
     return false;
@@ -89,7 +105,7 @@ export class Id<TableName extends string> {
   /**
    * Parse a {@link GenericId} from its JSON representation.
    */
-  static fromJSON(obj: any): Id<string> {
+  static fromJSON(obj: any): IdClass<string> {
     if (typeof obj.$id !== "string") {
       throw new Error(
         `Object ${JSON.stringify(obj)} isn't a valid Id: $id isn't a string.`
@@ -101,7 +117,7 @@ export class Id<TableName extends string> {
         `Object ${JSON.stringify(obj)} isn't a valid Id: Wrong number of parts.`
       );
     }
-    return new Id(parts[0], parts[1]);
+    return new IdClass(parts[0], parts[1]);
   }
 
   /**
@@ -130,20 +146,6 @@ export class Id<TableName extends string> {
 }
 
 /**
- * Internal type used in Convex code generation.
- *
- * @public
- */
-export type GenericIdConstructor<TableNames extends string> = {
-  new <TableName extends TableNames>(
-    tableName: TableName,
-    id: string
-  ): Id<TableName>;
-  prototype: Id<string>;
-  fromJSON(obj: any): Id<string>;
-};
-
-/**
  * A value supported by Convex.
  *
  * Values can be:
@@ -156,7 +158,7 @@ export type GenericIdConstructor<TableNames extends string> = {
  * @public
  */
 export type Value =
-  | Id<string>
+  | IdClass<string>
   | null
   | bigint
   | number
@@ -294,7 +296,7 @@ function jsonToConvexInternal(value: JSONValue): Value {
   if (entries.length === 1) {
     const key = entries[0][0];
     if (key === "$id" || key === "$weakRef" || key === "$strongRef") {
-      return Id.fromJSON(value);
+      return IdClass.fromJSON(value);
     }
     if (key === "$bytes") {
       if (typeof value.$bytes !== "string") {
@@ -392,7 +394,8 @@ function stringifyValueForError(value: any) {
 function convexToJsonInternal(
   value: Value,
   originalValue: Value,
-  context: string
+  context: string,
+  includeTopLevelUndefined: boolean
 ): JSONValue {
   if (value === undefined) {
     const contextText =
@@ -407,7 +410,7 @@ function convexToJsonInternal(
   if (value === null) {
     return value;
   }
-  if (value instanceof Id) {
+  if (value instanceof IdClass) {
     return value.toJSON();
   }
   if (typeof value === "bigint") {
@@ -438,13 +441,18 @@ function convexToJsonInternal(
   }
   if (Array.isArray(value)) {
     return value.map((value, i) =>
-      convexToJsonInternal(value, originalValue, context + `[${i}]`)
+      convexToJsonInternal(value, originalValue, context + `[${i}]`, false)
     );
   }
   if (value instanceof Set) {
     return {
       $set: [...value].map((value, i) =>
-        convexToJsonInternal(value, originalValue, context + `.keys()[${i}]`)
+        convexToJsonInternal(
+          value,
+          originalValue,
+          context + `.keys()[${i}]`,
+          false
+        )
       ),
     };
   }
@@ -454,12 +462,14 @@ function convexToJsonInternal(
         const jsonKey = convexToJsonInternal(
           k,
           originalValue,
-          context + `.keys()[${i}]`
+          context + `.keys()[${i}]`,
+          false
         );
         const jsonValue = convexToJsonInternal(
           v,
           originalValue,
-          context + `.values()[${i}]`
+          context + `.values()[${i}]`,
+          false
         );
         return [jsonKey, jsonValue];
       }),
@@ -490,10 +500,39 @@ function convexToJsonInternal(
   for (const [k, v] of Object.entries(value)) {
     if (v !== undefined) {
       validateObjectField(k);
-      out[k] = convexToJsonInternal(v, originalValue, context + `.${k}`);
+      out[k] = convexToJsonInternal(v, originalValue, context + `.${k}`, false);
+    } else if (includeTopLevelUndefined) {
+      validateObjectField(k);
+      out[k] = convexOrUndefinedToJsonInternal(
+        v,
+        originalValue,
+        context + `.${k}`
+      );
     }
   }
   return out;
+}
+
+// convexOrUndefinedToJsonInternal wrapper exists so we can pipe through the
+// `originalValue` and `context` through for better error messaging.
+function convexOrUndefinedToJsonInternal(
+  value: Value | undefined,
+  originalValue: Value | undefined,
+  context: string
+): JSONValue {
+  if (value === undefined) {
+    return { $undefined: null };
+  } else {
+    if (originalValue === undefined) {
+      // This should not happen.
+      throw new Error(
+        `Programming error. Current value is ${stringifyValueForError(
+          value
+        )} but original value is undefined`
+      );
+    }
+    return convexToJsonInternal(value, originalValue, context, false);
+  }
 }
 
 /**
@@ -509,5 +548,22 @@ function convexToJsonInternal(
  * @public
  */
 export function convexToJson(value: Value): JSONValue {
-  return convexToJsonInternal(value, value, "");
+  return convexToJsonInternal(value, value, "", false);
+}
+
+// Convert a Convex value or `undefined` into its JSON representation.
+// `undefined` is used in filters to represent a missing object field.
+export function convexOrUndefinedToJson(value: Value | undefined): JSONValue {
+  return convexOrUndefinedToJsonInternal(value, value, "");
+}
+
+/**
+ * Similar to convexToJson but also serializes top level undefined fields
+ * using convexOrUndefinedToJson().
+ *
+ * @param value - A Convex value to convert into JSON.
+ * @returns The JSON representation of `value`.
+ */
+export function patchValueToJson(value: Value): JSONValue {
+  return convexToJsonInternal(value, value, "", true);
 }

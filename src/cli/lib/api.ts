@@ -15,6 +15,7 @@ export type Project = {
   name: string;
   slug: string;
   active_instances: number;
+  is_demo: boolean;
 };
 
 type AdminKey = string;

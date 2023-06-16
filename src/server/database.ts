@@ -46,6 +46,23 @@ export interface DatabaseReader<DataModel extends GenericDataModel> {
   query<TableName extends TableNamesInDataModel<DataModel>>(
     tableName: TableName
   ): QueryInitializer<NamedTableInfo<DataModel, TableName>>;
+
+  /**
+   * Returns the string ID format for the ID in a given table, or null if the ID
+   * is from a different table or is not a valid ID.
+   *
+   * This accepts the string ID format as well as the `.toString()` representation
+   * of the legacy class-based ID format.
+   *
+   * This does not guarantee that the ID exists (i.e. `db.get(id)` may return `null`).
+   *
+   * @param tableName - The name of the table.
+   * @param id - The ID string.
+   */
+  normalizeId<TableName extends TableNamesInDataModel<DataModel>>(
+    tableName: TableName,
+    id: string
+  ): GenericId<TableName> | null;
 }
 
 /**
@@ -77,10 +94,11 @@ export interface DatabaseWriter<DataModel extends GenericDataModel>
   ): Promise<GenericId<TableName>>;
 
   /**
-   * Patch an existing document, merging its value with a new values.
+   * Patch an existing document, shallow merging it with the given partial
+   * document.
    *
-   * Any overlapping fields in the two documents will be overwritten with
-   * their new value.
+   * New fields are added. Existing fields are overwritten. Fields set to
+   * `undefined` are removed.
    *
    * @param id - The {@link values.GenericId} of the document to patch.
    * @param value - The partial {@link GenericDocument} to merge into the specified document. If this new value

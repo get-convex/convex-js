@@ -7,6 +7,7 @@ import {
 } from "./optimistic_updates_impl.js";
 import { serializePathAndArgs } from "./udf_path_utils.js";
 import { FunctionResult } from "./function_result.js";
+import { anyApi } from "../../server/api.js";
 
 let optimisticQuerySet: OptimisticQueryResults;
 beforeEach(() => {
@@ -100,8 +101,8 @@ test("optimistic updates edit query results", () => {
   // Edit the query with an optimistic update and confirm it ran.
   const changedQueries2 = optimisticQuerySet.applyOptimisticUpdate(
     localStore => {
-      const oldResult = localStore.getQuery("query", {});
-      localStore.setQuery("query", {}, oldResult + 1);
+      const oldResult = localStore.getQuery(anyApi.query.default, {});
+      localStore.setQuery(anyApi.query.default, {}, oldResult + 1);
     },
     0
   );
@@ -160,7 +161,7 @@ test("optimistic updates only notify changed queries", () => {
   // Update the first query
   const changedQueries2 = optimisticQuerySet.applyOptimisticUpdate(
     localStore => {
-      localStore.setQuery("query1", {}, "new query1 result");
+      localStore.setQuery(anyApi.query1.default, {}, "new query1 result");
     },
     0
   );
@@ -194,15 +195,15 @@ test("optimistic updates stack", () => {
 
   // The first update adds 1.
   optimisticQuerySet.applyOptimisticUpdate(localStore => {
-    const oldResult = localStore.getQuery("query", {});
-    localStore.setQuery("query", {}, oldResult + 1);
+    const oldResult = localStore.getQuery(anyApi.query.default, {});
+    localStore.setQuery(anyApi.query.default, {}, oldResult + 1);
   }, 0);
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual(3);
 
   // The second update multiplies by 2.
   optimisticQuerySet.applyOptimisticUpdate(localStore => {
-    const oldResult = localStore.getQuery("query", {});
-    localStore.setQuery("query", {}, oldResult * 2);
+    const oldResult = localStore.getQuery(anyApi.query.default, {});
+    localStore.setQuery(anyApi.query.default, {}, oldResult * 2);
   }, 1);
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual(6);
 
@@ -245,7 +246,7 @@ test("optimistic updates can set query results to undefined", () => {
 
   // make it undefined
   optimisticQuerySet.applyOptimisticUpdate(localStore => {
-    localStore.setQuery("query", {}, undefined);
+    localStore.setQuery(anyApi.query.default, {}, undefined);
   }, 0);
   expect(changedQueries).toEqual([queryToken]);
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual(undefined);

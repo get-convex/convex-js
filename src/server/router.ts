@@ -77,7 +77,7 @@ type RouteSpec =
  *   handler: httpAction(async ({ runMutation }, request) => {
  *     const { author, body } = await request.json();
  *
- *     await runMutation("sendMessage", { body, author });
+ *     await runMutation(api.sendMessage.default, { body, author });
  *     return new Response(null, {
  *       status: 200,
  *     });

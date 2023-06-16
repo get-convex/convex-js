@@ -1,3 +1,10 @@
+import {
+  FunctionArgs,
+  FunctionReference,
+  FunctionReturnType,
+  OptionalRestArgs,
+  getFunctionName,
+} from "../../server/api.js";
 import { parseArgs } from "../../common/index.js";
 import { Value } from "../../values/index.js";
 import { createError } from "../logging.js";
@@ -32,36 +39,50 @@ class OptimisticLocalStoreImpl implements OptimisticLocalStore {
     this.modifiedQueries = [];
   }
 
-  getQuery(name: string, args?: Record<string, Value>): Value | undefined {
-    const queryArgs = parseArgs(args);
-    const query = this.queryResults.get(serializePathAndArgs(name, queryArgs));
-    if (query === undefined) {
+  getQuery<Query extends FunctionReference<"query">>(
+    query: Query,
+    ...args: OptionalRestArgs<Query>
+  ): undefined | FunctionReturnType<Query> {
+    const queryArgs = parseArgs(args[0]);
+    const name = getFunctionName(query);
+    const queryResult = this.queryResults.get(
+      serializePathAndArgs(name, queryArgs)
+    );
+    if (queryResult === undefined) {
       return undefined;
     }
-    return OptimisticLocalStoreImpl.queryValue(query.result);
+    return OptimisticLocalStoreImpl.queryValue(queryResult.result);
   }
 
-  getAllQueries(
-    name: string
-  ): { args: Record<string, Value>; value: Value | undefined }[] {
-    const queriesWithName = [];
-    for (const query of this.queryResults.values()) {
-      if (query.udfPath === canonicalizeUdfPath(name)) {
+  getAllQueries<Query extends FunctionReference<"query">>(
+    query: Query
+  ): {
+    args: FunctionArgs<Query>;
+    value: undefined | FunctionReturnType<Query>;
+  }[] {
+    const queriesWithName: {
+      args: FunctionArgs<Query>;
+      value: undefined | FunctionReturnType<Query>;
+    }[] = [];
+    const name = getFunctionName(query);
+    for (const queryResult of this.queryResults.values()) {
+      if (queryResult.udfPath === canonicalizeUdfPath(name)) {
         queriesWithName.push({
-          args: query.args,
-          value: OptimisticLocalStoreImpl.queryValue(query.result),
+          args: queryResult.args as FunctionArgs<Query>,
+          value: OptimisticLocalStoreImpl.queryValue(queryResult.result),
         });
       }
     }
     return queriesWithName;
   }
 
-  setQuery(
-    name: string,
-    args: Record<string, Value>,
-    value: Value | undefined
+  setQuery<QueryReference extends FunctionReference<"query">>(
+    queryReference: QueryReference,
+    args: FunctionArgs<QueryReference>,
+    value: undefined | FunctionReturnType<QueryReference>
   ): void {
     const queryArgs = parseArgs(args);
+    const name = getFunctionName(queryReference);
     const queryToken = serializePathAndArgs(name, queryArgs);
 
     let result: FunctionResult | undefined;

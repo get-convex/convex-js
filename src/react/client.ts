@@ -1,16 +1,4 @@
-import {
-  GenericAPI,
-  BaseConvexClient,
-  NamedMutation,
-  NamedQuery,
-  NamedAction,
-  PublicQueryNames,
-  PublicMutationNames,
-  PublicActionNames,
-  ArgsAndOptions,
-  ArgsObject,
-  OptionalRestArgs,
-} from "../browser/index.js";
+import { BaseConvexClient } from "../browser/index.js";
 import type { OptimisticUpdate, QueryToken } from "../browser/index.js";
 import React, { useContext, useMemo } from "react";
 import { convexToJson, Value } from "../values/index.js";
@@ -22,8 +10,17 @@ import {
   ConnectionState,
 } from "../browser/sync/client.js";
 import type { UserIdentityAttributes } from "../browser/sync/protocol.js";
-import { useQueriesGeneric } from "./use_queries.js";
+import { useQueries } from "./use_queries.js";
 import { parseArgs } from "../common/index.js";
+import {
+  ArgsAndOptions,
+  FunctionArgs,
+  FunctionReference,
+  FunctionReturnType,
+  OptionalRestArgs,
+  getFunctionName,
+  makeFunctionReference,
+} from "../server/api.js";
 
 if (typeof React === "undefined") {
   throw new Error("Required dependency 'react' not found");
@@ -39,19 +36,14 @@ if (typeof ReactDOM === "undefined") {
  *
  * @public
  */
-export interface ReactMutation<
-  API extends GenericAPI,
-  Name extends PublicMutationNames<API>
-> {
+export interface ReactMutation<Mutation extends FunctionReference<"mutation">> {
   /**
    * Execute the mutation on the server, returning a `Promise` of its return value.
    *
    * @param args - Arguments for the mutation to pass up to the server.
    * @returns The return value of the server-side function call.
    */
-  (...args: OptionalRestArgs<NamedMutation<API, Name>>): Promise<
-    ReturnType<NamedMutation<API, Name>>
-  >;
+  (...args: OptionalRestArgs<Mutation>): Promise<FunctionReturnType<Mutation>>;
 
   /**
    * Define an optimistic update to apply as part of this mutation.
@@ -75,35 +67,36 @@ export interface ReactMutation<
    * @public
    */
   withOptimisticUpdate(
-    optimisticUpdate: OptimisticUpdate<
-      API,
-      ArgsObject<NamedMutation<API, Name>>
-    >
-  ): ReactMutation<API, Name>;
+    optimisticUpdate: OptimisticUpdate<FunctionArgs<Mutation>>
+  ): ReactMutation<Mutation>;
 }
 
 // Exported only for testing.
 export function createMutation(
-  name: string,
-  client: ConvexReactClient<any>,
-  update?: OptimisticUpdate<any, any>
-): ReactMutation<any, any> {
+  mutationReference: FunctionReference<"mutation">,
+  client: ConvexReactClient,
+  update?: OptimisticUpdate<any>
+): ReactMutation<any> {
   function mutation(args?: Record<string, Value>): Promise<unknown> {
     assertNotAccidentalArgument(args);
 
-    return client.mutation(name, args, { optimisticUpdate: update });
+    return client.mutation(mutationReference, args, {
+      optimisticUpdate: update,
+    });
   }
   mutation.withOptimisticUpdate = function withOptimisticUpdate(
-    optimisticUpdate: OptimisticUpdate<any, any>
-  ): ReactMutation<any, any> {
+    optimisticUpdate: OptimisticUpdate<any>
+  ): ReactMutation<any> {
     if (update !== undefined) {
       throw new Error(
-        `Already specified optimistic update for mutation ${name}`
+        `Already specified optimistic update for mutation ${getFunctionName(
+          mutationReference
+        )}`
       );
     }
-    return createMutation(name, client, optimisticUpdate);
+    return createMutation(mutationReference, client, optimisticUpdate);
   };
-  return mutation as ReactMutation<any, any>;
+  return mutation as ReactMutation<any>;
 }
 
 /**
@@ -111,10 +104,7 @@ export function createMutation(
  *
  * @public
  */
-export interface ReactAction<
-  API extends GenericAPI,
-  Name extends PublicActionNames<API>
-> {
+export interface ReactAction<Action extends FunctionReference<"action">> {
   /**
    * Execute the function on the server, returning a `Promise` of its return value.
    *
@@ -122,18 +112,16 @@ export interface ReactAction<
    * @returns The return value of the server-side function call.
    * @public
    */
-  (...args: OptionalRestArgs<NamedAction<API, Name>>): Promise<
-    ReturnType<NamedAction<API, Name>>
-  >;
+  (...args: OptionalRestArgs<Action>): Promise<FunctionReturnType<Action>>;
 }
 
 function createAction(
-  name: string,
-  client: ConvexReactClient<any>
-): ReactAction<any, any> {
+  actionReference: FunctionReference<"action">,
+  client: ConvexReactClient
+): ReactAction<any> {
   return function (args?: Record<string, Value>): Promise<unknown> {
-    return client.action(name, args);
-  } as ReactAction<any, any>;
+    return client.action(actionReference, args);
+  } as ReactAction<any>;
 }
 
 /**
@@ -203,17 +191,14 @@ export interface WatchQueryOptions {
  *
  * @public
  */
-export interface MutationOptions<
-  API extends GenericAPI,
-  Args extends Record<string, Value>
-> {
+export interface MutationOptions<Args extends Record<string, Value>> {
   /**
    * An optimistic update to apply along with this mutation.
    *
    * An optimistic update locally updates queries while a mutation is pending.
    * Once the mutation completes, the update will be rolled back.
    */
-  optimisticUpdate?: OptimisticUpdate<API, Args>;
+  optimisticUpdate?: OptimisticUpdate<Args>;
 }
 
 /**
@@ -221,12 +206,9 @@ export interface MutationOptions<
  *
  * This loads reactive queries and executes mutations over a WebSocket.
  *
- * @typeParam API - The API of your application, composed of all Convex queries
- * and mutations. `npx convex dev` [generates this type](/generated-api/react#convexapi)
- * in `convex/_generated/react.d.ts`.
  * @public
  */
-export class ConvexReactClient<API extends GenericAPI> {
+export class ConvexReactClient {
   private address: string;
   private cachedSync?: BaseConvexClient;
   private listeners: Map<QueryToken, Set<() => void>>;
@@ -333,21 +315,21 @@ export class ConvexReactClient<API extends GenericAPI> {
    * Construct a new {@link Watch} on a Convex query function.
    *
    * **Most application code should not call this method directly. Instead use
-   * the `useQuery` hook generated by `npx convex dev`.**
+   * the {@link useQuery} hook.**
    *
-   * @param name - The name of the query function.
+   * @param query - A {@link server.FunctionReference} for the public query to run.
    * @param args - An arguments object for the query. If this is omitted,
    * the arguments will be `{}`.
    * @param options - A {@link WatchQueryOptions} options object for this query.
    *
    * @returns The {@link Watch} object.
    */
-  watchQuery<Name extends PublicQueryNames<API>>(
-    name: Name,
-    ...argsAndOptions: ArgsAndOptions<NamedQuery<API, Name>, WatchQueryOptions>
-  ): Watch<ReturnType<NamedQuery<API, Name>>> {
+  watchQuery<Query extends FunctionReference<"query">>(
+    query: Query,
+    ...argsAndOptions: ArgsAndOptions<Query, WatchQueryOptions>
+  ): Watch<FunctionReturnType<Query>> {
     const [args, options] = argsAndOptions;
-
+    const name = getFunctionName(query);
     return {
       onUpdate: callback => {
         const { queryToken, unsubscribe } = this.sync.subscribe(
@@ -381,9 +363,7 @@ export class ConvexReactClient<API extends GenericAPI> {
         // Use the cached client because we can't have a query result if we don't
         // even have a client yet!
         if (this.cachedSync) {
-          return this.cachedSync.localQueryResult(name, args) as ReturnType<
-            NamedQuery<API, Name>
-          >;
+          return this.cachedSync.localQueryResult(name, args);
         }
         return undefined;
       },
@@ -407,42 +387,69 @@ export class ConvexReactClient<API extends GenericAPI> {
   /**
    * Execute a mutation function.
    *
-   * If you are within a React component, use the `useMutation` hook generated
-   * by `npx convex dev` instead.
-   *
-   * @param name - The name of the mutation.
+   * @param mutation - A {@link server.FunctionReference} for the public mutation
+   * to run.
    * @param args - An arguments object for the mutation. If this is omitted,
    * the arguments will be `{}`.
    * @param options - A {@link MutationOptions} options object for the mutation.
    * @returns A promise of the mutation's result.
    */
-  mutation<Name extends PublicMutationNames<API>>(
-    name: Name,
+  mutation<Mutation extends FunctionReference<"mutation">>(
+    mutation: Mutation,
     ...argsAndOptions: ArgsAndOptions<
-      NamedMutation<API, Name>,
-      MutationOptions<API, ArgsObject<NamedMutation<API, Name>>>
+      Mutation,
+      MutationOptions<FunctionArgs<Mutation>>
     >
-  ): Promise<ReturnType<NamedMutation<API, Name>>> {
+  ): Promise<FunctionReturnType<Mutation>> {
     const [args, options] = argsAndOptions;
+    const name = getFunctionName(mutation);
     return this.sync.mutation(name, args, options);
   }
 
   /**
    * Execute an action function.
    *
-   * If you are within a React component, use the `useAction` hook generated
-   * by `npx convex dev` instead.
-   *
-   * @param name - The name of the action.
+   * @param action - A {@link server.FunctionReference} for the public action
+   * to run.
    * @param args - An arguments object for the action. If this is omitted,
    * the arguments will be `{}`.
    * @returns A promise of the action's result.
    */
-  action<Name extends PublicActionNames<API>>(
-    name: Name,
-    ...args: OptionalRestArgs<NamedAction<API, Name>>
-  ): Promise<ReturnType<NamedAction<API, Name>>> {
+  action<Action extends FunctionReference<"action">>(
+    action: Action,
+    ...args: OptionalRestArgs<Action>
+  ): Promise<FunctionReturnType<Action>> {
+    const name = getFunctionName(action);
     return this.sync.action(name, ...args);
+  }
+
+  /**
+   * Fetch a query result once.
+   *
+   * **Most application code should subscribe to queries instead, using
+   * the {@link useQuery} hook.**
+   *
+   * @param query - A {@link server.FunctionReference} for the public query
+   * to run.
+   * @param args - An arguments object for the query. If this is omitted,
+   * the arguments will be `{}`.
+   * @returns A promise of the query's result.
+   */
+  query<Query extends FunctionReference<"query">>(
+    query: Query,
+    ...args: OptionalRestArgs<Query>
+  ): Promise<FunctionReturnType<Query>> {
+    const watch = this.watchQuery(query, ...args);
+    const existingResult = watch.localQueryResult();
+    if (existingResult !== undefined) {
+      return existingResult;
+    }
+    return new Promise(resolve => {
+      const unsubscribe = watch.onUpdate(() => {
+        unsubscribe();
+        resolve(watch.localQueryResult());
+      });
+    });
   }
 
   /**
@@ -488,8 +495,8 @@ export class ConvexReactClient<API extends GenericAPI> {
   }
 }
 
-const ConvexContext = React.createContext<ConvexReactClient<any>>(
-  undefined as unknown as ConvexReactClient<any> // in the future this will be a mocked client for testing
+const ConvexContext = React.createContext<ConvexReactClient>(
+  undefined as unknown as ConvexReactClient // in the future this will be a mocked client for testing
 );
 
 /**
@@ -497,16 +504,11 @@ const ConvexContext = React.createContext<ConvexReactClient<any>>(
  *
  * This relies on the {@link ConvexProvider} being above in the React component tree.
  *
- * If you're using code generation, use the `useConvex` function in
- * `convex/_generated/react.js` which is typed for your API.
- *
  * @returns The active {@link ConvexReactClient} object, or `undefined`.
  *
  * @public
  */
-export function useConvexGeneric<
-  API extends GenericAPI
->(): ConvexReactClient<API> {
+export function useConvex(): ConvexReactClient {
   return useContext(ConvexContext);
 }
 
@@ -521,7 +523,7 @@ export function useConvexGeneric<
  * @public
  */
 export const ConvexProvider: React.FC<{
-  client: ConvexReactClient<any>;
+  client: ConvexReactClient;
   children?: React.ReactNode;
 }> = ({ client, children }) => {
   return React.createElement(
@@ -532,7 +534,7 @@ export const ConvexProvider: React.FC<{
 };
 
 /**
- * Options object for {@link useQueryGeneric}.
+ * Options object for {@link useQuery}.
  *
  * @public
  */
@@ -547,32 +549,34 @@ export interface UseQueryOptions {}
  *
  * Throws an error if not used under {@link ConvexProvider}.
  *
- * If you're using code generation, use the `useQuery` function in
- * `convex/_generated/react.js` which is typed for your API.
- *
- * @param name - The name of the query function.
+ * @param query - a {@link server.FunctionReference} for the public query to run
+ * like `api.dir1.dir2.filename.func`.
  * @param args - The arguments to the query function.
  * @param options - [Optional] The {@link UseQueryOptions} options object.
  * @returns the result of the query. If the query is loading returns `undefined`.
  *
  * @public
  */
-export function useQueryGeneric(
-  name: string,
-  args?: Record<string, Value>,
-  _options?: UseQueryOptions
-): unknown | undefined {
-  const argsObject = parseArgs(args);
+export function useQuery<Query extends FunctionReference<"query">>(
+  query: Query,
+  ...args: OptionalRestArgs<Query>
+): Query["_returnType"] | undefined {
+  const argsObject = parseArgs(args[0]);
+
+  const queryReference =
+    typeof query === "string"
+      ? makeFunctionReference<"query", any, any>(query)
+      : query;
 
   const queries = useMemo(
-    () => ({ query: { name, args: argsObject } }),
+    () => ({ query: { query: queryReference, args: argsObject } }),
     // Stringify args so args that are semantically the same don't trigger a
     // rerender. Saves developers from adding `useMemo` on every args usage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(convexToJson(argsObject)), name]
+    [JSON.stringify(convexToJson(argsObject)), getFunctionName(queryReference)]
   );
 
-  const results = useQueriesGeneric(queries);
+  const results = useQueries(queries);
   const result = results["query"];
   if (result instanceof Error) {
     throw result;
@@ -591,20 +595,22 @@ export function useQueryGeneric(
  * by React dependency arrays and memoization logic relying on object identity
  * without causing rerenders.
  *
- * If you're using code generation, use the `useMutation` function in
- * `convex/_generated/react.js` which is typed for your API.
- *
  * Throws an error if not used under {@link ConvexProvider}.
  *
- * @param name - The name of the mutation.
+ * @param mutation - A {@link server.FunctionReference} for the public mutation
+ * to run like `api.dir1.dir2.filename.func`.
  * @returns The {@link ReactMutation} object with that name.
  *
  * @public
  */
-export function useMutationGeneric<
-  API extends GenericAPI,
-  Name extends PublicMutationNames<API>
->(name: Name): ReactMutation<API, Name> {
+export function useMutation<Mutation extends FunctionReference<"mutation">>(
+  mutation: Mutation
+): ReactMutation<Mutation> {
+  const mutationReference =
+    typeof mutation === "string"
+      ? makeFunctionReference<"mutation", any, any>(mutation)
+      : mutation;
+
   const convex = useContext(ConvexContext);
   if (convex === undefined) {
     throw new Error(
@@ -613,7 +619,11 @@ export function useMutationGeneric<
         "See https://docs.convex.dev/quick-start#set-up-convex-in-your-react-app"
     );
   }
-  return useMemo(() => createMutation(name, convex), [convex, name]);
+  return useMemo(
+    () => createMutation(mutationReference, convex),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [convex, getFunctionName(mutationReference)]
+  );
 }
 
 /**
@@ -626,21 +636,23 @@ export function useMutationGeneric<
  * by React dependency arrays and memoization logic relying on object identity
  * without causing rerenders.
  *
- * If you're using code generation, use the `useAction` function in
- * `convex/_generated/react.js` which is typed for your API.
- *
  * Throws an error if not used under {@link ConvexProvider}.
  *
- * @param name - The name of the action.
+ * @param action - A {@link server.FunctionReference} for the public action
+ * to run like `api.dir1.dir2.filename.func`.
  * @returns The {@link ReactAction} object with that name.
  *
  * @public
  */
-export function useActionGeneric<
-  API extends GenericAPI,
-  Name extends PublicActionNames<API>
->(name: Name): ReactAction<API, Name> {
+export function useAction<Action extends FunctionReference<"action">>(
+  action: Action
+): ReactAction<Action> {
   const convex = useContext(ConvexContext);
+  const actionReference =
+    typeof action === "string"
+      ? makeFunctionReference<"action", any, any>(action)
+      : action;
+
   if (convex === undefined) {
     throw new Error(
       "Could not find Convex client! `useAction` must be used in the React component " +
@@ -648,54 +660,12 @@ export function useActionGeneric<
         "See https://docs.convex.dev/quick-start#set-up-convex-in-your-react-app"
     );
   }
-  return useMemo(() => createAction(name, convex), [convex, name]);
+  return useMemo(
+    () => createAction(actionReference, convex),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [convex, getFunctionName(actionReference)]
+  );
 }
-
-/**
- * Internal type helper used by Convex code generation.
- *
- * Used to give {@link useQueryGeneric} a type specific to your API.
- * @public
- */
-export type UseQueryForAPI<API extends GenericAPI> = <
-  Name extends PublicQueryNames<API>
->(
-  name: Name,
-  ...argsAndOptions: ArgsAndOptions<NamedQuery<API, Name>, UseQueryOptions>
-) => ReturnType<NamedQuery<API, Name>> | undefined;
-
-/**
- * Internal type helper used by Convex code generation.
- *
- * Used to give {@link useMutationGeneric} a type specific to your API.
- * @public
- */
-export type UseMutationForAPI<API extends GenericAPI> = <
-  Name extends PublicMutationNames<API>
->(
-  name: Name
-) => ReactMutation<API, Name>;
-
-/**
- * Internal type helper used by Convex code generation.
- *
- * Used to give {@link useMutationGeneric} a type specific to your API.
- * @public
- */
-export type UseActionForAPI<API extends GenericAPI> = <
-  Name extends PublicActionNames<API>
->(
-  name: Name
-) => ReactAction<API, Name>;
-
-/**
- * Internal type helper used by Convex code generation.
- *
- * Used to give {@link useConvexGeneric} a type specific to your API.
- * @public
- */
-export type UseConvexForAPI<API extends GenericAPI> =
-  () => ConvexReactClient<API>;
 
 // When a function is called with a single argument that looks like a
 // React SyntheticEvent it was likely called as an event handler.

@@ -91,7 +91,12 @@ export function changesToGitIgnore(existingFile: string | null): string | null {
   }
   const gitIgnoreLines = existingFile.split("\n");
   const envVarFileIgnored = gitIgnoreLines.some(
-    line => line === ".env.local" || line === ".env.*" || line === ".env*"
+    line =>
+      line === ".env.local" ||
+      line === ".env.*" ||
+      line === ".env*" ||
+      line === "*.local" ||
+      line === ".env*.local"
   );
   if (!envVarFileIgnored) {
     return `${existingFile}\n${ENV_VAR_FILE_PATH}\n`;

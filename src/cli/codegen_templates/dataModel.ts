@@ -4,9 +4,9 @@ const dataModelDTS = `
   ${header("Generated data model types.")}
   import type {
      DataModelFromSchemaDefinition,
-  } from "convex/schema";
+  } from "convex/server";
   import type { DocumentByName, TableNamesInDataModel } from "convex/server";
-  import { GenericId, GenericIdConstructor } from "convex/values";
+  import type { GenericId } from "convex/values";
   import schema from "../schema";
   
   /**
@@ -28,28 +28,13 @@ const dataModelDTS = `
    * on the \`_id\` field. To learn more, see [Document IDs](https://docs.convex.dev/using/document-ids).
    *
    * Documents can be loaded using \`db.get(id)\` in query and mutation functions.
-   *
-   * **Important**: Use \`myId.equals(otherId)\` to check for equality.
-   * Using \`===\` will not work because two different instances of \`Id\` can refer
-   * to the same document.
+   * 
+   * IDs are just strings at runtime, but this type can be used to distinguish them from other
+   * strings when type checking.
    * 
    * @typeParam TableName - A string literal type of the table name (like "users").
    */
   export type Id<TableName extends TableNames> = GenericId<TableName>;
-
-  /**
-   * An identifier for a document in Convex.
-   *
-   * Convex documents are uniquely identified by their \`Id\`, which is accessible
-   * on the \`_id\` field. To learn more, see [Document IDs](https://docs.convex.dev/using/document-ids).
-   *
-   * Documents can be loaded using \`db.get(id)\` in query and mutation functions.
-   *
-   * **Important**: Use \`myId.equals(otherId)\` to check for equality.
-   * Using \`===\` will not work because two different instances of \`Id\` can refer
-   * to the same document.
-   */
-  export declare const Id: GenericIdConstructor<TableNames>;
 
   /**
    * A type describing your Convex data model.
@@ -63,34 +48,14 @@ const dataModelDTS = `
   export type DataModel = DataModelFromSchemaDefinition<typeof schema>;
   `;
 
-const dataModelJS = `
-  ${header("Generated data model types.")}
-  import { GenericId } from "convex/values";
-
-  /**
-   * An identifier for a document in Convex.
-   *
-   * Convex documents are uniquely identified by their \`Id\`, which is accessible
-   * on the \`_id\` field. To learn more, see [Data Modeling](https://docs.convex.dev/using/data-modeling).
-   *
-   * Documents can be loaded using \`db.get(id)\` in query and mutation functions.
-   *
-   * **Important**: Use \`myId.equals(otherId)\` to check for equality.
-   * Using \`===\` will not work because two different instances of \`Id\` can refer
-   * to the same document.
-   */
-   export const Id = GenericId;
-`;
-
 export const dataModel: GeneratedJsWithTypes = {
   DTS: dataModelDTS,
-  JS: dataModelJS,
 };
 
 const dataModelWithoutSchemaDTS = `
   ${header("Generated data model types.")}
   import { AnyDataModel } from "convex/server";
-  import { GenericId } from "convex/values";
+  import type { GenericId } from "convex/values";
 
   /**
    * No \`schema.ts\` file found!
@@ -121,12 +86,10 @@ const dataModelWithoutSchemaDTS = `
    *
    * Documents can be loaded using \`db.get(id)\` in query and mutation functions.
    *
-   * **Important**: Use \`myId.equals(otherId)\` to check for equality.
-   * Using \`===\` will not work because two different instances of \`Id\` can refer
-   * to the same document.
+   * IDs are just strings at runtime, but this type can be used to distinguish them from other
+   * strings when type checking.
    */
   export type Id<TableName extends TableNames = TableNames> = GenericId<TableName>;
-  export declare const Id: typeof GenericId;
 
   /**
    * A type describing your Convex data model.
@@ -146,7 +109,4 @@ const dataModelWithoutSchemaDTS = `
  */
 export const dataModelWithoutSchema: GeneratedJsWithTypes = {
   DTS: dataModelWithoutSchemaDTS,
-
-  // If you don't have a schema, the JS is still the same.
-  JS: dataModelJS,
 };

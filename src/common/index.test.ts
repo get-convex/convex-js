@@ -12,12 +12,12 @@ describe("validateDeploymentUrl", () => {
   test("missing .cloud throws", () => {
     expect(() =>
       validateDeploymentUrl("https://small-mouse-123.convex")
-    ).toThrowError("Invalid deployment address");
+    ).toThrow("Invalid deployment address");
   });
 
   test("wrong protocol throws", () => {
     expect(() =>
       validateDeploymentUrl("ws://small-mouse-123.convex.cloud")
-    ).toThrowError("Invalid deployment address");
+    ).toThrow("Invalid deployment address");
   });
 });

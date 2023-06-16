@@ -1,21 +1,20 @@
 import {
-  GenericAPI,
-  NamedAction,
-  NamedMutation,
-  NamedQuery,
+  FunctionReference,
+  FunctionReturnType,
   OptionalRestArgs,
-  PublicActionNames,
-  PublicMutationNames,
-  PublicQueryNames,
-} from "../api/index.js";
-import {
-  parseArgs,
-  STATUS_CODE_UDF_FAILED,
-  validateDeploymentUrl,
-} from "../common/index.js";
+  getFunctionName,
+} from "../server/api.js";
+import { parseArgs, validateDeploymentUrl } from "../common/index.js";
 import { version } from "../index.js";
 import { convexToJson, jsonToConvex } from "../values/index.js";
 import { logToConsole } from "./logging.js";
+
+export const STATUS_CODE_OK = 200;
+export const STATUS_CODE_BAD_REQUEST = 400;
+// Special custom 5xx HTTP status code to mean that the UDF returned an error.
+//
+// Must match the constant of the same name in the backend.
+export const STATUS_CODE_UDF_FAILED = 560;
 
 /** In browsers, Node.js 18, Deno, etc. `fetch` is a global function */
 type WindowFetch = typeof window.fetch;
@@ -36,17 +35,9 @@ const fetch: WindowFetch =
  * If you're building a React app, consider using
  * {@link react.ConvexReactClient} instead.
  *
- * To {@link ConvexHttpClient} with TypeScript type specific to your API, pass
- * in the `API` type parameter:
- * ```typescript
- * import { ConvexHttpClient } from "convex/browser";
- * import { API } from "./convex/_generated/api";
- *
- * const client = new ConvexHttpClient<API>(process.env["CONVEX_URL"]);
- * ```
  * @public
  */
-export class ConvexHttpClient<API extends GenericAPI> {
+export class ConvexHttpClient {
   private readonly address: string;
   private auth?: string;
   private adminAuth?: string;
@@ -118,11 +109,12 @@ export class ConvexHttpClient<API extends GenericAPI> {
    * the arguments will be `{}`.
    * @returns A promise of the query's result.
    */
-  async query<Name extends PublicQueryNames<API>>(
-    name: Name,
-    ...args: OptionalRestArgs<NamedQuery<API, Name>>
-  ): Promise<ReturnType<NamedQuery<API, Name>>> {
+  async query<Query extends FunctionReference<"query">>(
+    query: Query | string,
+    ...args: OptionalRestArgs<Query>
+  ): Promise<FunctionReturnType<Query>> {
     const queryArgs = parseArgs(args[0]);
+    const name = typeof query === "string" ? query : getFunctionName(query);
     const body = JSON.stringify({
       path: name,
       args: [convexToJson(queryArgs)],
@@ -153,10 +145,7 @@ export class ConvexHttpClient<API extends GenericAPI> {
     }
     switch (respJSON.status) {
       case "success":
-        // Validate that the response is a valid Convex value.
-        return jsonToConvex(respJSON.value) as Awaited<
-          ReturnType<NamedQuery<API, Name>>
-        >;
+        return jsonToConvex(respJSON.value);
       case "error":
         throw new Error(respJSON.errorMessage);
       default:
@@ -172,11 +161,13 @@ export class ConvexHttpClient<API extends GenericAPI> {
    * the arguments will be `{}`.
    * @returns A promise of the mutation's result.
    */
-  async mutation<Name extends PublicMutationNames<API>>(
-    name: Name,
-    ...args: OptionalRestArgs<NamedMutation<API, Name>>
-  ): Promise<ReturnType<NamedMutation<API, Name>>> {
+  async mutation<Mutation extends FunctionReference<"mutation">>(
+    mutation: Mutation | string,
+    ...args: OptionalRestArgs<Mutation>
+  ): Promise<FunctionReturnType<Mutation>> {
     const mutationArgs = parseArgs(args[0]);
+    const name =
+      typeof mutation === "string" ? mutation : getFunctionName(mutation);
     const body = JSON.stringify({
       path: name,
       args: [convexToJson(mutationArgs)],
@@ -186,7 +177,9 @@ export class ConvexHttpClient<API extends GenericAPI> {
       "Content-Type": "application/json",
       "Convex-Client": `npm-${version}`,
     };
-    if (this.auth) {
+    if (this.adminAuth) {
+      headers["Authorization"] = `Convex ${this.adminAuth}`;
+    } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
     const response = await fetch(`${this.address}/mutation`, {
@@ -204,10 +197,7 @@ export class ConvexHttpClient<API extends GenericAPI> {
     }
     switch (respJSON.status) {
       case "success":
-        // Validate that the response is a valid Convex value.
-        return jsonToConvex(respJSON.value) as Awaited<
-          ReturnType<NamedMutation<API, Name>>
-        >;
+        return jsonToConvex(respJSON.value);
       case "error":
         throw new Error(respJSON.errorMessage);
       default:
@@ -223,11 +213,12 @@ export class ConvexHttpClient<API extends GenericAPI> {
    * the arguments will be `{}`.
    * @returns A promise of the action's result.
    */
-  async action<Name extends PublicActionNames<API>>(
-    name: Name,
-    ...args: OptionalRestArgs<NamedAction<API, Name>>
-  ): Promise<ReturnType<NamedAction<API, Name>>> {
+  async action<Action extends FunctionReference<"action">>(
+    action: Action | string,
+    ...args: OptionalRestArgs<Action>
+  ): Promise<FunctionReturnType<Action>> {
     const actionArgs = parseArgs(args[0]);
+    const name = typeof action === "string" ? action : getFunctionName(action);
     const body = JSON.stringify({
       path: name,
       args: [convexToJson(actionArgs)],
@@ -237,7 +228,9 @@ export class ConvexHttpClient<API extends GenericAPI> {
       "Content-Type": "application/json",
       "Convex-Client": `npm-${version}`,
     };
-    if (this.auth) {
+    if (this.adminAuth) {
+      headers["Authorization"] = `Convex ${this.adminAuth}`;
+    } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
     const response = await fetch(`${this.address}/action`, {
@@ -255,10 +248,65 @@ export class ConvexHttpClient<API extends GenericAPI> {
     }
     switch (respJSON.status) {
       case "success":
-        // Validate that the response is a valid Convex value.
-        return jsonToConvex(respJSON.value) as Awaited<
-          ReturnType<NamedAction<API, Name>>
-        >;
+        return jsonToConvex(respJSON.value);
+      case "error":
+        throw new Error(respJSON.errorMessage);
+      default:
+        throw new Error(`Invalid response: ${JSON.stringify(respJSON)}`);
+    }
+  }
+
+  /**
+   * Execute a Convex function of an unknown type.
+   *
+   * @param name - The name of the function.
+   * @param args - The arguments object for the function. If this is omitted,
+   * the arguments will be `{}`.
+   * @returns A promise of the function's result.
+   *
+   * @internal
+   */
+  async function<
+    AnyFunction extends FunctionReference<"query" | "mutation" | "action">
+  >(
+    anyFunction: AnyFunction | string,
+    ...args: OptionalRestArgs<AnyFunction>
+  ): Promise<FunctionReturnType<AnyFunction>> {
+    const functionArgs = parseArgs(args[0]);
+    const name =
+      typeof anyFunction === "string"
+        ? anyFunction
+        : getFunctionName(anyFunction);
+    const body = JSON.stringify({
+      path: name,
+      args: [convexToJson(functionArgs)],
+      debug: this.debug,
+    });
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Convex-Client": `npm-${version}`,
+    };
+    if (this.adminAuth) {
+      headers["Authorization"] = `Convex ${this.adminAuth}`;
+    } else if (this.auth) {
+      headers["Authorization"] = `Bearer ${this.auth}`;
+    }
+    const response = await fetch(`${this.address}/function`, {
+      body,
+      method: "POST",
+      headers: headers,
+      credentials: "include",
+    });
+    if (!response.ok && response.status !== STATUS_CODE_UDF_FAILED) {
+      throw new Error(await response.text());
+    }
+    const respJSON = await response.json();
+    for (const line of respJSON.logLines ?? []) {
+      logToConsole("info", "any", name, line);
+    }
+    switch (respJSON.status) {
+      case "success":
+        return jsonToConvex(respJSON.value);
       case "error":
         throw new Error(respJSON.errorMessage);
       default:

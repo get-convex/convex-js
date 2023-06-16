@@ -1,22 +1,17 @@
 import chalk from "chalk";
+import { Context } from "../../bundler/context.js";
+import { doCodegen } from "./codegen";
 import {
+  configFromProjectConfig,
+  configJSON,
+  diffConfig,
   pullConfig,
   pushConfig,
-  diffConfig,
   readProjectConfig,
-  configJSON,
-  configFromProjectConfig,
-  enforceDeprecatedConfigField,
 } from "./config.js";
-import {
-  functionsDir,
-  ensureHasConvexDependency,
-  shouldUseNewFlow,
-} from "./utils.js";
-import { typeCheckFunctionsInMode } from "./typecheck.js";
-import { doCodegen } from "./codegen";
 import { pushSchema } from "./indexes.js";
-import { Context } from "../../bundler/context.js";
+import { typeCheckFunctionsInMode } from "./typecheck.js";
+import { ensureHasConvexDependency, functionsDir } from "./utils.js";
 
 export type PushOptions = {
   adminKey: string;
@@ -80,12 +75,8 @@ export async function runPush(ctx: Context, options: PushOptions) {
 
   const remoteConfig = await pullConfig(
     ctx,
-    shouldUseNewFlow()
-      ? undefined
-      : await enforceDeprecatedConfigField(ctx, projectConfig, "project"),
-    shouldUseNewFlow()
-      ? undefined
-      : await enforceDeprecatedConfigField(ctx, projectConfig, "team"),
+    undefined,
+    undefined,
     origin,
     options.adminKey
   );

@@ -8,38 +8,38 @@ import {
   modernBigIntToBase64,
   convexToJson,
   jsonToConvex,
-  Id,
+  IdClass,
 } from "./value.js";
 
 describe("Id", () => {
   describe(".equals", () => {
     test("should be true for the same ids", () => {
-      expect(new Id("myTable", "myId").equals(new Id("myTable", "myId"))).toBe(
-        true
-      );
+      expect(
+        new IdClass("myTable", "myId").equals(new IdClass("myTable", "myId"))
+      ).toBe(true);
     });
 
     test("should be false for different tables", () => {
       expect(
-        new Id("myTable", "myId").equals(new Id("otherTable", "myId"))
+        new IdClass("myTable", "myId").equals(new IdClass("otherTable", "myId"))
       ).toBe(false);
     });
 
     test("should be false for different id strings", () => {
       expect(
-        new Id("myTable", "myId").equals(new Id("myTable", "otherId"))
+        new IdClass("myTable", "myId").equals(new IdClass("myTable", "otherId"))
       ).toBe(false);
     });
 
     test("should be false for null", () => {
-      expect(new Id("myTable", "myId").equals(null)).toBe(false);
+      expect(new IdClass("myTable", "myId").equals(null)).toBe(false);
     });
   });
 
   test("JSON round trips", () => {
-    const originalId = new Id("myTable", "myId");
-    const recreatedId = Id.fromJSON(originalId.toJSON());
-    expect(originalId.equals(recreatedId));
+    const originalId = new IdClass("myTable", "myId");
+    const recreatedId = IdClass.fromJSON(originalId.toJSON());
+    expect(originalId).toEqual(recreatedId);
     expect(recreatedId).toHaveProperty("tableName", "myTable");
     expect(recreatedId).toHaveProperty("id", "myId");
   });

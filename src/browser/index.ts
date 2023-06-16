@@ -28,7 +28,6 @@ export type {
 } from "./sync/optimistic_updates.js";
 export type { QueryToken } from "./sync/udf_path_utils.js";
 export { ConvexHttpClient } from "./http_client.js";
-export * from "../api/index.js";
 export type { QueryJournal } from "./sync/protocol.js";
 /** @internal */
 export type { UserIdentityAttributes } from "./sync/protocol.js";

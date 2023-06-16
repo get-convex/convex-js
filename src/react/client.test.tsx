@@ -3,14 +3,11 @@
  */
 import { test, expect } from "@jest/globals";
 
-import {
-  ConvexReactClient,
-  createMutation,
-  useQueryGeneric,
-} from "./client.js";
+import { ConvexReactClient, createMutation, useQuery } from "./client.js";
 import { ConvexProvider } from "./index.js";
 import React from "react";
 import { renderHook } from "@testing-library/react-hooks";
+import { anyApi } from "../server/api.js";
 
 const address = "https://127.0.0.1:3001";
 
@@ -23,18 +20,21 @@ describe("ConvexReactClient", () => {
 describe("createMutation", () => {
   test("Optimistic updates can be created", () => {
     const client = new ConvexReactClient(address);
-    createMutation("myMutation", client).withOptimisticUpdate(() => {
-      // no update
-    });
-  });
-
-  test("Specifying an optimistic update twice produces an error", () => {
-    const client = new ConvexReactClient(address);
-    const mutation = createMutation("myMutation", client).withOptimisticUpdate(
+    createMutation(anyApi.myMutation.default, client).withOptimisticUpdate(
       () => {
         // no update
       }
     );
+  });
+
+  test("Specifying an optimistic update twice produces an error", () => {
+    const client = new ConvexReactClient(address);
+    const mutation = createMutation(
+      anyApi.myMutation.default,
+      client
+    ).withOptimisticUpdate(() => {
+      // no update
+    });
     expect(() => {
       mutation.withOptimisticUpdate(() => {
         // no update
@@ -59,7 +59,7 @@ describe("createMutation", () => {
       timeStamp: 0,
       type: "something",
     };
-    const myMutation = createMutation("myMutation", client);
+    const myMutation = createMutation(anyApi.myMutation.default, client);
     expect(() => myMutation(fakeSyntheticEvent)).toThrow(
       "Convex function called with SyntheticEvent object."
     );
@@ -71,11 +71,11 @@ describe("useQueryGeneric", () => {
     const client = new ConvexReactClient(address);
     // Use an optimistic update to set up a query to have a result.
     void client.mutation(
-      "mutation",
+      anyApi.myMutation.default,
       {},
       {
         optimisticUpdate: localStore => {
-          localStore.setQuery("myQuery", {}, "queryResult");
+          localStore.setQuery(anyApi.myQuery.default, {}, "queryResult");
         },
       }
     );
@@ -87,9 +87,38 @@ describe("useQueryGeneric", () => {
     const wrapper = ({ children }: any) => (
       <ConvexProvider client={client}>{children}</ConvexProvider>
     );
-    const { result } = renderHook(() => useQueryGeneric("myQuery"), {
+    const { result } = renderHook(() => useQuery(anyApi.myQuery.default), {
       wrapper,
     });
     expect(result.current).toStrictEqual("queryResult");
+  });
+});
+
+describe("async query fetch", () => {
+  const client = new ConvexReactClient(address);
+
+  function optimisticUpdate() {
+    // Use an optimistic update to set up a query to have a result.
+    void client.mutation(
+      anyApi.myMutation.default,
+      {},
+      {
+        optimisticUpdate: localStore => {
+          localStore.setQuery(anyApi.myQuery.default, {}, "queryResult");
+        },
+      }
+    );
+  }
+
+  test("returns after optimistic update", async () => {
+    const queryResult = client.query(anyApi.myQuery.default, {});
+    optimisticUpdate();
+    expect(await queryResult).toStrictEqual("queryResult");
+  });
+
+  test("returns existing result", async () => {
+    optimisticUpdate();
+    const queryResult = client.query(anyApi.myQuery.default, {});
+    expect(await queryResult).toStrictEqual("queryResult");
   });
 });
