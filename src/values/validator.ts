@@ -64,8 +64,6 @@ export type ValidatorJSON =
     }
   | { type: "id"; tableName: string }
   | { type: "array"; value: ValidatorJSON }
-  | { type: "set"; value: ValidatorJSON }
-  | { type: "map"; keys: ValidatorJSON; values: ValidatorJSON }
   | { type: "object"; value: Record<string, ObjectFieldType> }
   | { type: "union"; value: ValidatorJSON[] };
 
@@ -87,10 +85,22 @@ export const v = {
   null(): Validator<null> {
     return new Validator({ type: "null" }, false);
   },
+  /**
+   * Alias for `v.float64()`
+   */
   number(): Validator<number> {
     return new Validator({ type: "number" }, false);
   },
+  float64(): Validator<number> {
+    return new Validator({ type: "number" }, false);
+  },
+  /**
+   * @deprecated Use `v.int64()` instead
+   */
   bigint(): Validator<bigint> {
+    return new Validator({ type: "bigint" }, false);
+  },
+  int64(): Validator<bigint> {
     return new Validator({ type: "bigint" }, false);
   },
   boolean(): Validator<boolean> {
@@ -110,22 +120,6 @@ export const v = {
   },
   array<T>(values: Validator<T, false, any>): Validator<T[]> {
     return new Validator({ type: "array", value: values.json }, false);
-  },
-  set<T>(values: Validator<T, false, any>): Validator<Set<T>> {
-    return new Validator({ type: "set", value: values.json }, false);
-  },
-  map<K, V>(
-    keys: Validator<K, false, any>,
-    values: Validator<V, false, any>
-  ): Validator<Map<K, V>> {
-    return new Validator(
-      {
-        type: "map",
-        keys: keys.json,
-        values: values.json,
-      },
-      false
-    );
   },
   object<T extends PropertyValidators>(schema: T): ObjectValidator<T> {
     return new Validator(

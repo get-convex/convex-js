@@ -8,7 +8,6 @@ import {
   changeSpinner,
   logFailure,
   logFinishedStep,
-  stopSpinner,
   logError,
 } from "../../bundler/context.js";
 import {
@@ -36,7 +35,7 @@ type SchemaState =
   | { state: "validated" }
   | { state: "active" }
   | { state: "overwritten" }
-  | { state: "failed"; error: string };
+  | { state: "failed"; error: string; tableName?: string };
 
 type SchemaStateResponse = {
   indexes: IndexMetadata[];
@@ -93,7 +92,6 @@ export async function pushSchema(
   );
   const schemaState = await waitForReadySchema(ctx, origin, adminKey, schemaId);
   logIndexChanges(ctx, data, dryRun);
-  stopSpinner(ctx);
   return { schemaId, schemaState };
 }
 
@@ -131,11 +129,15 @@ async function waitForReadySchema(
       // Schema validation failed. This could be either because the data
       // is bad or the schema is wrong. Classify this as a filesystem error
       // because adjusting `schema.ts` is the most normal next step.
+      logFailure(ctx, "Schema validation failed");
       logError(ctx, chalk.red(`${result.data.schemaState.error}`));
-      return await ctx.crash(1, "invalid filesystem data");
+      return await ctx.crash(1, {
+        "invalid filesystem or db data":
+          result.data.schemaState.tableName ?? null,
+      });
 
     case "overwritten":
-      logError(ctx, chalk.red(`Schema was overwritten by another push.`));
+      logFailure(ctx, `Schema was overwritten by another push.`);
       return await ctx.crash(1, "fatal");
     case "validated":
       logFinishedStep(ctx, "Schema validation complete.");

@@ -6,7 +6,7 @@ import { test, expect } from "@jest/globals";
 import { ConvexReactClient, createMutation, useQuery } from "./client.js";
 import { ConvexProvider } from "./index.js";
 import React from "react";
-import { renderHook } from "@testing-library/react-hooks";
+import { renderHook } from "@testing-library/react";
 import { anyApi } from "../server/api.js";
 
 const address = "https://127.0.0.1:3001";

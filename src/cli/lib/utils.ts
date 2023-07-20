@@ -6,7 +6,7 @@ import path from "path";
 import os from "os";
 import { z } from "zod";
 
-import { ProjectConfig, readProjectConfig } from "./config.js";
+import { ProjectConfig } from "./config.js";
 
 import {
   Context,
@@ -72,7 +72,7 @@ export async function logAndHandleAxiosError(
     }
 
     if (res.status === 400) {
-      error_type = "invalid filesystem data";
+      error_type = "invalid filesystem or env vars";
     } else if (res.status === 401) {
       error_type = "fatal";
       msg = `${msg}\nAuthenticate with \`npx convex dev\``;
@@ -81,7 +81,7 @@ export async function logAndHandleAxiosError(
       msg = `${msg}: ${res.config.url}`;
     }
 
-    logError(ctx, chalk.red(msg));
+    logError(ctx, chalk.red(msg.trim()));
   } else {
     logError(ctx, chalk.red(err));
   }
@@ -504,6 +504,13 @@ const wait = function (waitMs: number) {
   });
 };
 
+export function waitForever() {
+  // This never resolves
+  return new Promise(_ => {
+    // ignore
+  });
+}
+
 // We can eventually switch to something like `filesize` for i18n and
 // more robust formatting, but let's keep our CLI bundle small for now.
 export function formatSize(n: number): string {
@@ -605,19 +612,18 @@ export async function isInExistingProject(ctx: Context) {
   return !!parentConvexJson;
 }
 
-export async function getConfiguredDeploymentOrCrashIfNoConfig(ctx: Context) {
+export async function getConfiguredDeploymentOrCrash(
+  ctx: Context
+): Promise<string> {
   const configuredDeployment = await getConfiguredDeployment(ctx);
-  if (configuredDeployment === null) {
-    const { projectConfig } = await readProjectConfig(ctx);
-    if (projectConfig.team === undefined || projectConfig.team === undefined) {
-      logFailure(
-        ctx,
-        "No CONVEX_DEPLOYMENT set, run `npx convex dev` to configure a Convex project"
-      );
-      return await ctx.crash(1, "invalid filesystem data");
-    }
+  if (configuredDeployment !== null) {
+    return configuredDeployment;
   }
-  return configuredDeployment;
+  logFailure(
+    ctx,
+    "No CONVEX_DEPLOYMENT set, run `npx convex dev` to configure a Convex project"
+  );
+  return await ctx.crash(1, "invalid filesystem data");
 }
 
 export async function getConfiguredDeployment(ctx: Context) {

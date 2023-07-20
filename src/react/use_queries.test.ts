@@ -5,7 +5,7 @@
 import { RequestForQueries, useQueriesHelper } from "./use_queries";
 import { test, expect, jest } from "@jest/globals";
 import FakeWatch from "../test/fake_watch";
-import { act, renderHook } from "@testing-library/react-hooks";
+import { act, renderHook } from "@testing-library/react";
 import { anyApi } from "../server/api.js";
 
 test("Adding a new query", () => {

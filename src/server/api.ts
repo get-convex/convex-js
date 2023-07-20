@@ -79,6 +79,10 @@ const functionName = Symbol.for("functionName");
 export function getFunctionName(
   functionReference: AnyFunctionReference
 ): string {
+  // Both a legacy thing and also a convenience for interactive use:
+  // the types won't check but a string is always allowed at runtime.
+  if (typeof functionReference === "string") return functionReference;
+
   // Two different runtime values for FunctionReference implement this
   // interface: api objects returned from `createApi()` and standalone
   // function reference objects returned from makeFunctionReference.
@@ -251,6 +255,13 @@ export type FilterApi<API, Predicate> = Expand<{
 }>;
 
 /**
+ * Given an api of type API and a FunctionReference subtype, return an api object
+ * containing only the function references that match.
+ *
+ * ```ts
+ * const q = filterApi<typeof api, FunctionReference<"query">>(api)
+ * ```
+ *
  * @public
  */
 export function filterApi<API, Predicate>(api: API): FilterApi<API, Predicate> {
@@ -427,6 +438,8 @@ export type ArgsAndOptions<
 export type FunctionReturnType<FuncRef extends AnyFunctionReference> =
   FuncRef["_returnType"];
 
+type UndefinedToNull<T> = T extends void ? null : T;
+
 /**
  * Convert the return type of a function to it's client-facing format.
  *
@@ -434,4 +447,4 @@ export type FunctionReturnType<FuncRef extends AnyFunctionReference> =
  * - Converting `undefined` and `void` to `null`
  * - Removing all `Promise` wrappers
  */
-type ConvertReturnType<T> = Awaited<T> extends void ? null : Awaited<T>;
+export type ConvertReturnType<T> = UndefinedToNull<Awaited<T>>;

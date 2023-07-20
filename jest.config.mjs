@@ -1,5 +1,4 @@
 export default {
-  transform: { "\\.(ts)$": "ts-jest", "\\.(tsx)$": "ts-jest" },
   testEnvironment: "node",
   testPathIgnorePatterns: ["/node_modules/", "/dist/"],
   // .js always uses the module type of the nearest package.json
@@ -11,13 +10,17 @@ export default {
   // to use .js file extensions.
   moduleNameMapper: {
     "^(\\.{1,2}/.*)\\.js$": "$1",
-    // Workaround from https://github.com/facebook/jest/issues/12270#issuecomment-1034792989
-    "#ansi-styles": "chalk/source/vendor/ansi-styles/index.js",
-    "#supports-color": "chalk/source/vendor/supports-color/index.js",
   },
-  globals: {
-    "ts-jest": {
-      useESM: true,
-    },
+  transform: {
+    // https://kulshekhar.github.io/ts-jest/docs/getting-started/options/
+    // '^.+\\.[tj]sx?$' to process js/ts with `ts-jest`
+    // '^.+\\.m?[tj]sx?$' to process js/ts/mjs/mts with `ts-jest`
+    "^.+\\.m?[tj]sx?$": [
+      "ts-jest",
+      {
+        useESM: true,
+      },
+    ],
   },
+  resolver: `./src/test/test_resolver.js`,
 };

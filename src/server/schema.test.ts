@@ -17,13 +17,12 @@ describe("DataModelFromSchemaDefinition", () => {
         ref: v.id("reference"),
         null: v.null(),
         number: v.number(),
-        bigint: v.bigint(),
+        float64: v.float64(),
+        int64: v.int64(),
         boolean: v.boolean(),
         string: v.string(),
         bytes: v.bytes(),
         array: v.array(v.boolean()),
-        set: v.set(v.number()),
-        map: v.map(v.string(), v.number()),
       }),
     });
     type DataModel = DataModelFromSchemaDefinition<typeof schema>;
@@ -33,13 +32,12 @@ describe("DataModelFromSchemaDefinition", () => {
       ref: GenericId<"reference">;
       null: null;
       number: number;
-      bigint: bigint;
+      float64: number;
+      int64: bigint;
       boolean: boolean;
       string: string;
       array: boolean[];
       bytes: ArrayBuffer;
-      set: Set<number>;
-      map: Map<string, number>;
     };
     type ExpectedFieldPaths =
       | "_id"
@@ -47,13 +45,12 @@ describe("DataModelFromSchemaDefinition", () => {
       | "ref"
       | "null"
       | "number"
-      | "bigint"
+      | "float64"
+      | "int64"
       | "boolean"
       | "string"
       | "bytes"
-      | "array"
-      | "set"
-      | "map";
+      | "array";
 
     type ExpectedDataModel = {
       table: {
@@ -274,7 +271,7 @@ describe("DataModelFromSchemaDefinition", () => {
         required: v.string(),
         optional: v.optional(v.boolean()),
         nested: v.object({
-          required: v.bigint(),
+          required: v.int64(),
           optional: v.optional(v.number()),
         }),
       }),
@@ -455,13 +452,12 @@ describe("JsonTypesFromSchema", () => {
       ref: v.id("reference"),
       nullField: v.null(),
       numberField: v.number(),
-      bigintField: v.bigint(),
+      float64Field: v.float64(),
+      int64Field: v.int64(),
       booleanField: v.boolean(),
       stringField: v.string(),
       bytesField: v.bytes(),
       arrayField: v.array(v.boolean()),
-      setField: v.set(v.number()),
-      mapField: v.map(v.string(), v.number()),
       anyField: v.any(),
       literalBigint: v.literal(1n),
       literalNumber: v.literal(0.0),
@@ -479,24 +475,13 @@ describe("JsonTypesFromSchema", () => {
         },
         nullField: { fieldType: { type: "null" }, optional: false },
         numberField: { fieldType: { type: "number" }, optional: false },
-        bigintField: { fieldType: { type: "bigint" }, optional: false },
+        float64Field: { fieldType: { type: "number" }, optional: false },
+        int64Field: { fieldType: { type: "bigint" }, optional: false },
         booleanField: { fieldType: { type: "boolean" }, optional: false },
         stringField: { fieldType: { type: "string" }, optional: false },
         bytesField: { fieldType: { type: "bytes" }, optional: false },
         arrayField: {
           fieldType: { type: "array", value: { type: "boolean" } },
-          optional: false,
-        },
-        setField: {
-          fieldType: { type: "set", value: { type: "number" } },
-          optional: false,
-        },
-        mapField: {
-          fieldType: {
-            type: "map",
-            keys: { type: "string" },
-            values: { type: "number" },
-          },
           optional: false,
         },
         anyField: { fieldType: { type: "any" }, optional: false },

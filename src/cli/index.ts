@@ -22,7 +22,8 @@ import { convexImport } from "./convexImport.js";
 import { dev } from "./dev.js";
 import { deploy } from "./deploy.js";
 
-const MINIMUM_MAJOR_VERSION = 14;
+const MINIMUM_MAJOR_VERSION = 16;
+const MINIMUM_MINOR_VERSION = 15;
 
 async function main() {
   // If you want to use `@sentry/tracing` in your project directly, use a named import instead:
@@ -46,10 +47,15 @@ async function main() {
 
   const nodeVersion = process.versions.node;
   const majorVersion = parseInt(nodeVersion.split(".")[0], 10);
-  if (majorVersion < MINIMUM_MAJOR_VERSION) {
+  const minorVersion = parseInt(nodeVersion.split(".")[1], 10);
+  if (
+    majorVersion < MINIMUM_MAJOR_VERSION ||
+    (majorVersion === MINIMUM_MAJOR_VERSION &&
+      minorVersion < MINIMUM_MINOR_VERSION)
+  ) {
     console.error(
       chalk.red(
-        `Your Node version ${nodeVersion} is too old. Convex requires at least Node v${MINIMUM_MAJOR_VERSION}.`
+        `Your Node version ${nodeVersion} is too old. Convex requires at least Node v${MINIMUM_MAJOR_VERSION}.${MINIMUM_MINOR_VERSION}`
       )
     );
     console.error(

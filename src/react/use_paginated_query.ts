@@ -83,6 +83,7 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
       `\`options.initialNumItems\` must be a positive number. Received \`${options?.initialNumItems}\`.`
     );
   }
+  const queryName = getFunctionName(query);
   const createInitialState = useMemo(() => {
     return () => {
       const id = nextPaginationId();
@@ -113,8 +114,7 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
   }, [
     // eslint-disable-next-line react-hooks/exhaustive-deps
     JSON.stringify(convexToJson(args as Value)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    getFunctionName(query),
+    queryName,
     options.initialNumItems,
   ]);
 

@@ -52,100 +52,6 @@ export type JSONValue =
 export type Id<TableName extends string> = string & { __tableName: TableName };
 
 /**
- * !!!! DEPRECATED !!!!
- *
- * An identifier for a document in Convex in the legacy class format.
- *
- * Convex documents are uniquely identified by their `Id`, which is accessible
- * on the `_id` field. To learn more, see [Document IDs](https://docs.convex.dev/database/document-ids).
- *
- * Documents can be loaded using `db.get(id)` in query and mutation functions.
- *
- * **Important**: Use `myId.equals(otherId)` to check for equality.
- * Using `===` will not work because two different instances of `Id` can refer
- * to the same document.
- *
- * @typeParam TableName - A string literal type of the table name (like "users").
- *
- * @deprecated - IDs should be strings, and use the `Id<"myTable">` type. This class
- * still exists to help transition older code using class IDs to using string IDs.
- * @public
- */
-export class IdClass<TableName extends string> {
-  /**
-   * The table name this {@link GenericId} references.
-   */
-  public readonly tableName: TableName;
-
-  /**
-   * The identifier string.
-   *
-   * This is encoded in URL-safe base 64 (uses `-` and `_`).
-   */
-  public readonly id: string;
-
-  constructor(tableName: TableName, id: string) {
-    this.tableName = tableName;
-    this.id = id;
-  }
-
-  /**
-   * Check if this {@link GenericId} refers to the same document as another {@link GenericId}.
-   *
-   * @param other - The other {@link GenericId} to compare to.
-   * @returns `true` if the objects refer to the same document.
-   */
-  equals(other: unknown): boolean {
-    if (other instanceof IdClass) {
-      return this.tableName === other.tableName && this.id === other.id;
-    }
-    return false;
-  }
-
-  /**
-   * Parse a {@link GenericId} from its JSON representation.
-   */
-  static fromJSON(obj: any): IdClass<string> {
-    if (typeof obj.$id !== "string") {
-      throw new Error(
-        `Object ${JSON.stringify(obj)} isn't a valid Id: $id isn't a string.`
-      );
-    }
-    const parts = obj.$id.split("|");
-    if (parts.length !== 2) {
-      throw new Error(
-        `Object ${JSON.stringify(obj)} isn't a valid Id: Wrong number of parts.`
-      );
-    }
-    return new IdClass(parts[0], parts[1]);
-  }
-
-  /**
-   * Convert a {@link GenericId} into its JSON representation.
-   */
-  toJSON(): JSONValue {
-    const idString = `${this.tableName}|${this.id}`;
-    return { $id: idString };
-  }
-
-  /**
-   * Convert a {@link GenericId} into its string representation.
-   *
-   * This includes the identifier but not the table name.
-   */
-  toString(): string {
-    return this.id;
-  }
-
-  /**
-   * Pretty-print this {@link GenericId} for debugging.
-   */
-  inspect(): string {
-    return `Id('${this.tableName}', '${this.id}')`;
-  }
-}
-
-/**
  * A value supported by Convex.
  *
  * Values can be:
@@ -158,7 +64,6 @@ export class IdClass<TableName extends string> {
  * @public
  */
 export type Value =
-  | IdClass<string>
   | null
   | bigint
   | number
@@ -166,8 +71,6 @@ export type Value =
   | string
   | ArrayBuffer
   | Value[]
-  | Set<Value>
-  | Map<Value, Value>
   | { [key: string]: undefined | Value };
 
 /**
@@ -247,9 +150,7 @@ export const base64ToBigInt = (DataView.prototype as any).getBigInt64
   ? modernBase64ToBigInt
   : slowBase64ToBigInt;
 
-const MAX_IDENTIFIER_LEN = 64;
-const ALL_UNDERSCORES = /^_+$/;
-const IDENTIFIER_REGEX = /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/;
+const MAX_IDENTIFIER_LEN = 1024;
 
 function validateObjectField(k: string) {
   if (k.length === 0) {
@@ -263,17 +164,21 @@ function validateObjectField(k: string) {
   if (k.startsWith("$")) {
     throw new Error(`Field name ${k} starts with a '$', which is reserved.`);
   }
-  if (ALL_UNDERSCORES.test(k)) {
-    throw new Error(`Field name ${k} can't exclusively be underscores.`);
-  }
-  if (!IDENTIFIER_REGEX.test(k)) {
-    throw new Error(
-      `Field name ${k} must only contain alphanumeric characters or underscores and can't start with a number.`
-    );
+  for (let i = 0; i < k.length; i += 1) {
+    const charCode = k.charCodeAt(i);
+    // Non-control ASCII characters
+    if (charCode < 32 || charCode >= 127) {
+      throw new Error(
+        `Field name ${k} has invalid character '${k[i]}': Field names can only contain non-control ASCII characters`
+      );
+    }
   }
 }
 
-function jsonToConvexInternal(value: JSONValue): Value {
+function jsonToConvexInternal(
+  value: JSONValue,
+  allowMapsAndSets: boolean
+): Value {
   if (value === null) {
     return value;
   }
@@ -287,7 +192,7 @@ function jsonToConvexInternal(value: JSONValue): Value {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map(jsonToConvexInternal);
+    return value.map(value => jsonToConvexInternal(value, allowMapsAndSets));
   }
   if (typeof value !== "object") {
     throw new Error(`Unexpected type of ${value}`);
@@ -295,9 +200,6 @@ function jsonToConvexInternal(value: JSONValue): Value {
   const entries = Object.entries(value);
   if (entries.length === 1) {
     const key = entries[0][0];
-    if (key === "$id" || key === "$weakRef" || key === "$strongRef") {
-      return IdClass.fromJSON(value);
-    }
     if (key === "$bytes") {
       if (typeof value.$bytes !== "string") {
         throw new Error(`Malformed $bytes field on ${value}`);
@@ -331,28 +233,40 @@ function jsonToConvexInternal(value: JSONValue): Value {
       if (!Array.isArray(value.$set)) {
         throw new Error(`Malformed $set field on ${value}`);
       }
-      return new Set(value.$set.map(jsonToConvexInternal));
+      if (!allowMapsAndSets) {
+        throw new Error(
+          `Received a Set which is no longer supported as a Convex type, with values: ${value.$set}.`
+        );
+      }
+      return new Set(
+        value.$set.map(value => jsonToConvexInternal(value, allowMapsAndSets))
+      ) as any;
     }
     if (key === "$map") {
       if (!Array.isArray(value.$map)) {
         throw new Error(`Malformed $map field on ${value}`);
+      }
+      if (!allowMapsAndSets) {
+        throw new Error(
+          `Received a Map which is no longer supported as a Convex type, with entries: ${value.$map}.`
+        );
       }
       const map = new Map();
       for (const pair of value.$map) {
         if (!Array.isArray(pair) || pair.length !== 2) {
           throw new Error(`Malformed pair in $map ${value}`);
         }
-        const k = jsonToConvexInternal(pair[0]);
-        const v = jsonToConvexInternal(pair[1]);
+        const k = jsonToConvexInternal(pair[0], allowMapsAndSets);
+        const v = jsonToConvexInternal(pair[1], allowMapsAndSets);
         map.set(k, v);
       }
-      return map;
+      return map as any;
     }
   }
   const out: { [key: string]: Value } = {};
   for (const [k, v] of Object.entries(value)) {
     validateObjectField(k);
-    out[k] = jsonToConvexInternal(v);
+    out[k] = jsonToConvexInternal(v, allowMapsAndSets);
   }
   return out;
 }
@@ -369,8 +283,14 @@ function jsonToConvexInternal(value: JSONValue): Value {
  *
  * @public
  */
-export function jsonToConvex(value: JSONValue): Value {
-  return jsonToConvexInternal(value);
+export function jsonToConvex(
+  value: JSONValue,
+  /**
+   * @internal
+   */
+  allowMapsAndSets = false
+): Value {
+  return jsonToConvexInternal(value, allowMapsAndSets);
 }
 
 function stringifyValueForError(value: any) {
@@ -395,7 +315,9 @@ function convexToJsonInternal(
   value: Value,
   originalValue: Value,
   context: string,
-  includeTopLevelUndefined: boolean
+  includeTopLevelUndefined: boolean,
+  // Used to support old versions that allowed Maps and Sets
+  allowMapsAndSets: boolean
 ): JSONValue {
   if (value === undefined) {
     const contextText =
@@ -409,9 +331,6 @@ function convexToJsonInternal(
   }
   if (value === null) {
     return value;
-  }
-  if (value instanceof IdClass) {
-    return value.toJSON();
   }
   if (typeof value === "bigint") {
     if (value < MIN_INT64 || MAX_INT64 < value) {
@@ -441,35 +360,64 @@ function convexToJsonInternal(
   }
   if (Array.isArray(value)) {
     return value.map((value, i) =>
-      convexToJsonInternal(value, originalValue, context + `[${i}]`, false)
+      convexToJsonInternal(
+        value,
+        originalValue,
+        context + `[${i}]`,
+        false,
+        allowMapsAndSets
+      )
     );
   }
   if (value instanceof Set) {
+    if (!allowMapsAndSets) {
+      throw new Error(
+        errorMessageForUnsupportedType(
+          context,
+          "Set",
+          [...value],
+          originalValue
+        )
+      );
+    }
     return {
       $set: [...value].map((value, i) =>
         convexToJsonInternal(
           value,
           originalValue,
           context + `.keys()[${i}]`,
-          false
+          false,
+          allowMapsAndSets
         )
       ),
     };
   }
   if (value instanceof Map) {
+    if (!allowMapsAndSets) {
+      throw new Error(
+        errorMessageForUnsupportedType(
+          context,
+          "Map",
+          [...value],
+          originalValue
+        )
+      );
+    }
     return {
       $map: [...value].map(([k, v], i) => {
         const jsonKey = convexToJsonInternal(
           k,
           originalValue,
           context + `.keys()[${i}]`,
-          false
+          false,
+          allowMapsAndSets
         );
         const jsonValue = convexToJsonInternal(
           v,
           originalValue,
           context + `.values()[${i}]`,
-          false
+          false,
+          allowMapsAndSets
         );
         return [jsonKey, jsonValue];
       }),
@@ -478,29 +426,23 @@ function convexToJsonInternal(
 
   if (!isSimpleObject(value)) {
     const theType = value?.constructor?.name;
-    const typeMsg = theType ? `${theType} ` : "";
-    if (context) {
-      throw new Error(
-        `${typeMsg}${stringifyValueForError(
-          value
-        )} is not a supported Convex type (present at path ${context} in original object ${stringifyValueForError(
-          originalValue
-        )}). To learn about Convex's supported types, see https://docs.convex.dev/using/types.`
-      );
-    } else {
-      throw new Error(
-        `${typeMsg}${stringifyValueForError(
-          value
-        )} is not a supported Convex type.`
-      );
-    }
+    const typeName = theType ? `${theType} ` : "";
+    throw new Error(
+      errorMessageForUnsupportedType(context, typeName, value, originalValue)
+    );
   }
 
   const out: { [key: string]: JSONValue } = {};
   for (const [k, v] of Object.entries(value)) {
     if (v !== undefined) {
       validateObjectField(k);
-      out[k] = convexToJsonInternal(v, originalValue, context + `.${k}`, false);
+      out[k] = convexToJsonInternal(
+        v,
+        originalValue,
+        context + `.${k}`,
+        false,
+        allowMapsAndSets
+      );
     } else if (includeTopLevelUndefined) {
       validateObjectField(k);
       out[k] = convexOrUndefinedToJsonInternal(
@@ -511,6 +453,25 @@ function convexToJsonInternal(
     }
   }
   return out;
+}
+
+function errorMessageForUnsupportedType(
+  context: string,
+  typeName: string,
+  value: any,
+  originalValue: any
+) {
+  if (context) {
+    return `${typeName}${stringifyValueForError(
+      value
+    )} is not a supported Convex type (present at path ${context} in original object ${stringifyValueForError(
+      originalValue
+    )}). To learn about Convex's supported types, see https://docs.convex.dev/using/types.`;
+  } else {
+    return `${typeName}${stringifyValueForError(
+      value
+    )} is not a supported Convex type.`;
+  }
 }
 
 // convexOrUndefinedToJsonInternal wrapper exists so we can pipe through the
@@ -531,7 +492,7 @@ function convexOrUndefinedToJsonInternal(
         )} but original value is undefined`
       );
     }
-    return convexToJsonInternal(value, originalValue, context, false);
+    return convexToJsonInternal(value, originalValue, context, false, false);
   }
 }
 
@@ -547,8 +508,14 @@ function convexOrUndefinedToJsonInternal(
  *
  * @public
  */
-export function convexToJson(value: Value): JSONValue {
-  return convexToJsonInternal(value, value, "", false);
+export function convexToJson(
+  value: Value,
+  /**
+   * @internal
+   */
+  allowMapsAndSets = false
+): JSONValue {
+  return convexToJsonInternal(value, value, "", false, allowMapsAndSets);
 }
 
 // Convert a Convex value or `undefined` into its JSON representation.
@@ -565,5 +532,5 @@ export function convexOrUndefinedToJson(value: Value | undefined): JSONValue {
  * @returns The JSON representation of `value`.
  */
 export function patchValueToJson(value: Value): JSONValue {
-  return convexToJsonInternal(value, value, "", true);
+  return convexToJsonInternal(value, value, "", true, false);
 }

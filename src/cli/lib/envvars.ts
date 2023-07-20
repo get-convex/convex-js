@@ -4,120 +4,26 @@
 import chalk from "chalk";
 import * as dotenv from "dotenv";
 
-import inquirer from "inquirer";
-import { Context, logFinishedStep } from "../../bundler/context";
+import { Context } from "../../bundler/context";
 import { loadPackageJson } from "./utils";
 
 const FRAMEWORKS = ["create-react-app", "Next.js", "Vite", "Remix"] as const;
-export type Framework = (typeof FRAMEWORKS)[number];
+type Framework = (typeof FRAMEWORKS)[number];
 
-export async function offerToWriteToEnv(
-  ctx: Context,
-  type: "dev" | "prod",
-  value: string,
-  saveUrl: "yes" | "no" | "ask" = "ask" as const
-) {
-  const write = await askAboutWritingToEnv(ctx, type, value, saveUrl);
-  await writeToEnv(ctx, write, value);
-  if (write) {
-    const { envFile, envVar } = write;
-    logFinishedStep(
-      ctx,
-      `Saved ${type} deployment URL as ${envVar} to ${envFile}`
-    );
-  }
-}
-
-export type WriteConfig = {
+type ConvexUrlWriteConfig = {
   envFile: string;
-  type: string;
   envVar: string;
   oldValue?: string;
 } | null;
 
-export async function askAboutWritingToEnv(
+export async function writeConvexUrlToEnvFile(
   ctx: Context,
-  type: "dev" | "prod",
-  value: string | null,
-  saveUrl: "yes" | "no" | "ask" = "ask" as const
-): Promise<WriteConfig> {
-  if (saveUrl === "no") {
-    return null;
-  }
-
-  const { detectedFramework, envVar } = await suggestedEnvVarName(ctx);
-
-  if (detectedFramework === "Remix" && type === "prod") {
-    return null;
-  }
-
-  const { envFile, existing } =
-    type === "dev"
-      ? suggestedDevEnvFile(ctx, detectedFramework)
-      : suggestedProdEnvFile(ctx);
-
-  if (existing) {
-    const config = dotenv.parse(ctx.fs.readUtf8File(envFile));
-
-    const matching = Object.keys(config).filter(key => EXPECTED_NAMES.has(key));
-    if (matching.length > 1) {
-      console.error(
-        chalk.yellow(
-          `Found multiple CONVEX_URL environment variables in ${envFile} so cannot update automatically.`
-        )
-      );
-      return null;
-    }
-    if (matching.length === 1) {
-      const [envVar, oldValue] = [matching[0], config[matching[0]]];
-      if (oldValue === value) {
-        return null;
-      }
-      if (Object.values(config).filter(v => v === oldValue).length !== 1) {
-        chalk.yellow(`Can't safely modify ${envFile}, please edit manually.`);
-        return null;
-      }
-      if (
-        saveUrl === "yes" ||
-        (await promptAboutSaving(type, envVar, envFile))
-      ) {
-        return { envFile, type, envVar, oldValue };
-      }
-      return null;
-    }
-  }
-
-  if (saveUrl === "yes" || (await promptAboutSaving(type, envVar, envFile))) {
-    return { envFile, type, envVar };
-  }
-
-  return null;
-}
-
-async function promptAboutSaving(
-  type: "dev" | "prod",
-  envVar: string,
-  envFile: string
-) {
-  return (
-    await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "updateEnvFile",
-        message: `Save ${type} deployment URL as ${envVar} to ${envFile}?`,
-        default: true,
-      },
-    ])
-  ).updateEnvFile;
-}
-
-export async function writeToEnv(
-  ctx: Context,
-  writeConfig: WriteConfig,
   value: string
-) {
-  if (!writeConfig) {
-    return;
+): Promise<ConvexUrlWriteConfig> {
+  const writeConfig = await envVarWriteConfig(ctx, value);
+
+  if (writeConfig === null) {
+    return null;
   }
 
   const { envFile, envVar, oldValue } = writeConfig;
@@ -136,43 +42,7 @@ export async function writeToEnv(
       ctx.fs.writeUtf8File(envFile, contents);
     }
   }
-}
-
-export function logProvisioning(
-  ctx: Context,
-  writeConfig: WriteConfig,
-  type: "dev" | "prod",
-  url: string
-) {
-  if (writeConfig) {
-    const { envVar, envFile } = writeConfig;
-    logFinishedStep(
-      ctx,
-      `Provisioned ${type} deployment and saved its URL as ${envVar} to ${envFile}`
-    );
-  } else {
-    logFinishedStep(
-      ctx,
-      `Provisioned ${type} deployment at ${chalk.bold(url)}`
-    );
-  }
-}
-
-export function logConfiguration(
-  ctx: Context,
-  writeConfig: WriteConfig,
-  type: "dev" | "prod",
-  url: string
-) {
-  if (writeConfig) {
-    const { envVar, envFile } = writeConfig;
-    logFinishedStep(
-      ctx,
-      `Configured ${type} deployment and saved its URL as ${envVar} to ${envFile}`
-    );
-  } else {
-    logFinishedStep(ctx, `Configured ${type} deployment at ${chalk.bold(url)}`);
-  }
+  return writeConfig;
 }
 
 export async function suggestedEnvVarName(ctx: Context): Promise<{
@@ -227,27 +97,40 @@ export async function suggestedEnvVarName(ctx: Context): Promise<{
   };
 }
 
-function suggestedProdEnvFile(ctx: Context): {
-  existing: boolean;
-  envFile: string;
-} {
-  // The most prod-looking env file that exists, or .env
-  if (ctx.fs.exists(".env.production")) {
-    return {
-      existing: true,
-      envFile: ".env.production",
-    };
+async function envVarWriteConfig(
+  ctx: Context,
+  value: string | null
+): Promise<ConvexUrlWriteConfig> {
+  const { detectedFramework, envVar } = await suggestedEnvVarName(ctx);
+
+  const { envFile, existing } = suggestedDevEnvFile(ctx, detectedFramework);
+
+  if (existing) {
+    const config = dotenv.parse(ctx.fs.readUtf8File(envFile));
+
+    const matching = Object.keys(config).filter(key => EXPECTED_NAMES.has(key));
+    if (matching.length > 1) {
+      console.error(
+        chalk.yellow(
+          `Found multiple CONVEX_URL environment variables in ${envFile} so cannot update automatically.`
+        )
+      );
+      return null;
+    }
+    if (matching.length === 1) {
+      const [envVar, oldValue] = [matching[0], config[matching[0]]];
+      if (oldValue === value) {
+        return null;
+      }
+      if (Object.values(config).filter(v => v === oldValue).length !== 1) {
+        chalk.yellow(`Can't safely modify ${envFile}, please edit manually.`);
+        return null;
+      }
+      return { envFile, envVar, oldValue };
+    }
   }
-  if (ctx.fs.exists(".env")) {
-    return {
-      existing: true,
-      envFile: ".env",
-    };
-  }
-  return {
-    existing: false,
-    envFile: ".env",
-  };
+
+  return { envFile, envVar };
 }
 
 function suggestedDevEnvFile(

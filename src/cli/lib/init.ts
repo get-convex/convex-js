@@ -9,8 +9,7 @@ import {
   showSpinner,
 } from "../../bundler/context.js";
 import { dashboardUrl } from "../dashboard.js";
-import { deploymentCredentialsOrConfigure } from "../dev.js";
-import { DeploymentType } from "./api.js";
+import { DeploymentType, createProjectProvisioningDevOrProd } from "./api.js";
 import { doCodegen, doInitCodegen } from "./codegen";
 import {
   configFilepath,
@@ -20,9 +19,8 @@ import {
   writeProjectConfig,
 } from "./config.js";
 import { writeDeploymentEnvVar } from "./deployment.js";
-import { askAboutWritingToEnv, writeToEnv } from "./envvars.js";
+import { writeConvexUrlToEnvFile } from "./envvars.js";
 import {
-  bigBrainAPI,
   functionsDir,
   loadPackageJson,
   logAndHandleAxiosError,
@@ -76,7 +74,11 @@ export async function init(
       url,
       adminKey,
       projectsRemaining,
-    } = await create_project(ctx, selectedTeam, projectName, deploymentType));
+    } = await createProjectProvisioningDevOrProd(
+      ctx,
+      { teamSlug: selectedTeam, projectName },
+      deploymentType
+    ));
 
     ({ projectConfig, modules } = await pullConfig(
       ctx,
@@ -171,37 +173,6 @@ export async function init(
   return { deploymentName, adminKey, url };
 }
 
-// This works like running `dev --once` for the first time
-// but without a push.
-// It only exists for backwards compatibility with existing
-// scripts that used `convex init` or `convex reinit`.
-export async function initOrReinitForDeprecatedCommands(
-  ctx: Context,
-  cmdOptions: {
-    team: string | null;
-    project: string | null;
-    url?: string | undefined;
-    adminKey?: string | undefined;
-  }
-) {
-  const { url } = await deploymentCredentialsOrConfigure(ctx, null, {
-    ...cmdOptions,
-    prod: false,
-  });
-  // Try the CONVEX_URL write again in case the user had an existing
-  // convex.json but didn't have CONVEX_URL in .env.local.
-  const envVarWrite = await askAboutWritingToEnv(ctx, "dev", url, "yes");
-  await writeToEnv(ctx, envVarWrite, url);
-  if (envVarWrite !== null) {
-    logMessage(
-      ctx,
-      chalk.green(
-        `Saved the dev deployment URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`
-      )
-    );
-  }
-}
-
 export async function finalizeConfiguration(
   ctx: Context,
   functionsPath: string,
@@ -209,8 +180,7 @@ export async function finalizeConfiguration(
   url: string,
   wroteToGitIgnore: boolean
 ) {
-  const envVarWrite = await askAboutWritingToEnv(ctx, "dev", url, "yes");
-  await writeToEnv(ctx, envVarWrite, url);
+  const envVarWrite = await writeConvexUrlToEnvFile(ctx, url);
   if (envVarWrite !== null) {
     logFinishedStep(
       ctx,
@@ -234,68 +204,4 @@ export async function finalizeConfiguration(
   console.error(
     "Give us feedback at https://convex.dev/community or support@convex.dev\n"
   );
-}
-
-interface CreateProjectArgs {
-  projectName: string;
-  team: string;
-  backendVersionOverride?: string;
-  deploymentType?: "prod" | "dev";
-}
-
-/** Provision a new empty project and return the origin. */
-async function create_project(
-  ctx: Context,
-  team: string,
-  projectName: string,
-  firstDeploymentType: "prod" | "dev"
-): Promise<{
-  projectSlug: string;
-  teamSlug: string;
-  deploymentName: string;
-  url: string;
-  adminKey: string;
-  projectsRemaining: number;
-}> {
-  const provisioningArgs: CreateProjectArgs = {
-    team,
-    backendVersionOverride: process.env.CONVEX_BACKEND_VERSION_OVERRIDE,
-    projectName,
-    deploymentType: firstDeploymentType,
-  };
-  const data = await bigBrainAPI(
-    ctx,
-    "POST",
-    "create_project",
-    provisioningArgs
-  );
-
-  const projectSlug = data.projectSlug;
-  const teamSlug = data.teamSlug;
-  const deploymentName = data.deploymentName;
-  const url = data.prodUrl;
-  const adminKey = data.adminKey;
-  const projectsRemaining = data.projectsRemaining;
-  if (
-    projectSlug === undefined ||
-    teamSlug === undefined ||
-    deploymentName === undefined ||
-    url === undefined ||
-    adminKey === undefined ||
-    projectsRemaining === undefined
-  ) {
-    // Okay to throw here because this is an unexpected error.
-    // eslint-disable-next-line no-restricted-syntax
-    throw new Error(
-      "Unknown error during provisioning: " + JSON.stringify(data)
-    );
-  }
-  return {
-    projectSlug,
-    teamSlug,
-    deploymentName,
-    url,
-    adminKey,
-    projectsRemaining,
-  };
 }

@@ -34,13 +34,15 @@ test("bundle finds JavaScript functions", async () => {
     false
   );
   const bundles = sorted(
-    await bundle(
-      oneoffContext,
-      dirname + "/test_fixtures/js",
-      entryPoints.isolate,
-      false,
-      "browser"
-    ),
+    (
+      await bundle(
+        oneoffContext,
+        dirname + "/test_fixtures/js",
+        entryPoints.isolate,
+        false,
+        "browser"
+      )
+    ).modules,
     b => b.path
   ).filter(bundle => !bundle.path.includes("_deps"));
   expect(bundles).toHaveLength(2);

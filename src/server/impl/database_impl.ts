@@ -22,7 +22,7 @@ export function setupReader(): DatabaseReader<GenericDataModel> {
       }
       const args = { id: convexToJson(id) };
       const syscallJSON = await performAsyncSyscall("1.0/get", args);
-      return jsonToConvex(syscallJSON) as GenericDocument;
+      return jsonToConvex(syscallJSON, true) as GenericDocument;
     },
     query: (tableName: string) => new QueryInitializerImpl(tableName),
     normalizeId: <TableName extends string>(
@@ -35,7 +35,7 @@ export function setupReader(): DatabaseReader<GenericDataModel> {
         table: tableName,
         idString: id,
       });
-      const syscallResult = jsonToConvex(syscallJSON) as any;
+      const syscallResult = jsonToConvex(syscallJSON, false) as any;
       return syscallResult.id;
     },
   };
@@ -55,7 +55,7 @@ export function setupWriter(): DatabaseWriter<GenericDataModel> {
         table,
         value: convexToJson(value),
       });
-      const syscallResult = jsonToConvex(syscallJSON) as any;
+      const syscallResult = jsonToConvex(syscallJSON, false) as any;
       return syscallResult._id;
     },
     patch: async (id, value) => {

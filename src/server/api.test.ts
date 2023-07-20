@@ -14,6 +14,7 @@ import {
   justQueries,
   justPaginatedQueries,
   PartialApi,
+  ConvertReturnType,
 } from "./api.js";
 
 /* eslint-disable @typescript-eslint/ban-types */
@@ -430,4 +431,16 @@ describe("Args", () => {
       assert<Equals<Args, ExpectedArgs>>();
     });
   });
+});
+
+test("ConvertReturnType", () => {
+  assert<Equals<ConvertReturnType<undefined>, null>>;
+
+  assert<Equals<ConvertReturnType<undefined | string>, null | string>>;
+
+  assert<Equals<ConvertReturnType<Promise<undefined>>, null>>;
+
+  assert<Equals<ConvertReturnType<Promise<undefined | string>>, null | string>>;
+
+  assert<Equals<ConvertReturnType<Promise<string>>, string>>;
 });

@@ -10,6 +10,18 @@ export type ErrorType =
   // command will then print out the error and wait for the file to change before
   // retrying.
   | "invalid filesystem data"
+  // The error was caused by either the local state (ie schema.ts content)
+  // or the state of the db (ie documents not matching the new schema).
+  // The `convex dev` command will wait for either file OR table data change
+  // to retry (if a table name is specified as the value in this Object).
+  | {
+      "invalid filesystem or db data": string | null;
+    }
+  // The error was caused by either the local state (ie schema.ts content)
+  // or the state of the deployment environment variables.
+  // The `convex dev` command will wait for either file OR env var change
+  // before retrying.
+  | "invalid filesystem or env vars"
   // The error was some transient issue (e.g. a network
   // error). This will then cause a retry after an exponential backoff.
   | "transient"
@@ -117,4 +129,18 @@ export function stopSpinner(ctx: Context) {
     ctx.spinner.stop();
     ctx.spinner = undefined;
   }
+}
+
+// Only shows the spinner if the async `fn` takes longer than `delayMs`
+export async function showSpinnerIfSlow(
+  ctx: Context,
+  message: string,
+  delayMs: number,
+  fn: () => Promise<any>
+) {
+  const timeout = setTimeout(() => {
+    showSpinner(ctx, message);
+  }, delayMs);
+  await fn();
+  clearTimeout(timeout);
 }

@@ -21,6 +21,14 @@ export function parseArgs(
 export function validateDeploymentUrl(deploymentUrl: string) {
   // Don't use things like `new URL(deploymentUrl).hostname` since these aren't
   // supported by React Native's JS environment
+  if (typeof deploymentUrl === "undefined") {
+    throw new Error(
+      `Client created with undefined deployment address. If you used an environment variable, check that it's set.`
+    );
+  }
+  if (typeof deploymentUrl !== "string") {
+    throw new Error(`Invalid deployment address: found ${deploymentUrl}".`);
+  }
   if (
     !(deploymentUrl.startsWith("http:") || deploymentUrl.startsWith("https:"))
   ) {

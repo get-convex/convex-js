@@ -14,7 +14,7 @@ import {
   showSpinner,
   logFinishedStep,
 } from "../bundler/context";
-import { getUrlAndAdminKeyForConfiguredDeployment } from "./lib/api";
+import { fetchDeploymentCredentialsProvisionProd } from "./lib/api";
 import path from "path";
 
 export const convexImport = new Command("import")
@@ -49,6 +49,8 @@ export const convexImport = new Command("import")
   .showHelpAfterError()
   .action(async (tableName: string, filePath: string, options: any) => {
     const ctx = oneoffContext;
+    const { adminKey, url: deploymentUrl } =
+      await fetchDeploymentCredentialsProvisionProd(ctx, options);
 
     if (!ctx.fs.exists(filePath)) {
       logFailure(ctx, `Error: Path ${chalk.bold(filePath)} does not exist.`);
@@ -56,9 +58,6 @@ export const convexImport = new Command("import")
     }
 
     const format = await determineFormat(ctx, filePath, options.format ?? null);
-
-    const { adminKey, url: deploymentUrl } =
-      await getUrlAndAdminKeyForConfiguredDeployment(ctx, options);
 
     await ensureHasConvexDependency(ctx, "import");
 

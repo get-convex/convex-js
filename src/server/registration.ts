@@ -270,7 +270,10 @@ export type RegisteredQuery<
   isRegistered?: true;
 
   /** @internal */
-  invokeQuery(argsStr: string): Promise<string>;
+  invokeQuery(
+    argsStr: string,
+    allowMapsAndSetsInReturnValue: boolean
+  ): Promise<string>;
 
   /** @internal */
   exportArgs(): string;

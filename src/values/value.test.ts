@@ -8,42 +8,7 @@ import {
   modernBigIntToBase64,
   convexToJson,
   jsonToConvex,
-  IdClass,
 } from "./value.js";
-
-describe("Id", () => {
-  describe(".equals", () => {
-    test("should be true for the same ids", () => {
-      expect(
-        new IdClass("myTable", "myId").equals(new IdClass("myTable", "myId"))
-      ).toBe(true);
-    });
-
-    test("should be false for different tables", () => {
-      expect(
-        new IdClass("myTable", "myId").equals(new IdClass("otherTable", "myId"))
-      ).toBe(false);
-    });
-
-    test("should be false for different id strings", () => {
-      expect(
-        new IdClass("myTable", "myId").equals(new IdClass("myTable", "otherId"))
-      ).toBe(false);
-    });
-
-    test("should be false for null", () => {
-      expect(new IdClass("myTable", "myId").equals(null)).toBe(false);
-    });
-  });
-
-  test("JSON round trips", () => {
-    const originalId = new IdClass("myTable", "myId");
-    const recreatedId = IdClass.fromJSON(originalId.toJSON());
-    expect(originalId).toEqual(recreatedId);
-    expect(recreatedId).toHaveProperty("tableName", "myTable");
-    expect(recreatedId).toHaveProperty("id", "myId");
-  });
-});
 
 describe("convexToJson", () => {
   test("serializes objects", () => {
@@ -116,7 +81,9 @@ describe("convexToJson", () => {
 
 describe("jsonToConvex", () => {
   test("deserializes object with BigInt value", () => {
-    expect(jsonToConvex({ property: { $integer: "/JxOAAAAAAA=" } })).toEqual({
+    expect(
+      jsonToConvex({ property: { $integer: "/JxOAAAAAAA=" } }, false)
+    ).toEqual({
       property: BigInt("5151996"),
     });
   });

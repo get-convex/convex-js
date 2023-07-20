@@ -38,7 +38,7 @@ async function invokeMutation<
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since queries are only running in V8.
   const requestId = "";
-  const args = jsonToConvex(JSON.parse(argsStr));
+  const args = jsonToConvex(JSON.parse(argsStr), false);
   const mutationCtx = {
     db: setupWriter(),
     auth: setupAuth(requestId),
@@ -163,11 +163,11 @@ export const internalMutationGeneric: MutationBuilder<any, "internal"> = (
 
 async function invokeQuery<
   F extends (ctx: QueryCtx<GenericDataModel>, ...args: any) => any
->(func: F, argsStr: string) {
+>(func: F, argsStr: string, allowMapsAndSetsInReturnValue: boolean) {
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since queries are only running in V8.
   const requestId = "";
-  const args = jsonToConvex(JSON.parse(argsStr));
+  const args = jsonToConvex(JSON.parse(argsStr), false);
   const queryCtx = {
     db: setupReader(),
     auth: setupAuth(requestId),
@@ -175,7 +175,12 @@ async function invokeQuery<
   };
   const result = await Promise.resolve(func(queryCtx, ...(args as any)));
   validateReturnValue(result);
-  return JSON.stringify(convexToJson(result === undefined ? null : result));
+  return JSON.stringify(
+    convexToJson(
+      result === undefined ? null : result,
+      allowMapsAndSetsInReturnValue
+    )
+  );
 }
 
 /**
@@ -208,7 +213,8 @@ export const queryGeneric: QueryBuilder<any, "public"> = (
   func.isRegistered = true;
   func.isQuery = true;
   func.isPublic = true;
-  func.invokeQuery = argsStr => invokeQuery(func, argsStr);
+  func.invokeQuery = (argsStr, allowMapsAndSetsInReturnValue) =>
+    invokeQuery(func, argsStr, allowMapsAndSetsInReturnValue);
   func.exportArgs = exportArgs(functionDefinition);
   return func;
 };
@@ -243,7 +249,7 @@ export const internalQueryGeneric: QueryBuilder<any, "internal"> = (
   func.isRegistered = true;
   func.isQuery = true;
   func.isInternal = true;
-  func.invokeQuery = argsStr => invokeQuery(func as any, argsStr);
+  func.invokeQuery = argsStr => invokeQuery(func as any, argsStr, false);
   func.exportArgs = exportArgs(functionDefinition);
   return func;
 };
@@ -253,7 +259,7 @@ async function invokeAction<F extends (ctx: ActionCtx, ...args: any) => any>(
   requestId: string,
   argsStr: string
 ) {
-  const args = jsonToConvex(JSON.parse(argsStr));
+  const args = jsonToConvex(JSON.parse(argsStr), false);
   const calls = setupActionCalls(requestId);
   const ctx = {
     ...calls,

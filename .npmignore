@@ -8,6 +8,8 @@ temp/
 values-api-extractor.json
 jest.config.js
 *.test.ts
+*.test.tsx
+client_node_test_helpers.ts
 .eslintrc.*
 *.tgz
 test-esm.mjs

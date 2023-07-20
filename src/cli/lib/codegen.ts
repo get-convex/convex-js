@@ -239,15 +239,40 @@ export async function doCodegen({
       commonjs
     );
 
-    // Replace the codegen directory with its new contents
+    // If any files differ replace the codegen directory with its new contents
     if (!debug && !dryRun) {
       const codegenDir = path.join(functionsDirectoryPath, "_generated");
-      syncFromTemp(ctx, tempCodegenDir, codegenDir, true);
+      if (!canSkipSync(ctx, tempCodegenDir, codegenDir)) {
+        syncFromTemp(ctx, tempCodegenDir, codegenDir, true);
+      }
     }
 
     // Generated code is updated, typecheck the query and mutation functions.
     await typeCheckFunctionsInMode(ctx, typeCheckMode, functionsDirectoryPath);
   });
+}
+
+function zipLongest<T>(a: T[], b: T[]): [T?, T?][] {
+  return [...Array(Math.max(a.length, b.length)).keys()].map(i => [a[i], b[i]]);
+}
+
+function canSkipSync(ctx: Context, tempDir: TempDir, destDir: string) {
+  if (!ctx.fs.exists(destDir)) return false;
+  for (const [tmp, dest] of zipLongest(
+    [...walkDir(ctx.fs, tempDir.tmpPath)],
+    [...walkDir(ctx.fs, destDir)]
+  )) {
+    if (!tmp || !dest) return false;
+    const tmpRelPath = path.relative(tempDir.tmpPath, tmp.path);
+    const destRelPath = path.relative(destDir, dest.path);
+    if (tmpRelPath !== destRelPath) return false;
+    if (tmp.isDir !== dest.isDir) return false;
+    if (tmp.isDir) continue;
+    if (ctx.fs.readUtf8File(tmp.path) !== ctx.fs.readUtf8File(dest.path)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // TODO: this externalizes partial state to the watching dev server (eg vite)

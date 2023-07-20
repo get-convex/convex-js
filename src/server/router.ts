@@ -150,7 +150,7 @@ export class HttpRouter {
       }
       methods.set(method, handler);
       this.exactRoutes.set(spec.path, methods);
-    } else {
+    } else if ("pathPrefix" in spec) {
       if (!spec.pathPrefix.startsWith("/")) {
         throw new Error(`path '${spec.pathPrefix}' does not start with a /`);
       }
@@ -168,6 +168,10 @@ export class HttpRouter {
       }
       prefixes.set(spec.pathPrefix, handler);
       this.prefixRoutes.set(method, prefixes);
+    } else {
+      throw new Error(
+        `Invalid httpRouter route entry: must contain either field 'path' or 'pathPrefix'`
+      );
     }
   };
 

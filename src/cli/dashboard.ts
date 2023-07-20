@@ -8,7 +8,7 @@ import {
 import open from "open";
 import { Context, oneoffContext } from "../bundler/context.js";
 import { fetchTeamAndProject } from "./lib/api.js";
-import { getConfiguredDeploymentOrCrashIfNoConfig } from "./lib/utils.js";
+import { getConfiguredDeploymentOrCrash } from "./lib/utils.js";
 
 export const dashboard = new Command("dashboard")
   .description("Open the dashboard in the browser")
@@ -18,9 +18,7 @@ export const dashboard = new Command("dashboard")
   )
   .action(async options => {
     const ctx = oneoffContext;
-    const configuredDeployment = await getConfiguredDeploymentOrCrashIfNoConfig(
-      ctx
-    );
+    const configuredDeployment = await getConfiguredDeploymentOrCrash(ctx);
     const loginUrl = await dashboardUrlForConfiguredDeployment(
       ctx,
       configuredDeployment

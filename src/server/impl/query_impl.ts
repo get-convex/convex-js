@@ -104,7 +104,7 @@ export class QueryInitializerImpl
     const syscallJSON = await performAsyncSyscall("1.0/count", {
       table: this.tableName,
     });
-    const syscallResult = jsonToConvex(syscallJSON) as number;
+    const syscallResult = jsonToConvex(syscallJSON, false) as number;
     return syscallResult;
   }
 
@@ -255,7 +255,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
     if (done) {
       this.closeQuery();
     }
-    const convexValue = jsonToConvex(value);
+    const convexValue = jsonToConvex(value, true);
     return { value: convexValue, done };
   }
 
@@ -291,7 +291,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
       }
     );
     return {
-      page: page.map(jsonToConvex),
+      page: page.map((json: string) => jsonToConvex(json, true)),
       isDone,
       continueCursor,
     };

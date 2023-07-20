@@ -1,21 +1,8 @@
 import { Command, Option } from "commander";
-import ws from "ws";
-import chalk from "chalk";
-import util from "util";
-import {
-  oneoffContext,
-  Context,
-  logError,
-  logOutput,
-  logMessage,
-  logFailure,
-  logFinishedStep,
-} from "../bundler/context";
-import { getUrlAndAdminKeyForConfiguredDeployment } from "./lib/api.js";
-import { BaseConvexClient, ConvexHttpClient } from "../browser/index.js";
-import { convexToJson, Value } from "../values/value.js";
-import { checkAuthorization, performLogin } from "./lib/login.js";
+import { logFailure, oneoffContext } from "../bundler/context";
 import { watchAndPush } from "./dev.js";
+import { fetchDeploymentCredentialsProvisionProd } from "./lib/api.js";
+import { runFunctionAndLog, subscribeAndLog } from "./lib/run";
 import { ensureHasConvexDependency } from "./lib/utils.js";
 
 export const run = new Command("run")
@@ -64,14 +51,8 @@ export const run = new Command("run")
   .action(async (functionName, argsString, options) => {
     const ctx = oneoffContext;
 
-    if (!options.url || !options.adminKey) {
-      if (!(await checkAuthorization(ctx, false))) {
-        await performLogin(ctx, options);
-      }
-    }
-
     const { adminKey, url: deploymentUrl } =
-      await getUrlAndAdminKeyForConfiguredDeployment(ctx, options);
+      await fetchDeploymentCredentialsProvisionProd(ctx, options);
 
     await ensureHasConvexDependency(ctx, "run");
 
@@ -101,95 +82,25 @@ Use --no-push to run functions that are already deployed.`
         {
           once: true,
           traceEvents: false,
+          watch: false,
         }
       );
     }
 
     if (options.watch) {
-      return await subscribe(ctx, deploymentUrl, functionName, args);
+      return await subscribeAndLog(
+        ctx,
+        deploymentUrl,
+        adminKey,
+        functionName,
+        args
+      );
     }
-    return await runFunction(ctx, deploymentUrl, adminKey, functionName, args);
+    return await runFunctionAndLog(
+      ctx,
+      deploymentUrl,
+      adminKey,
+      functionName,
+      args
+    );
   });
-
-async function runFunction(
-  ctx: Context,
-  deploymentUrl: string,
-  adminKey: string,
-  functionName: string,
-  args: Value
-) {
-  const client = new ConvexHttpClient(deploymentUrl);
-  client.setAdminAuth(adminKey);
-
-  let result: Value;
-  try {
-    result = await client.function(functionName, args);
-  } catch (err) {
-    logFailure(ctx, `Failed to run function "${functionName}":`);
-    logError(ctx, chalk.red(err));
-    return await ctx.crash(1);
-  }
-
-  // `null` is the default return type
-  if (result !== null) {
-    logOutput(ctx, formatValue(result));
-  }
-}
-
-function formatValue(value: Value) {
-  const json = convexToJson(value);
-  if (process.stdout.isTTY) {
-    // TODO (Tom) add JSON syntax highlighting like https://stackoverflow.com/a/51319962/398212
-    // until then, just spit out something that isn't quite JSON because it's easy
-    return util.inspect(value, { colors: true, depth: null });
-  } else {
-    return JSON.stringify(json, null, 2);
-  }
-}
-
-async function subscribe(
-  ctx: Context,
-  deployment: string,
-  functionName: string,
-  args: Record<string, Value>
-) {
-  const client = new BaseConvexClient(
-    deployment,
-    updatedQueries => {
-      for (const _ of updatedQueries) {
-        logOutput(
-          ctx,
-          formatValue(client.localQueryResult(functionName, args)!)
-        );
-      }
-    },
-    {
-      // pretend that a Node.js 'ws' library WebSocket is a browser WebSocket
-      webSocketConstructor: ws as unknown as typeof WebSocket,
-      unsavedChangesWarning: false,
-    }
-  );
-  const { unsubscribe } = client.subscribe(functionName, args);
-  logFinishedStep(ctx, `Watching query ${functionName} on ${deployment}...`);
-
-  let done = false;
-  let onDone: (v: unknown) => void;
-  const doneP = new Promise(resolve => (onDone = resolve));
-  function sigintListener() {
-    logMessage(ctx, `Closing connection to ${deployment}...`);
-    unsubscribe();
-    void client.close();
-    process.off("SIGINT", sigintListener);
-    done = true;
-    onDone(null);
-  }
-  process.on("SIGINT", sigintListener);
-  while (!done) {
-    // loops once per day (any large value < 2**31 would work)
-    const oneDay = 24 * 60 * 60 * 1000;
-    await Promise.race([
-      doneP,
-      new Promise(resolve => setTimeout(resolve, oneDay)),
-    ]);
-  }
-}

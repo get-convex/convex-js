@@ -3,7 +3,7 @@
  */
 /* eslint-disable @typescript-eslint/ban-types */
 import { expect, jest, test } from "@jest/globals";
-import { renderHook } from "@testing-library/react-hooks";
+import { renderHook } from "@testing-library/react";
 import React from "react";
 
 import {
@@ -19,6 +19,30 @@ import { PaginatedQueryArgs, usePaginatedQuery } from "./use_paginated_query";
 import { PaginatedQueryItem } from "./use_paginated_query";
 
 const address = "https://127.0.0.1:3001";
+
+type Props = { onError: (e: Error) => void; children: any };
+class ErrorBoundary extends React.Component<Props> {
+  state: { error: Error | undefined } = { error: undefined };
+  onError: (e: Error) => void;
+
+  constructor(props: Props) {
+    super(props);
+    this.onError = props.onError;
+  }
+
+  componentDidCatch(error: Error) {
+    this.onError(error);
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return this.state.error.toString();
+    }
+
+    return this.props.children;
+  }
+}
 
 test.each([
   {
@@ -43,11 +67,18 @@ test.each([
   },
 ])("Throws an error when options is $options", ({ options, expectedError }) => {
   const convexClient = new ConvexReactClient(address);
+  let lastError: Error | undefined = undefined;
+  function updateError(e: Error) {
+    lastError = e;
+  }
+
   const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <ConvexProvider client={convexClient}>{children}</ConvexProvider>
+    <ErrorBoundary onError={updateError}>
+      <ConvexProvider client={convexClient}>{children}</ConvexProvider>
+    </ErrorBoundary>
   );
 
-  const { result } = renderHook(
+  renderHook(
     () =>
       // @ts-expect-error We're testing user programming errors
       usePaginatedQuery(makeFunctionReference<"query">("myQuery"), {}, options),
@@ -55,8 +86,8 @@ test.each([
       wrapper,
     }
   );
-  expect(result.error).not.toBeUndefined();
-  expect(result.error!.toString()).toEqual(expectedError);
+  expect(lastError).not.toBeUndefined();
+  expect(lastError!.toString()).toEqual(expectedError);
 });
 
 test("Initially returns LoadingFirstPage", () => {

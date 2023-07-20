@@ -110,15 +110,14 @@ export class ConvexHttpClient {
    * @returns A promise of the query's result.
    */
   async query<Query extends FunctionReference<"query">>(
-    query: Query | string,
+    query: Query,
     ...args: OptionalRestArgs<Query>
   ): Promise<FunctionReturnType<Query>> {
     const queryArgs = parseArgs(args[0]);
-    const name = typeof query === "string" ? query : getFunctionName(query);
+    const name = getFunctionName(query);
     const body = JSON.stringify({
       path: name,
       args: [convexToJson(queryArgs)],
-      debug: this.debug,
     });
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -140,12 +139,14 @@ export class ConvexHttpClient {
     }
     const respJSON = await response.json();
 
-    for (const line of respJSON.logLines ?? []) {
-      logToConsole("info", "query", name, line);
+    if (this.debug) {
+      for (const line of respJSON.logLines ?? []) {
+        logToConsole("info", "query", name, line);
+      }
     }
     switch (respJSON.status) {
       case "success":
-        return jsonToConvex(respJSON.value);
+        return jsonToConvex(respJSON.value, true);
       case "error":
         throw new Error(respJSON.errorMessage);
       default:
@@ -162,16 +163,14 @@ export class ConvexHttpClient {
    * @returns A promise of the mutation's result.
    */
   async mutation<Mutation extends FunctionReference<"mutation">>(
-    mutation: Mutation | string,
+    mutation: Mutation,
     ...args: OptionalRestArgs<Mutation>
   ): Promise<FunctionReturnType<Mutation>> {
     const mutationArgs = parseArgs(args[0]);
-    const name =
-      typeof mutation === "string" ? mutation : getFunctionName(mutation);
+    const name = getFunctionName(mutation);
     const body = JSON.stringify({
       path: name,
       args: [convexToJson(mutationArgs)],
-      debug: this.debug,
     });
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -192,12 +191,14 @@ export class ConvexHttpClient {
       throw new Error(await response.text());
     }
     const respJSON = await response.json();
-    for (const line of respJSON.logLines ?? []) {
-      logToConsole("info", "mutation", name, line);
+    if (this.debug) {
+      for (const line of respJSON.logLines ?? []) {
+        logToConsole("info", "mutation", name, line);
+      }
     }
     switch (respJSON.status) {
       case "success":
-        return jsonToConvex(respJSON.value);
+        return jsonToConvex(respJSON.value, true);
       case "error":
         throw new Error(respJSON.errorMessage);
       default:
@@ -214,15 +215,14 @@ export class ConvexHttpClient {
    * @returns A promise of the action's result.
    */
   async action<Action extends FunctionReference<"action">>(
-    action: Action | string,
+    action: Action,
     ...args: OptionalRestArgs<Action>
   ): Promise<FunctionReturnType<Action>> {
     const actionArgs = parseArgs(args[0]);
-    const name = typeof action === "string" ? action : getFunctionName(action);
+    const name = getFunctionName(action);
     const body = JSON.stringify({
       path: name,
       args: [convexToJson(actionArgs)],
-      debug: this.debug,
     });
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -243,12 +243,14 @@ export class ConvexHttpClient {
       throw new Error(await response.text());
     }
     const respJSON = await response.json();
-    for (const line of respJSON.logLines ?? []) {
-      logToConsole("info", "action", name, line);
+    if (this.debug) {
+      for (const line of respJSON.logLines ?? []) {
+        logToConsole("info", "action", name, line);
+      }
     }
     switch (respJSON.status) {
       case "success":
-        return jsonToConvex(respJSON.value);
+        return jsonToConvex(respJSON.value, true);
       case "error":
         throw new Error(respJSON.errorMessage);
       default:
@@ -280,7 +282,6 @@ export class ConvexHttpClient {
     const body = JSON.stringify({
       path: name,
       args: [convexToJson(functionArgs)],
-      debug: this.debug,
     });
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -301,12 +302,14 @@ export class ConvexHttpClient {
       throw new Error(await response.text());
     }
     const respJSON = await response.json();
-    for (const line of respJSON.logLines ?? []) {
-      logToConsole("info", "any", name, line);
+    if (this.debug) {
+      for (const line of respJSON.logLines ?? []) {
+        logToConsole("info", "any", name, line);
+      }
     }
     switch (respJSON.status) {
       case "success":
-        return jsonToConvex(respJSON.value);
+        return jsonToConvex(respJSON.value, true);
       case "error":
         throw new Error(respJSON.errorMessage);
       default:

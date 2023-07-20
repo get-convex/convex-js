@@ -5,6 +5,7 @@ import esbuild from "esbuild";
 import { Filesystem } from "./fs.js";
 import { Context, logFailure, logWarning } from "./context.js";
 import { wasmPlugin } from "./wasm.js";
+import { createExternalPlugin, findExactVersion } from "./external.js";
 export { nodeFs, RecordingFs } from "./fs.js";
 export type { Filesystem } from "./fs.js";
 
@@ -17,7 +18,7 @@ export function* walkDir(
   fs: Filesystem,
   dirPath: string
 ): Generator<{ isDir: boolean; path: string }, void, void> {
-  for (const dirEntry of fs.listDir(dirPath)) {
+  for (const dirEntry of fs.listDir(dirPath).sort()) {
     const childPath = path.join(dirPath, dirEntry.name);
     if (dirEntry.isDirectory()) {
       yield { isDir: true, path: childPath };
@@ -40,6 +41,7 @@ export interface Bundle {
 
 type EsBuildResult = esbuild.BuildResult & {
   outputFiles: esbuild.OutputFile[];
+  externalModulePaths: Map<string, string[]>;
 };
 
 async function doEsbuild(
@@ -48,8 +50,10 @@ async function doEsbuild(
   entryPoints: string[],
   generateSourceMaps: boolean,
   platform: esbuild.Platform,
-  chunksFolder: string
+  chunksFolder: string,
+  externalNodeModules: string[]
 ): Promise<EsBuildResult> {
+  const external = createExternalPlugin(ctx, externalNodeModules);
   try {
     const result = await esbuild.build({
       entryPoints,
@@ -59,7 +63,8 @@ async function doEsbuild(
       target: "esnext",
       outdir: "out",
       outbase: dir,
-      plugins: [wasmPlugin],
+      // The wasmPlugin should be last so it doesn't run on external modules.
+      plugins: [external.plugin, wasmPlugin],
       write: false,
       sourcemap: generateSourceMaps,
       splitting: true,
@@ -93,9 +98,13 @@ async function doEsbuild(
       }
       ctx.fs.registerPath(absPath, st);
     }
-    return result;
+    return {
+      ...result,
+      externalModulePaths: external.externalModulePaths,
+    };
   } catch (err) {
-    logFailure(ctx, `esbuild failed: ${(err as any).toString()}`);
+    // We don't print any error because esbuild already printed
+    // all the relevant information.
     return await ctx.crash(1, "invalid filesystem data");
   }
 }
@@ -106,15 +115,17 @@ export async function bundle(
   entryPoints: string[],
   generateSourceMaps: boolean,
   platform: esbuild.Platform,
-  chunksFolder = "_deps"
-): Promise<Bundle[]> {
+  chunksFolder = "_deps",
+  externalNodeModules: string[] = []
+): Promise<{ modules: Bundle[]; externalDependencies: Map<string, string> }> {
   const result = await doEsbuild(
     ctx,
     dir,
     entryPoints,
     generateSourceMaps,
     platform,
-    chunksFolder
+    chunksFolder,
+    externalNodeModules
   );
   if (result.errors.length) {
     for (const error of result.errors) {
@@ -144,11 +155,57 @@ export async function bundle(
       module.sourceMap = sourceMap;
     }
   }
-  return modules;
+
+  const externalDependencies = new Map<string, string>();
+  for (const [moduleName, modulePaths] of result.externalModulePaths) {
+    const versions: string[] = [];
+    for (const modulePath of modulePaths) {
+      try {
+        const version = await findExactVersion(ctx, moduleName, modulePath);
+        // If there is no version, we should have bundled, and not add to the list.
+        if (version === undefined) {
+          logFailure(
+            ctx,
+            `${moduleName} at ${modulePath} should have been bundled`
+          );
+          return await ctx.crash(1, "invalid filesystem data");
+        }
+        if (!versions.includes(version)) {
+          versions.push(version);
+        }
+      } catch (e: any) {
+        logFailure(
+          ctx,
+          `Failed to determine version of ${moduleName} at ${modulePath}: ${e.toString()}`
+        );
+        return await ctx.crash(1, "invalid filesystem data");
+      }
+    }
+    if (versions.length > 1) {
+      console.log(
+        chalk.yellow(
+          `warning: ${moduleName} has multiple installed versions: ${versions}. Using ${versions[0]}`
+        )
+      );
+    }
+    externalDependencies.set(moduleName, versions[0]);
+  }
+
+  return {
+    modules,
+    externalDependencies,
+  };
 }
 
 export async function bundleSchema(ctx: Context, dir: string) {
-  return bundle(ctx, dir, [path.resolve(dir, "schema.ts")], true, "browser");
+  const result = await bundle(
+    ctx,
+    dir,
+    [path.resolve(dir, "schema.ts")],
+    true,
+    "browser"
+  );
+  return result.modules;
 }
 
 export async function bundleAuthConfig(ctx: Context, dir: string) {
@@ -156,7 +213,8 @@ export async function bundleAuthConfig(ctx: Context, dir: string) {
   if (!ctx.fs.exists(authConfigPath)) {
     return [];
   }
-  return await bundle(ctx, dir, [authConfigPath], true, "browser");
+  const result = await bundle(ctx, dir, [authConfigPath], true, "browser");
+  return result.modules;
 }
 
 export async function entryPoints(

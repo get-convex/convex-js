@@ -102,7 +102,7 @@ export class RequestManager {
         status.onResult({
           success: true,
           logLines: response.logLines,
-          value: jsonToConvex(response.result),
+          value: jsonToConvex(response.result, true),
         });
     } else {
       logToConsole("error", udfType, udfPath, response.result);
@@ -115,9 +115,9 @@ export class RequestManager {
     }
 
     // We can resolve Mutation failures immediately since they don't have any
-    // side effects.
-    // TODO(presley): Add timestamp to ActionResponse so the client can read
-    // its own writes on the happy path.
+    // side effects. Actions are intentionally decoupled from
+    // queries/mutations here on the sync protocol since they have different
+    // guarantees.
     if (response.type === "ActionResponse" || !response.success) {
       onResolve();
       this.inflightRequests.delete(response.requestId);

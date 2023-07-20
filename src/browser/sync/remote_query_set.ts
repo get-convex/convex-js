@@ -37,7 +37,7 @@ export class RemoteQuerySet {
               logToConsole("info", "query", queryPath, line);
             }
           }
-          const value = jsonToConvex(modification.value ?? null);
+          const value = jsonToConvex(modification.value ?? null, true);
           this.remoteQuerySet.set(modification.queryId, {
             success: true,
             value,

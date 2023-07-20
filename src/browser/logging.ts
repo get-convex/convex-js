@@ -24,8 +24,23 @@ export function logToConsole(
   message: string
 ) {
   const prefix = prefix_for_source(source);
+
   if (type === "info") {
-    console.log(`%c[CONVEX ${prefix}(${udfPath})] ${message}`, INFO_COLOR);
+    const match = message.match(/^\[.*?\] /);
+    if (match === null) {
+      console.error(
+        `[CONVEX ${prefix}(${udfPath})] Could not parse console.log`
+      );
+      return;
+    }
+    const level = message.slice(1, match[0].length - 2);
+    const args = message.slice(match[0].length);
+
+    console.log(
+      `%c[CONVEX ${prefix}(${udfPath})] [${level}]`,
+      INFO_COLOR,
+      args
+    );
   } else {
     console.error(`[CONVEX ${prefix}(${udfPath})] ${message}`);
   }

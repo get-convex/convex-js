@@ -1,5 +1,8 @@
 import { Context, showSpinner } from "../../bundler/context.js";
-import { DeploymentType, getUrlAndAdminKeyByDeploymentType } from "./api.js";
+import {
+  DeploymentType,
+  fetchDeploymentCredentialsProvisioningDevOrProd,
+} from "./api.js";
 import { doCodegen } from "./codegen.js";
 import {
   configName,
@@ -41,10 +44,9 @@ export async function reinit(
   showSpinner(ctx, `Reinitializing project ${projectSlug}...\n`);
 
   const { deploymentName, url, adminKey } =
-    await getUrlAndAdminKeyByDeploymentType(
+    await fetchDeploymentCredentialsProvisioningDevOrProd(
       ctx,
-      projectSlug,
-      teamSlug,
+      { teamSlug, projectSlug },
       deploymentType
     );
   const { projectConfig: projectConfigFromBackend } = await pullConfig(

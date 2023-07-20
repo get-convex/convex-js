@@ -39,6 +39,7 @@ export interface AuthInfo {
 /** Type representing Convex project configuration. */
 export interface ProjectConfig {
   functions: string;
+  externalNodeModules: string[];
   // deprecated
   project?: string;
   // deprecated
@@ -49,9 +50,15 @@ export interface ProjectConfig {
   authInfo?: AuthInfo[];
 }
 
+interface NodeDependency {
+  name: string;
+  version: string;
+}
+
 export interface Config {
   projectConfig: ProjectConfig;
   modules: Bundle[];
+  nodeDependencies: NodeDependency[];
   schemaId?: string;
   udfServerVersion?: string;
   authConfig?: Bundle;
@@ -85,6 +92,19 @@ export async function parseProjectConfig(
     logError(ctx, "Expected `convex.json` to contain an object");
     return await ctx.crash(1, "invalid filesystem data");
   }
+  if (typeof obj.externalNodeModules === "undefined") {
+    obj.externalNodeModules = [];
+  } else if (
+    !Array.isArray(obj.externalNodeModules) ||
+    !obj.externalNodeModules.every((item: any) => typeof item === "string")
+  ) {
+    logError(
+      ctx,
+      "Expected `externalNodeModules` in `convex.json` to be an array of strings"
+    );
+    return await ctx.crash(1, "invalid filesystem data");
+  }
+
   if (typeof obj.functions === "undefined") {
     obj.functions = DEFAULT_FUNCTIONS_PATH;
   } else if (typeof obj.functions !== "string") {
@@ -189,7 +209,10 @@ export async function readProjectConfig(ctx: Context): Promise<{
 }> {
   if (!ctx.fs.exists("convex.json")) {
     return {
-      projectConfig: { functions: DEFAULT_FUNCTIONS_PATH },
+      projectConfig: {
+        functions: DEFAULT_FUNCTIONS_PATH,
+        externalNodeModules: [],
+      },
       configPath: configName(),
     };
   }
@@ -254,13 +277,9 @@ export async function configFromProjectConfig(
   const entryPoints = await entryPointsByEnvironment(ctx, baseDir, verbose);
   // es-build prints errors to console which would clobber
   // our spinner.
-  const modules = await bundle(
-    ctx,
-    baseDir,
-    entryPoints.isolate,
-    true,
-    "browser"
-  );
+  const modules = (
+    await bundle(ctx, baseDir, entryPoints.isolate, true, "browser")
+  ).modules;
   if (verbose) {
     logMessage(
       ctx,
@@ -270,27 +289,43 @@ export async function configFromProjectConfig(
   }
 
   // Bundle node modules.
-  const nodeModules = await bundle(
+  const nodeResult = await bundle(
     ctx,
     baseDir,
     entryPoints.node,
     true,
     "node",
-    path.join("_deps", "node")
+    path.join("_deps", "node"),
+    projectConfig.externalNodeModules
   );
   if (verbose) {
     logMessage(
       ctx,
       "Node modules: ",
-      nodeModules.map(m => m.path)
+      nodeResult.modules.map(m => m.path)
     );
+    if (projectConfig.externalNodeModules.length > 0) {
+      logMessage(
+        ctx,
+        "Node external npm dependencies: ",
+        [...nodeResult.externalDependencies.entries()].map(
+          a => `${a[0]}: ${a[1]}`
+        )
+      );
+    }
   }
-  modules.push(...nodeModules);
+  modules.push(...nodeResult.modules);
   modules.push(...(await bundleAuthConfig(ctx, baseDir)));
+
+  const nodeDependencies: NodeDependency[] = [];
+  for (const [moduleName, moduleVersion] of nodeResult.externalDependencies) {
+    nodeDependencies.push({ name: moduleName, version: moduleVersion });
+  }
 
   return {
     projectConfig: projectConfig,
     modules: modules,
+    nodeDependencies: nodeDependencies,
     // We're just using the version this CLI is running with for now.
     // This could be different than the version of `convex` the app runs with
     // if the CLI is installed globally.
@@ -409,6 +444,12 @@ function stripDefaults(projectConfig: ProjectConfig): any {
   if (Array.isArray(stripped.authInfo) && stripped.authInfo.length === 0) {
     delete stripped.authInfo;
   }
+  if (
+    Array.isArray(stripped.externalNodeModules) &&
+    stripped.externalNodeModules.length === 0
+  ) {
+    delete stripped.externalNodeModules;
+  }
   return stripped;
 }
 
@@ -464,6 +505,9 @@ export async function pullConfig(
     const backendConfig = parseBackendConfig(res.data.config);
     const projectConfig = {
       ...backendConfig,
+      // This field is not stored in the backend, which is ok since it is also
+      // not used to diff configs.
+      externalNodeModules: [],
       project,
       team,
       prodUrl: origin,
@@ -471,6 +515,8 @@ export async function pullConfig(
     return {
       projectConfig,
       modules: res.data.modules,
+      // TODO(presley): Add this to diffConfig().
+      nodeDependencies: res.data.nodeDependencies,
       udfServerVersion: res.data.udfServerVersion,
     };
   } catch (err) {
@@ -494,6 +540,7 @@ export function configJSON(
   return {
     config: projectConfig,
     modules: config.modules,
+    nodeDependencies: config.nodeDependencies,
     udfServerVersion: config.udfServerVersion,
     schemaId,
     adminKey,
@@ -533,13 +580,13 @@ export async function pushConfig(
         );
         logFailure(
           ctx,
-          `Go to ${dashboardUrl}/settings to setup your environment variable, then rerun this command.`
+          `Go to ${dashboardUrl}/settings to setup your environment variable.`
         );
       } else {
-        logFailure(ctx, `Fix your auth.config.js, then rerun this command.`);
+        logFailure(ctx, `Fix your auth.config.js.`);
       }
       logError(ctx, chalk.red((error as any).response.data.message));
-      await ctx.crash(1, "fatal", error);
+      await ctx.crash(1, "invalid filesystem or env vars", error);
     }
 
     logFailure(ctx, "Error: Unable to push deployment config to " + url);

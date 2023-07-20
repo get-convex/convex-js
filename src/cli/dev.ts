@@ -1,48 +1,24 @@
 import chalk from "chalk";
 import { Command, Option } from "commander";
-import inquirer from "inquirer";
 import path from "path";
 import { performance } from "perf_hooks";
 import {
   Context,
-  logError,
-  logFailure,
   logFinishedStep,
-  logMessage,
   oneoffContext,
   showSpinner,
+  showSpinnerIfSlow,
   stopSpinner,
 } from "../bundler/context";
-import {
-  DeploymentType,
-  deploymentName,
-  getDevDeploymentMaybeThrows,
-  getUrlAndAdminKeyByDeploymentType,
-  getUrlAndAdminKeyFromSlug,
-} from "./lib/api";
-import {
-  ProjectConfig,
-  enforceDeprecatedConfigField,
-  readProjectConfig,
-  upgradeOldAuthInfoToAuthConfig,
-  writeProjectConfig,
-} from "./lib/config";
-import { writeDeploymentEnvVar } from "./lib/deployment";
-import { init } from "./lib/init";
+import { deploymentCredentialsOrConfigure } from "./configure";
 import { checkAuthorization, performLogin } from "./lib/login";
 import { PushOptions, runPush } from "./lib/push";
-import { reinit } from "./lib/reinit";
-import {
-  formatDuration,
-  functionsDir,
-  getConfiguredDeployment,
-  getCurrentTimeString,
-  hasProject,
-  hasProjects,
-  hasTeam,
-  logAndHandleAxiosError,
-} from "./lib/utils";
+import { formatDuration, getCurrentTimeString, waitForever } from "./lib/utils";
 import { Crash, WatchContext, Watcher } from "./lib/watch";
+import { watchLogs } from "./lib/logs";
+import { runFunctionAndLog, subscribe } from "./lib/run";
+import { BaseConvexClient } from "../browser";
+import { Value } from "../values";
 
 export const dev = new Command("dev")
   .summary("Develop against a dev deployment, watching for changes")
@@ -59,10 +35,6 @@ export const dev = new Command("dev")
       .choices(["enable", "try", "disable"])
       .default("try")
   )
-  // TODO: deprecate
-  .option("--save-url", "Save deployment URLs to .env and .env.local")
-  // TODO: deprecate
-  .option("--no-save-url", "Do not save deployment URLs to .env and .env.local")
   .addOption(
     new Option("--codegen <mode>", "Regenerate code in `convex/_generated/`")
       .choices(["enable", "disable"])
@@ -71,9 +43,9 @@ export const dev = new Command("dev")
   .option("--once", "Run only once, do not watch for changes")
   .addOption(
     new Option(
-      "--configure <choice>",
-      "Choose whether to configure new or existing project"
-    ).choices(["new", "existing", "ask"])
+      "--configure [choice]",
+      "Ignore existing configuration and configure new or existing project"
+    ).choices(["new", "existing"])
   )
   .option("--team <team_slug>", "The team you'd like to use for this project")
   .option(
@@ -82,8 +54,27 @@ export const dev = new Command("dev")
   )
   .addOption(
     new Option(
+      "--no-watch",
+      "Run until a successful push (and function call if --run is specified) without watching for changes afterward"
+    ).hideHelp()
+  )
+  .addOption(
+    new Option(
+      "--run <functionName>",
+      "The identifier of the function to run after the first code push, " +
+        "like `init` or `dir/file:myFunction`"
+    ).hideHelp()
+  )
+  .addOption(
+    new Option(
       "--prod",
       "Develop live against this project's production deployment."
+    ).hideHelp()
+  )
+  .addOption(
+    new Option(
+      "--tail-logs",
+      "Tail this project's Convex logs in this terminal."
     ).hideHelp()
   )
   .addOption(new Option("--trace-events").hideHelp())
@@ -104,162 +95,59 @@ export const dev = new Command("dev")
       }
     }
 
-    const chosenConfiguration: "new" | "existing" | "ask" | null =
-      cmdOptions.configure ?? null;
-
+    const configure =
+      cmdOptions.configure === true ? "ask" : cmdOptions.configure ?? null;
     const credentials = await deploymentCredentialsOrConfigure(
       ctx,
-      chosenConfiguration,
+      configure,
       cmdOptions
     );
-    await watchAndPush(
-      ctx,
-      {
-        ...credentials,
-        verbose: !!cmdOptions.verbose,
-        dryRun: false,
-        typecheck: cmdOptions.typecheck,
-        debug: false,
-        codegen: cmdOptions.codegen === "enable",
-      },
-      cmdOptions
+
+    const promises = [];
+    if (cmdOptions.tailLogs) {
+      promises.push(watchLogs(ctx, credentials.url, credentials.adminKey));
+    }
+    promises.push(
+      watchAndPush(
+        ctx,
+        {
+          ...credentials,
+          verbose: !!cmdOptions.verbose,
+          dryRun: false,
+          typecheck: cmdOptions.typecheck,
+          debug: false,
+          codegen: cmdOptions.codegen === "enable",
+        },
+        cmdOptions
+      )
     );
+    await Promise.race(promises);
   });
-
-type DeploymentCredentials = {
-  url: string;
-  adminKey: string;
-};
-
-export async function deploymentCredentialsOrConfigure(
-  ctx: Context,
-  chosenConfiguration: "new" | "existing" | "ask" | null,
-  cmdOptions: {
-    prod: boolean;
-    team: string | null;
-    project: string | null;
-    url?: string | undefined;
-    adminKey?: string | undefined;
-  }
-): Promise<DeploymentCredentials> {
-  const { url, adminKey } = cmdOptions;
-  if (url !== undefined && adminKey !== undefined) {
-    return { url, adminKey };
-  }
-  const deploymentType = cmdOptions.prod ? "prod" : "dev";
-  const configuredDeployment =
-    chosenConfiguration === null
-      ? await getConfiguredDeploymentOrUpgrade(ctx, deploymentType)
-      : null;
-  // No configured deployment NOR existing config
-  if (configuredDeployment === null) {
-    const choice =
-      chosenConfiguration === "new" || chosenConfiguration === "existing"
-        ? chosenConfiguration
-        : await askToConfigure(ctx);
-    return await initOrReinit(ctx, choice, deploymentType, cmdOptions);
-  }
-  // Existing config but user doesn't have access to it
-  if ("error" in configuredDeployment) {
-    const projectConfig = (await readProjectConfig(ctx)).projectConfig;
-    const choice = await askToReconfigure(
-      ctx,
-      projectConfig,
-      configuredDeployment.error
-    );
-    return initOrReinit(ctx, choice, deploymentType, cmdOptions);
-  }
-  const { deploymentName } = configuredDeployment;
-  const adminKeyAndUrlForConfiguredDeployment = await getUrlAndAdminKeyFromSlug(
-    ctx,
-    deploymentName,
-    deploymentType
-  );
-  // Configured deployment and user has access
-  if (!("error" in adminKeyAndUrlForConfiguredDeployment)) {
-    return adminKeyAndUrlForConfiguredDeployment;
-  }
-  await checkForDeploymentTypeError(
-    ctx,
-    adminKeyAndUrlForConfiguredDeployment.error
-  );
-
-  // Configured deployment and user doesn't has access to it
-  const choice = await askToReconfigureNew(ctx, deploymentName);
-  return initOrReinit(ctx, choice, deploymentType, cmdOptions);
-}
-
-async function checkForDeploymentTypeError(ctx: Context, error: unknown) {
-  if ((error as any).response?.data?.code === "DeploymentTypeMismatch") {
-    logFailure(
-      ctx,
-      "Use `npx convex deploy` to push changes to your production deployment configured in CONVEX_DEPLOYMENT"
-    );
-    logError(ctx, chalk.red((error as any).response.data.message));
-    await ctx.crash(1, "invalid filesystem data", error);
-  }
-}
-
-async function getConfiguredDeploymentOrUpgrade(
-  ctx: Context,
-  deploymentType: DeploymentType
-) {
-  const deploymentName = await getConfiguredDeployment(ctx);
-  if (deploymentName !== null) {
-    return { deploymentName };
-  }
-  return await upgradeOldConfigToDeploymentVar(ctx, deploymentType);
-}
-
-async function initOrReinit(
-  ctx: Context,
-  choice: "new" | "existing",
-  deploymentType: DeploymentType,
-  cmdOptions: { team: string | null; project: string | null }
-): Promise<DeploymentCredentials> {
-  switch (choice) {
-    case "new":
-      return (await init(ctx, deploymentType, cmdOptions))!;
-    case "existing": {
-      const credentials = (await reinit(ctx, deploymentType, cmdOptions))!;
-      return credentials;
-    }
-    default: {
-      return choice;
-    }
-  }
-}
 
 export async function watchAndPush(
   outerCtx: Context,
   options: PushOptions,
   cmdOptions: {
+    run?: string;
     once: boolean;
+    watch: boolean;
     traceEvents: boolean;
-  },
-  originalProjectConfig?: ProjectConfig
+  }
 ) {
-  let watcher: Watcher | undefined;
+  const watch: { watcher: Watcher | undefined } = { watcher: undefined };
   let numFailures = 0;
+  let ran = false;
+  let pushed = false;
+  let tableNameTriggeringRetry;
+  let shouldRetryOnDeploymentEnvVarChange;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const start = performance.now();
+    tableNameTriggeringRetry = null;
+    shouldRetryOnDeploymentEnvVarChange = false;
     const ctx = new WatchContext(cmdOptions.traceEvents);
     showSpinner(ctx, "Preparing Convex functions...");
-    if (originalProjectConfig !== undefined) {
-      // If the project or team slugs change, exit because that's the
-      // simplest thing to do.
-      const config = await readProjectConfig(ctx);
-      if (
-        originalProjectConfig.project !== config.projectConfig.project ||
-        originalProjectConfig.team !== config.projectConfig.team
-      ) {
-        logFailure(ctx, "Detected a change in your `convex.json`. Exiting...");
-        return await outerCtx.crash(1, "invalid filesystem data");
-      }
-    }
-
     try {
       await runPush(ctx, options);
       const end = performance.now();
@@ -270,6 +158,11 @@ export async function watchAndPush(
           end - start
         )})`
       );
+      if (cmdOptions.run !== undefined && !ran) {
+        await runFunctionInDev(ctx, options, cmdOptions.run);
+        ran = true;
+      }
+      pushed = true;
     } catch (e: any) {
       // Crash the app on unexpected errors.
       if (!(e instanceof Crash) || !e.errorType) {
@@ -293,8 +186,21 @@ export async function watchAndPush(
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
+
       // Fall through if we had a filesystem-based error.
-      console.assert(e.errorType === "invalid filesystem data");
+      console.assert(
+        e.errorType === "invalid filesystem data" ||
+          e.errorType === "invalid filesystem or env vars" ||
+          e.errorType["invalid filesystem or db data"] !== undefined
+      );
+      if (e.errorType === "invalid filesystem or env vars") {
+        shouldRetryOnDeploymentEnvVarChange = true;
+      } else if (
+        e.errorType !== "invalid filesystem data" &&
+        e.errorType["invalid filesystem or db data"] !== undefined
+      ) {
+        tableNameTriggeringRetry = e.errorType["invalid filesystem or db data"];
+      }
       if (cmdOptions.once) {
         await outerCtx.crash(1, e.errorType);
       }
@@ -306,279 +212,227 @@ export async function watchAndPush(
     if (cmdOptions.once) {
       return;
     }
-    const observations = ctx.fs.finalize();
-    if (observations === "invalidated") {
-      console.error("Filesystem changed during push, retrying...");
-      continue;
+    if (pushed && !cmdOptions.watch) {
+      return;
     }
-    // Initialize the watcher if we haven't done it already. Chokidar expects to have a
-    // nonempty watch set at initialization, so we can't do it before running our first
-    // push.
-    if (!watcher) {
-      watcher = new Watcher(observations);
-      await watcher.ready();
-    }
-    // Watch new directories if needed.
-    watcher.update(observations);
+    const fileSystemWatch = getFileSystemWatch(ctx, watch, cmdOptions);
+    const tableWatch = getTableWatch(ctx, options, tableNameTriggeringRetry);
+    const envVarWatch = getDeplymentEnvVarWatch(
+      ctx,
+      options,
+      shouldRetryOnDeploymentEnvVarChange
+    );
+    await Promise.race([
+      fileSystemWatch.watch(),
+      tableWatch.watch(),
+      envVarWatch.watch(),
+    ]);
+    fileSystemWatch.stop();
+    void tableWatch.stop();
+    void envVarWatch.stop();
+  }
+}
 
-    // Process events until we find one that overlaps with our previous observations.
-    let anyChanges = false;
-    do {
-      await watcher.waitForEvent();
-      for (const event of watcher.drainEvents()) {
-        if (cmdOptions.traceEvents) {
-          console.error(
-            "Processing",
-            event.name,
-            path.relative("", event.absPath)
-          );
+async function runFunctionInDev(
+  ctx: WatchContext,
+  credentials: {
+    url: string;
+    adminKey: string;
+  },
+  functionName: string
+) {
+  await runFunctionAndLog(
+    ctx,
+    credentials.url,
+    credentials.adminKey,
+    functionName,
+    {},
+    {
+      onSuccess: () => {
+        logFinishedStep(ctx, `Finished running function "${functionName}"`);
+      },
+    }
+  );
+}
+
+function getTableWatch(
+  ctx: WatchContext,
+  credentials: {
+    url: string;
+    adminKey: string;
+  },
+  tableName: string | null
+) {
+  return getFunctionWatch(ctx, credentials, "_system/cli/queryTable", () =>
+    tableName !== null ? { tableName } : null
+  );
+}
+
+function getDeplymentEnvVarWatch(
+  ctx: WatchContext,
+  credentials: {
+    url: string;
+    adminKey: string;
+  },
+  shouldRetryOnDeploymentEnvVarChange: boolean
+) {
+  return getFunctionWatch(
+    ctx,
+    credentials,
+    "_system/cli/queryEnvironmentVariables",
+    () => (shouldRetryOnDeploymentEnvVarChange ? {} : null)
+  );
+}
+
+function getFunctionWatch(
+  ctx: WatchContext,
+  credentials: {
+    url: string;
+    adminKey: string;
+  },
+  functionName: string,
+  getArgs: () => Record<string, Value> | null
+) {
+  let client: BaseConvexClient;
+  return {
+    watch: async () => {
+      const args = getArgs();
+      if (args === null) {
+        return waitForever();
+      }
+      return subscribe(
+        ctx,
+        credentials.url,
+        credentials.adminKey,
+        functionName,
+        args,
+        "first change",
+        {
+          onStart: convex => {
+            client = convex;
+          },
         }
-        const result = observations.overlaps(event);
-        if (result.overlaps) {
-          const relPath = path.relative("", event.absPath);
-          if (cmdOptions.traceEvents) {
-            console.error(`${relPath} ${result.reason}, rebuilding...`);
+      );
+    },
+    stop: async () => {
+      await client?.close();
+    },
+  };
+}
+
+function getFileSystemWatch(
+  ctx: WatchContext,
+  watch: { watcher: Watcher | undefined },
+  cmdOptions: { traceEvents: boolean }
+) {
+  let hasStopped = false;
+  return {
+    watch: async () => {
+      const observations = ctx.fs.finalize();
+      if (observations === "invalidated") {
+        console.error("Filesystem changed during push, retrying...");
+        return;
+      }
+      // Initialize the watcher if we haven't done it already. Chokidar expects to have a
+      // nonempty watch set at initialization, so we can't do it before running our first
+      // push.
+      if (!watch.watcher) {
+        watch.watcher = new Watcher(observations);
+        await showSpinnerIfSlow(
+          ctx,
+          "Preparing to watch files...",
+          500,
+          async () => {
+            await watch.watcher!.ready();
           }
-          anyChanges = true;
+        );
+        stopSpinner(ctx);
+      }
+      // Watch new directories if needed.
+      watch.watcher.update(observations);
+
+      // Process events until we find one that overlaps with our previous observations.
+      let anyChanges = false;
+      do {
+        await watch.watcher.waitForEvent();
+        if (hasStopped) {
+          return;
+        }
+        for (const event of watch.watcher.drainEvents()) {
+          if (cmdOptions.traceEvents) {
+            console.error(
+              "Processing",
+              event.name,
+              path.relative("", event.absPath)
+            );
+          }
+          const result = observations.overlaps(event);
+          if (result.overlaps) {
+            const relPath = path.relative("", event.absPath);
+            if (cmdOptions.traceEvents) {
+              console.error(`${relPath} ${result.reason}, rebuilding...`);
+            }
+            anyChanges = true;
+            break;
+          }
+        }
+      } while (!anyChanges);
+
+      // Wait for the filesystem to quiesce before starting a new push. It's okay to
+      // drop filesystem events at this stage since we're already committed to doing
+      // a push and resubscribing based on that push's observations.
+      let deadline = performance.now() + quiescenceDelay;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const now = performance.now();
+        if (now >= deadline) {
           break;
         }
-      }
-    } while (!anyChanges);
-
-    // Wait for the filesystem to quiesce before starting a new push. It's okay to
-    // drop filesystem events at this stage since we're already committed to doing
-    // a push and resubscribing based on that push's observations.
-    let deadline = performance.now() + quiescenceDelay;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const now = performance.now();
-      if (now >= deadline) {
-        break;
-      }
-      const remaining = deadline - now;
-      if (cmdOptions.traceEvents) {
-        console.error(`Waiting for ${formatDuration(remaining)} to quiesce...`);
-      }
-      const remainingWait = new Promise<"timeout">(resolve =>
-        setTimeout(() => resolve("timeout"), deadline - now)
-      );
-      const result = await Promise.race([
-        remainingWait,
-        watcher.waitForEvent().then<"newEvents">(() => "newEvents"),
-      ]);
-      if (result === "newEvents") {
-        for (const event of watcher.drainEvents()) {
-          const result = observations.overlaps(event);
-          // Delay another `quiescenceDelay` since we had an overlapping event.
-          if (result.overlaps) {
-            if (cmdOptions.traceEvents) {
-              console.error(
-                `Received an overlapping event at ${event.absPath}, delaying push.`
-              );
-            }
-            deadline = performance.now() + quiescenceDelay;
-          }
+        const remaining = deadline - now;
+        if (cmdOptions.traceEvents) {
+          console.error(
+            `Waiting for ${formatDuration(remaining)} to quiesce...`
+          );
         }
-      } else {
-        console.assert(result === "timeout");
-        // Let the check above `break` from the loop if we're past our deadlne.
+        const remainingWait = new Promise<"timeout">(resolve =>
+          setTimeout(() => resolve("timeout"), deadline - now)
+        );
+        const result = await Promise.race([
+          remainingWait,
+          watch.watcher.waitForEvent().then<"newEvents">(() => "newEvents"),
+        ]);
+        if (result === "newEvents") {
+          for (const event of watch.watcher.drainEvents()) {
+            const result = observations.overlaps(event);
+            // Delay another `quiescenceDelay` since we had an overlapping event.
+            if (result.overlaps) {
+              if (cmdOptions.traceEvents) {
+                console.error(
+                  `Received an overlapping event at ${event.absPath}, delaying push.`
+                );
+              }
+              deadline = performance.now() + quiescenceDelay;
+            }
+          }
+        } else {
+          console.assert(result === "timeout");
+          // Let the check above `break` from the loop if we're past our deadlne.
+        }
       }
-    }
-  }
-}
-
-async function upgradeOldConfigToDeploymentVar(
-  ctx: Context,
-  deploymentType: DeploymentType
-): Promise<{ deploymentName: string } | { error: unknown } | null> {
-  const { configPath, projectConfig } = await readProjectConfig(ctx);
-  const { team, project } = projectConfig;
-  if (typeof team !== "string" || typeof project !== "string") {
-    // The config is not a valid old config, proceed to init/reinit
-    return null;
-  }
-  let devDeploymentName;
-  try {
-    const { deploymentName } =
-      deploymentType === "prod"
-        ? // If we're upgrading from an old config "prod" is guaranteed to exist
-          await getUrlAndAdminKeyByDeploymentType(
-            ctx,
-            project,
-            team,
-            deploymentType
-          )
-        : // But "dev" is not, this call provisions it on demand
-          await getDevDeploymentMaybeThrows(ctx, {
-            projectSlug: project,
-            teamSlug: team,
-          });
-    devDeploymentName = deploymentName!;
-  } catch (error) {
-    // Could not retrieve the deployment name using the old config, proceed to reconfigure
-    return { error };
-  }
-  await writeDeploymentEnvVar(ctx, deploymentType, {
-    team,
-    project,
-    deploymentName: devDeploymentName,
-  });
-  logMessage(
-    ctx,
-    chalk.green(
-      `Saved the ${deploymentType} deployment name as CONVEX_DEPLOYMENT to .env.local`
-    )
-  );
-  const projectConfigWithoutAuthInfo = await upgradeOldAuthInfoToAuthConfig(
-    ctx,
-    projectConfig,
-    functionsDir(configPath, projectConfig)
-  );
-  await writeProjectConfig(ctx, projectConfigWithoutAuthInfo, {
-    deleteIfAllDefault: true,
-  });
-  return { deploymentName: devDeploymentName };
-}
-
-async function askToConfigure(ctx: Context): Promise<"new" | "existing"> {
-  if (!(await hasProjects(ctx))) {
-    return "new";
-  }
-  return await promptToInitWithProjects();
-}
-
-async function askToReconfigure(
-  ctx: Context,
-  projectConfig: ProjectConfig,
-  error: unknown
-): Promise<"new" | "existing"> {
-  const team = await enforceDeprecatedConfigField(ctx, projectConfig, "team");
-  const project = await enforceDeprecatedConfigField(
-    ctx,
-    projectConfig,
-    "project"
-  );
-  const [isExistingTeam, existingProject, hasAnyProjects] = await Promise.all([
-    await hasTeam(ctx, team),
-    await hasProject(ctx, team, project),
-    await hasProjects(ctx),
-  ]);
-
-  // The config is good so there must be something else going on,
-  // fatal with the original error
-  if (isExistingTeam && existingProject) {
-    return await logAndHandleAxiosError(ctx, error);
-  }
-
-  if (isExistingTeam) {
-    logFailure(
-      ctx,
-      `Project ${chalk.bold(project)} does not exist in your team ${chalk.bold(
-        team
-      )}, as configured in ${chalk.bold("convex.json")}`
-    );
-  } else {
-    logFailure(
-      ctx,
-      `You don't have access to team ${chalk.bold(
-        team
-      )}, as configured in ${chalk.bold("convex.json")}`
-    );
-  }
-  if (!hasAnyProjects) {
-    const { confirmed } = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "confirmed",
-        message: `Create a new project?`,
-        default: true,
-      },
-    ]);
-    if (!confirmed) {
-      console.error(
-        "Run `npx convex dev` in a directory with a valid convex.json."
-      );
-      return await ctx.crash(1, "invalid filesystem data");
-    }
-    return "new";
-  }
-
-  return await promptToReconfigure();
-}
-
-async function askToReconfigureNew(
-  ctx: Context,
-  configuredDeploymentName: deploymentName
-): Promise<"new" | "existing"> {
-  logFailure(
-    ctx,
-    `You don't have access to the project with deployment ${chalk.bold(
-      configuredDeploymentName
-    )}, as configured in ${chalk.bold("CONVEX_DEPLOYMENT")}`
-  );
-
-  const hasAnyProjects = await hasProjects(ctx);
-
-  if (!hasAnyProjects) {
-    const { confirmed } = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "confirmed",
-        message: `Configure a new project?`,
-        default: true,
-      },
-    ]);
-    if (!confirmed) {
-      console.error(
-        "Run `npx convex dev` in a directory with a valid CONVEX_DEPLOYMENT set"
-      );
-      return await ctx.crash(1, "invalid filesystem data");
-    }
-    return "new";
-  }
-
-  return await promptToReconfigure();
+    },
+    stop: () => {
+      hasStopped = true;
+    },
+  };
 }
 
 const initialBackoff = 500;
 const maxBackoff = 16000;
 const quiescenceDelay = 500;
 
-function nextBackoff(prevFailures: number): number {
+export function nextBackoff(prevFailures: number): number {
   const baseBackoff = initialBackoff * Math.pow(2, prevFailures);
   const actualBackoff = Math.min(baseBackoff, maxBackoff);
   const jitter = actualBackoff * (Math.random() - 0.5);
   return actualBackoff + jitter;
-}
-
-export async function promptToInitWithProjects(): Promise<"new" | "existing"> {
-  const { choice } = await inquirer.prompt([
-    {
-      type: "list",
-      name: "choice",
-      message: `What would you like to configure?`,
-      default: "new",
-      choices: [
-        { name: "a new project", value: "new" },
-        { name: "an existing project", value: "existing" },
-      ],
-    },
-  ]);
-  return choice;
-}
-
-export async function promptToReconfigure(): Promise<"new" | "existing"> {
-  const { choice } = await inquirer.prompt([
-    {
-      type: "list",
-      name: "choice",
-      message: `Configure a different project?`,
-      default: "new",
-      choices: [
-        { name: "create new project", value: "new" },
-        { name: "choose an existing project", value: "existing" },
-      ],
-    },
-  ]);
-  return choice;
 }

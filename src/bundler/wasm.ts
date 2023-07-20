@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 
 export const wasmPlugin = {
-  name: "wasm",
+  name: "convex-wasm",
   setup(build: PluginBuild) {
     // Resolve ".wasm" files to a path with a namespace
     build.onResolve({ filter: /\.wasm$/ }, args => {

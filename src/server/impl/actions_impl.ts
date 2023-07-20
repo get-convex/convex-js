@@ -22,7 +22,7 @@ export function setupActionCalls(requestId: string) {
         "1.0/actions/query",
         syscallArgs
       );
-      return jsonToConvex(result);
+      return jsonToConvex(result, false);
     },
     runMutation: async (
       mutation: FunctionReference<"mutation", "public" | "internal">,
@@ -40,7 +40,7 @@ export function setupActionCalls(requestId: string) {
         "1.0/actions/mutation",
         syscallArgs
       );
-      return jsonToConvex(result);
+      return jsonToConvex(result, false);
     },
     runAction: async (
       action: FunctionReference<"action", "public" | "internal">,
@@ -58,7 +58,7 @@ export function setupActionCalls(requestId: string) {
         "1.0/actions/action",
         syscallArgs
       );
-      return jsonToConvex(result);
+      return jsonToConvex(result, false);
     },
   };
 }

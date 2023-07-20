@@ -1,6 +1,11 @@
 import chalk from "chalk";
 import path from "path";
-import { Context, logError, logFailure } from "../../bundler/context";
+import {
+  Context,
+  logError,
+  logFailure,
+  showSpinner,
+} from "../../bundler/context";
 import * as Sentry from "@sentry/node";
 import * as semver from "semver";
 import { spawnAsync } from "./utils";
@@ -11,7 +16,11 @@ export type TypeCheckMode = "enable" | "try" | "disable";
 
 type TypecheckResultHandler = (
   result: TypecheckResult,
-  logSpecificError?: () => void
+  logSpecificError?: () => void,
+  // If given, we run it to print out errors.
+  // We expect it to throw or resolve to "success"
+  // if a concurrent change invalidated the error result.
+  runOnError?: () => Promise<"success">
 ) => Promise<void>;
 
 /**
@@ -34,7 +43,7 @@ export async function typeCheckFunctionsInMode(
   await typeCheckFunctions(
     ctx,
     functionsDir,
-    async (result, logSpecificError) => {
+    async (result, logSpecificError, runOnError) => {
       if (
         (result === "cantTypeCheck" && typeCheckMode === "enable") ||
         result === "typecheckFailed"
@@ -44,6 +53,15 @@ export async function typeCheckFunctionsInMode(
           ctx,
           chalk.gray("To ignore failing typecheck, use `--typecheck=disable`.")
         );
+        try {
+          const result = await runOnError?.();
+          // Concurrent change invalidated the error, don't fail
+          if (result === "success") {
+            return;
+          }
+        } catch (e) {
+          // As expected, `runOnError` threw
+        }
         await ctx.crash(1, "invalid filesystem data");
       }
     }
@@ -121,7 +139,7 @@ async function runTscInner(
   const result = await spawnAsync(ctx, tscPath, tscArgs.concat("--listFiles"));
   if (result.status === null) {
     return handleResult("typecheckFailed", () => {
-      logError(ctx, chalk.red(`TypeScript typecheck timed out.`));
+      logFailure(ctx, `TypeScript typecheck timed out.`);
       if (result.error) {
         logError(ctx, chalk.red(`${result.error}`));
       }
@@ -167,20 +185,21 @@ async function runTscInner(
 
   // At this point we know that `tsc` failed. Rerun it without `--listFiles`
   // and with stderr redirected to have it print out a nice error.
-  try {
-    // We're letting TypeScript print errors directly to console,
-    // and the spinner would stop spinning. Hide it.
-    await spawnAsync(ctx, tscPath, [...tscArgs, "--pretty", "true"], {
-      stdio: "inherit",
-    });
-    // If this passes, we had a concurrent file change that'll overlap with
-    // our observations in the first run. Invalidate our context's filesystem
-    // but allow the rest of the system to observe the success.
-    ctx.fs.invalidate();
-    return handleResult("success");
-  } catch (e) {
-    return handleResult("typecheckFailed", () => {
+  return handleResult(
+    "typecheckFailed",
+    () => {
       logFailure(ctx, "TypeScript typecheck via `tsc` failed.");
-    });
-  }
+    },
+    async () => {
+      showSpinner(ctx, "Collecting TypeScript errors");
+      await spawnAsync(ctx, tscPath, [...tscArgs, "--pretty", "true"], {
+        stdio: "inherit",
+      });
+      // If this passes, we had a concurrent file change that'll overlap with
+      // our observations in the first run. Invalidate our context's filesystem
+      // but allow the rest of the system to observe the success.
+      ctx.fs.invalidate();
+      return "success";
+    }
+  );
 }

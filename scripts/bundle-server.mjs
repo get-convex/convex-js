@@ -14,13 +14,9 @@ const out = [];
 // Only bundle "setup.ts" from `udf/_system`.
 const udfDir = process.argv[2];
 const setupPath = path.join(udfDir, "setup.ts");
-const setupBundles = await bundle(
-  oneoffContext,
-  process.argv[2],
-  [setupPath],
-  true,
-  "browser"
-);
+const setupBundles = (
+  await bundle(oneoffContext, process.argv[2], [setupPath], true, "browser")
+).modules;
 if (setupBundles.length !== 1) {
   throw new Error("Got more than one setup bundle?");
 }
@@ -35,13 +31,15 @@ for (const systemDir of systemDirs) {
     systemDir,
     false
   );
-  const bundles = await bundle(
-    oneoffContext,
-    systemDir,
-    entryPoints.isolate,
-    false,
-    "browser"
-  );
+  const bundles = (
+    await bundle(
+      oneoffContext,
+      systemDir,
+      entryPoints.isolate,
+      false,
+      "browser"
+    )
+  ).modules;
   out.push(...bundles);
 }
 process.stdout.write(JSON.stringify(out));

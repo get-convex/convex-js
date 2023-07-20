@@ -1,12 +1,14 @@
 import { Command, Option } from "commander";
 import path from "path";
 import { oneoffContext } from "../bundler/context.js";
-import { initOrReinitForDeprecatedCommands } from "./lib/init.js";
 import { checkAuthorization, performLogin } from "./lib/login.js";
+import { initOrReinitForDeprecatedCommands } from "./configure.js";
 
 const cwd = path.basename(process.cwd());
 
-/** Initialize a new Convex project. */
+// Initialize a new Convex project.
+// This command is deprecated and hidden from the command help.
+// `npx convex dev --once --configure=new` replaces it.
 export const init = new Command("init")
   .description("Initialize a new Convex project in the current directory")
   .option(
@@ -18,14 +20,6 @@ export const init = new Command("init")
       "--team <slug>",
       "Slug identifier for the team this project will belong to."
     )
-  )
-  .option(
-    "--save-url",
-    "Save the production deployment URL to .env or .env.production."
-  )
-  .option(
-    "--no-save-url",
-    "Do not save production deployment URL to a .env file."
   )
   .action(async options => {
     const ctx = oneoffContext;

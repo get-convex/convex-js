@@ -225,9 +225,9 @@ function validatedCronString(s: string) {
 }
 
 function validatedCronIdentifier(s: string) {
-  if (!s.match(/^[a-zA-Z0-9_ '-]*$/)) {
+  if (!s.match(/^[ -~]*$/)) {
     throw new Error(
-      `Invalid cron identifier ${s}: use ASCII letters, numbers, spaces, underscores, dashes and apostrophes`
+      `Invalid cron identifier ${s}: use ASCII letters that are not control characters`
     );
   }
   return s;
