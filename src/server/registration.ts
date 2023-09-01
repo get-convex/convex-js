@@ -1,19 +1,28 @@
 import {
   Auth,
-  DatabaseReader,
-  DatabaseWriter,
+  GenericDatabaseReader,
+  GenericDatabaseWriter,
   StorageActionWriter,
   StorageReader,
   StorageWriter,
-} from ".";
+} from "./index.js";
 import {
   FunctionReference,
   FunctionReturnType,
   OptionalRestArgs,
 } from "../server/api.js";
-import { ObjectType, PropertyValidators } from "../values/validator";
-import { GenericDataModel } from "./data_model.js";
-import { Scheduler } from "./scheduler";
+import { ObjectType, PropertyValidators } from "../values/validator.js";
+import { Id } from "../values/value.js";
+import {
+  GenericDataModel,
+  NamedTableInfo,
+  TableNamesInDataModel,
+  VectorIndexNames,
+} from "./data_model.js";
+import { Scheduler } from "./scheduler.js";
+import { VectorSearchQuery } from "./vector_search.js";
+import { Expand } from "../type_utils.js";
+
 /**
  * A set of services for use within Convex mutation functions.
  *
@@ -25,11 +34,11 @@ import { Scheduler } from "./scheduler";
  *
  * @public
  */
-export interface MutationCtx<DataModel extends GenericDataModel> {
+export interface GenericMutationCtx<DataModel extends GenericDataModel> {
   /**
    * A utility for reading and writing data in the database.
    */
-  db: DatabaseWriter<DataModel>;
+  db: GenericDatabaseWriter<DataModel>;
 
   /**
    * Information about the currently authenticated user.
@@ -48,6 +57,18 @@ export interface MutationCtx<DataModel extends GenericDataModel> {
 }
 
 /**
+ * If you're using code generation, use the `MutationCtx` type in
+ * `convex/_generated/server.d.ts` which is typed for your data model.
+ *
+ * If you need an unparameterized MutationCtx use GenericMutationCtx.
+ *
+ * @public
+ * @deprecated
+ */
+export interface MutationCtx<DataModel extends GenericDataModel>
+  extends GenericMutationCtx<DataModel> {}
+
+/**
  * A set of services for use within Convex query functions.
  *
  * The query context is passed as the first argument to any Convex query
@@ -56,16 +77,14 @@ export interface MutationCtx<DataModel extends GenericDataModel> {
  * This differs from the {@link MutationCtx} because all of the services are
  * read-only.
  *
- * If you're using code generation, use the `QueryCtx` type in
- * `convex/_generated/server.d.ts` which is typed for your data model.
  *
  * @public
  */
-export interface QueryCtx<DataModel extends GenericDataModel> {
+export interface GenericQueryCtx<DataModel extends GenericDataModel> {
   /**
    * A utility for reading data in the database.
    */
-  db: DatabaseReader<DataModel>;
+  db: GenericDatabaseReader<DataModel>;
 
   /**
    * Information about the currently authenticated user.
@@ -79,6 +98,18 @@ export interface QueryCtx<DataModel extends GenericDataModel> {
 }
 
 /**
+ * If you're using code generation, use the `QueryCtx` type in
+ * `convex/_generated/server.d.ts` which is typed for your data model.
+ *
+ * If you need an unparameterized QueryCtx use GenericQueryCtx.
+ *
+ * @public
+ * @deprecated
+ */
+export interface QueryCtx<DataModel extends GenericDataModel>
+  extends GenericQueryCtx<DataModel> {}
+
+/**
  * A set of services for use within Convex action functions.
  *
  * The context is passed as the first argument to any Convex action
@@ -89,7 +120,7 @@ export interface QueryCtx<DataModel extends GenericDataModel> {
  *
  * @public
  */
-export interface ActionCtx {
+export interface GenericActionCtx<DataModel extends GenericDataModel> {
   /**
    * Run the Convex query with the given name and arguments.
    *
@@ -151,7 +182,41 @@ export interface ActionCtx {
    * A utility for reading and writing files in storage.
    */
   storage: StorageActionWriter;
+
+  /**
+   * Run a vector search on the given table and index.
+   *
+   * @param tableName - The name of the table to query.
+   * @param indexName - The name of the vector index on the table to query.
+   * @param query - A {@link VectorSearchQuery} containing the vector to query,
+   * the number of results to return, and any filters.
+   * @returns A promise of IDs and scores for the documents with the nearest
+   * vectors
+   */
+  vectorSearch<
+    TableName extends TableNamesInDataModel<DataModel>,
+    IndexName extends VectorIndexNames<NamedTableInfo<DataModel, TableName>>
+  >(
+    tableName: TableName,
+    indexName: IndexName,
+    query: Expand<
+      VectorSearchQuery<NamedTableInfo<DataModel, TableName>, IndexName>
+    >
+  ): Promise<Array<{ _id: Id<TableName>; _score: number }>>;
 }
+
+/**
+ * If you're using code generation, use the `ActionCtx` type in
+ * `convex/_generated/server.d.ts` which is typed for your data model.
+ *
+ * If you need an unparameterized ActionCtx use GenericActionCtx.
+ *
+ * @public
+ * @deprecated
+ */
+export interface ActionCtx<
+  DataModel extends GenericDataModel = GenericDataModel
+> extends GenericActionCtx<DataModel> {}
 
 /**
  * The default arguments type for a Convex query, mutation, or action function.
@@ -237,7 +302,7 @@ export type RegisteredMutation<
   Args extends DefaultFunctionArgs,
   Output
 > = {
-  (ctx: MutationCtx<any>, args: Args): Output;
+  (ctx: GenericMutationCtx<any>, args: Args): Output;
 
   isConvexFunction: true;
   isMutation: true;
@@ -263,7 +328,7 @@ export type RegisteredQuery<
   Args extends DefaultFunctionArgs,
   Output
 > = {
-  (ctx: QueryCtx<any>, args: Args): Output;
+  (ctx: GenericQueryCtx<any>, args: Args): Output;
 
   isConvexFunction: true;
   isQuery: true;
@@ -292,7 +357,7 @@ export type RegisteredAction<
   Args extends DefaultFunctionArgs,
   Output
 > = {
-  (ctx: ActionCtx, args: Args): Output;
+  (ctx: GenericActionCtx<any>, args: Args): Output;
 
   isConvexFunction: true;
   isAction: true;
@@ -314,7 +379,7 @@ export type RegisteredAction<
  * @public
  */
 export type PublicHttpAction = {
-  (ctx: ActionCtx, request: Request): Response;
+  (ctx: GenericActionCtx<any>, request: Request): Response;
   isHttp: true;
   isRegistered?: true;
 
@@ -429,11 +494,15 @@ export type MutationBuilder<
   Visibility extends FunctionVisibility
 > = {
   <Output, ArgsValidator extends PropertyValidators>(
-    func: ValidatedFunction<MutationCtx<DataModel>, ArgsValidator, Output>
+    func: ValidatedFunction<
+      GenericMutationCtx<DataModel>,
+      ArgsValidator,
+      Output
+    >
   ): RegisteredMutation<Visibility, ObjectType<ArgsValidator>, Output>;
 
   <Output, Args extends ArgsArray = OneArgArray>(
-    func: UnvalidatedFunction<MutationCtx<DataModel>, Args, Output>
+    func: UnvalidatedFunction<GenericMutationCtx<DataModel>, Args, Output>
   ): RegisteredMutation<Visibility, ArgsArrayToObject<Args>, Output>;
 };
 
@@ -448,11 +517,11 @@ export type QueryBuilder<
   Visibility extends FunctionVisibility
 > = {
   <Output, ArgsValidator extends PropertyValidators>(
-    func: ValidatedFunction<QueryCtx<DataModel>, ArgsValidator, Output>
+    func: ValidatedFunction<GenericQueryCtx<DataModel>, ArgsValidator, Output>
   ): RegisteredQuery<Visibility, ObjectType<ArgsValidator>, Output>;
 
   <Output, Args extends ArgsArray = OneArgArray>(
-    func: UnvalidatedFunction<QueryCtx<DataModel>, Args, Output>
+    func: UnvalidatedFunction<GenericQueryCtx<DataModel>, Args, Output>
   ): RegisteredQuery<Visibility, ArgsArrayToObject<Args>, Output>;
 };
 
@@ -462,13 +531,16 @@ export type QueryBuilder<
  * Used to give {@link actionGeneric} a type specific to your data model.
  * @public
  */
-export type ActionBuilder<Visibility extends FunctionVisibility> = {
+export type ActionBuilder<
+  DataModel extends GenericDataModel,
+  Visibility extends FunctionVisibility
+> = {
   <Output, ArgsValidator extends PropertyValidators>(
-    func: ValidatedFunction<ActionCtx, ArgsValidator, Output>
+    func: ValidatedFunction<GenericActionCtx<DataModel>, ArgsValidator, Output>
   ): RegisteredAction<Visibility, ObjectType<ArgsValidator>, Output>;
 
   <Output, Args extends ArgsArray = OneArgArray>(
-    func: UnvalidatedFunction<ActionCtx, Args, Output>
+    func: UnvalidatedFunction<GenericActionCtx<DataModel>, Args, Output>
   ): RegisteredAction<Visibility, ArgsArrayToObject<Args>, Output>;
 };
 
@@ -480,5 +552,5 @@ export type ActionBuilder<Visibility extends FunctionVisibility> = {
  * @public
  */
 export type HttpActionBuilder = (
-  func: (ctx: ActionCtx, request: Request) => Promise<Response>
+  func: (ctx: GenericActionCtx<any>, request: Request) => Promise<Response>
 ) => PublicHttpAction;

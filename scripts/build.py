@@ -23,28 +23,30 @@ def log_duration(func: Callable[[], None]) -> Callable[[], None]:
 
 
 @log_duration
-def build_types() -> None:
-    subprocess.run([NPM, "run", "build-types"], check=True)
+def build_esm_types() -> None:
+    subprocess.run([NPM, "run", "build-esm-types"], check=True)
 
 
 @log_duration
-def build_internal_types() -> None:
-    subprocess.run([NPM, "run", "build-internal-types"], check=True)
+def build_internal_esm_types() -> None:
+    subprocess.run([NPM, "run", "build-internal-esm-types"], check=True)
 
 
 @log_duration
-def check_cli_types() -> None:
-    subprocess.run([NPM, "run", "check-cli-types"], check=True)
+def build_cjs_types() -> None:
+    subprocess.run([NPM, "run", "build-cjs-types"], check=True)
 
 
 @log_duration
-def build_esm() -> None:
-    subprocess.run([NPM, "run", "build-esm"], check=True)
+def build_internal_cjs_types() -> None:
+    subprocess.run([NPM, "run", "build-internal-cjs-types"], check=True)
 
 
 @log_duration
-def build_cjs() -> None:
+def build_cjs_and_esm() -> None:
     subprocess.run([NPM, "run", "build-cjs"], check=True)
+    subprocess.run([NPM, "run", "build-esm"], check=True)
+    subprocess.run([NPM, "run", "build-node-esm-and-cjs"], check=True)
 
 
 @log_duration
@@ -69,11 +71,12 @@ def main() -> None:
     pool = ThreadPoolExecutor(max_workers=20)
 
     children = []
-    children.append(pool.submit(build_types))
-    children.append(pool.submit(build_internal_types))
-    children.append(pool.submit(check_cli_types))
-    children.append(pool.submit(build_cjs))
-    children.append(pool.submit(build_esm))
+    # Types are slower, run them first
+    children.append(pool.submit(build_esm_types))
+    children.append(pool.submit(build_internal_esm_types))
+    children.append(pool.submit(build_cjs_types))
+    children.append(pool.submit(build_internal_cjs_types))
+    children.append(pool.submit(build_cjs_and_esm))
     children.append(pool.submit(build_browser_script_tag))
     children.append(pool.submit(build_react_script_tag))
     children.append(pool.submit(build_standalone_cli))

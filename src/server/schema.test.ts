@@ -23,6 +23,7 @@ describe("DataModelFromSchemaDefinition", () => {
         string: v.string(),
         bytes: v.bytes(),
         array: v.array(v.boolean()),
+        record: v.record(v.string(), v.boolean()),
       }),
     });
     type DataModel = DataModelFromSchemaDefinition<typeof schema>;
@@ -38,6 +39,7 @@ describe("DataModelFromSchemaDefinition", () => {
       string: string;
       array: boolean[];
       bytes: ArrayBuffer;
+      record: Record<string, boolean>;
     };
     type ExpectedFieldPaths =
       | "_id"
@@ -50,7 +52,8 @@ describe("DataModelFromSchemaDefinition", () => {
       | "boolean"
       | "string"
       | "bytes"
-      | "array";
+      | "array"
+      | "record";
 
     type ExpectedDataModel = {
       table: {
@@ -58,6 +61,7 @@ describe("DataModelFromSchemaDefinition", () => {
         fieldPaths: ExpectedFieldPaths;
         indexes: SystemIndexes;
         searchIndexes: {};
+        vectorIndexes: {};
       };
     };
 
@@ -88,6 +92,7 @@ describe("DataModelFromSchemaDefinition", () => {
         fieldPaths: ExpectedFieldPaths;
         indexes: SystemIndexes;
         searchIndexes: {};
+        vectorIndexes: {};
       };
     };
 
@@ -125,6 +130,7 @@ describe("DataModelFromSchemaDefinition", () => {
         fieldPaths: ExpectedFieldPaths;
         indexes: SystemIndexes;
         searchIndexes: {};
+        vectorIndexes: {};
       };
     };
     assert<Equals<DataModel, ExpectedDataModel>>();
@@ -169,6 +175,7 @@ describe("DataModelFromSchemaDefinition", () => {
         fieldPaths: ExpectedFieldPaths;
         indexes: SystemIndexes;
         searchIndexes: {};
+        vectorIndexes: {};
       };
     };
     assert<Equals<DataModel, ExpectedDataModel>>();
@@ -206,6 +213,7 @@ describe("DataModelFromSchemaDefinition", () => {
         fieldPaths: ExpectedFieldPaths;
         indexes: SystemIndexes;
         searchIndexes: {};
+        vectorIndexes: {};
       };
     };
     assert<Equals<DataModel, ExpectedDataModel>>();
@@ -236,6 +244,7 @@ describe("DataModelFromSchemaDefinition", () => {
         fieldPaths: ExpectedFieldPaths;
         indexes: SystemIndexes;
         searchIndexes: {};
+        vectorIndexes: {};
       };
     };
     assert<Equals<DataModel, ExpectedDataModel>>();
@@ -260,6 +269,63 @@ describe("DataModelFromSchemaDefinition", () => {
         fieldPaths: ExpectedFieldPaths;
         indexes: SystemIndexes;
         searchIndexes: {};
+        vectorIndexes: {};
+      };
+    };
+    assert<Equals<DataModel, ExpectedDataModel>>();
+  });
+
+  test("defineSchema handles records with Ids", () => {
+    const schema = defineSchema({
+      table: defineTable({
+        property: v.record(v.id("reference"), v.string()),
+      }),
+    });
+    type DataModel = DataModelFromSchemaDefinition<typeof schema>;
+    type ExpectedDocument = {
+      _id: GenericId<"table">;
+      _creationTime: number;
+      property: Record<GenericId<"reference">, string>;
+    };
+    type ExpectedFieldPaths = "_id" | "_creationTime" | "property";
+    type ExpectedDataModel = {
+      table: {
+        document: ExpectedDocument;
+        fieldPaths: ExpectedFieldPaths;
+        indexes: SystemIndexes;
+        searchIndexes: {};
+        vectorIndexes: {};
+      };
+    };
+    assert<Equals<DataModel, ExpectedDataModel>>();
+  });
+
+  test("defineSchema handles records with type unions", () => {
+    const schema = defineSchema({
+      table: defineTable({
+        property: v.record(
+          v.union(v.literal("foo"), v.literal("bla")),
+          v.optional(v.string())
+        ),
+      }),
+    });
+    type DataModel = DataModelFromSchemaDefinition<typeof schema>;
+    type ExpectedDocument = {
+      _id: GenericId<"table">;
+      _creationTime: number;
+      property: {
+        foo?: string;
+        bla?: string;
+      };
+    };
+    type ExpectedFieldPaths = "_id" | "_creationTime" | "property";
+    type ExpectedDataModel = {
+      table: {
+        document: ExpectedDocument;
+        fieldPaths: ExpectedFieldPaths;
+        indexes: SystemIndexes;
+        searchIndexes: {};
+        vectorIndexes: {};
       };
     };
     assert<Equals<DataModel, ExpectedDataModel>>();
@@ -302,6 +368,7 @@ describe("DataModelFromSchemaDefinition", () => {
         fieldPaths: ExpectedFieldPaths;
         indexes: SystemIndexes;
         searchIndexes: {};
+        vectorIndexes: {};
       };
     };
     assert<Equals<DataModel, ExpectedDataModel>>();
@@ -330,12 +397,14 @@ describe("DataModelFromSchemaDefinition", () => {
         fieldPaths: "_id" | "_creationTime" | "property";
         indexes: SystemIndexes;
         searchIndexes: {};
+        vectorIndexes: {};
       };
       [tableName: string]: {
         document: any;
         fieldPaths: string;
         indexes: {};
         searchIndexes: {};
+        vectorIndexes: {};
       };
     };
     assert<Equals<DataModel, ExpectedDataModel>>();
@@ -375,6 +444,7 @@ describe("DataModelFromSchemaDefinition", () => {
         fieldPaths: ExpectedFieldPaths;
         indexes: ExpectedIndexes;
         searchIndexes: {};
+        vectorIndexes: {};
       };
     };
     assert<Equals<DataModel, ExpectedDataModel>>();
@@ -427,6 +497,73 @@ test("defineSchema generates search index types", () => {
       fieldPaths: ExpectedFieldPaths;
       indexes: SystemIndexes;
       searchIndexes: ExpectedSearchIndexes;
+      vectorIndexes: {};
+    };
+  };
+  assert<Equals<DataModel, ExpectedDataModel>>();
+});
+
+test("defineSchema generates vector search index types", () => {
+  const schema = defineSchema({
+    table: defineTable({
+      property1: v.string(),
+      property2: v.string(),
+      embedding: v.array(v.float64()),
+    })
+      .vectorIndex("no_filter_fields", {
+        vectorField: "embedding",
+        dimensions: 1536,
+      })
+      .vectorIndex("one_filter_field", {
+        vectorField: "embedding",
+        dimensions: 1536,
+        filterFields: ["property1"],
+      })
+      .vectorIndex("two_filter_fields", {
+        vectorField: "embedding",
+        dimensions: 1536,
+        filterFields: ["property1", "property2"],
+      }),
+  });
+  type DataModel = DataModelFromSchemaDefinition<typeof schema>;
+  type ExpectedDocument = {
+    _id: GenericId<"table">;
+    _creationTime: number;
+    property1: string;
+    property2: string;
+    embedding: number[];
+  };
+  type ExpectedFieldPaths =
+    | "_id"
+    | "_creationTime"
+    | "property1"
+    | "property2"
+    | "embedding";
+  type ExpectedVectorSearchIndexes = {
+    no_filter_fields: {
+      vectorField: "embedding";
+      dimensions: number;
+      filterFields: never;
+    };
+    one_filter_field: {
+      vectorField: "embedding";
+      dimensions: number;
+      filterFields: "property1";
+    };
+    two_filter_fields: {
+      vectorField: "embedding";
+      dimensions: number;
+      filterFields: "property1" | "property2";
+    };
+  };
+  schema.tables.table.vectorIndex;
+  type ExpectedDataModel = {
+    table: {
+      document: ExpectedDocument;
+      fieldPaths: ExpectedFieldPaths;
+      indexes: SystemIndexes;
+      searchIndexes: {};
+      vectorIndexes: ExpectedVectorSearchIndexes;
     };
   };
   assert<Equals<DataModel, ExpectedDataModel>>();

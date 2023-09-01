@@ -1,5 +1,5 @@
 import { convexToJson, Value } from "../values/index.js";
-import { Watch } from "./client";
+import { Watch } from "./client.js";
 import { QueryJournal } from "../browser/sync/protocol.js";
 import { FunctionReference, getFunctionName } from "../server/api.js";
 

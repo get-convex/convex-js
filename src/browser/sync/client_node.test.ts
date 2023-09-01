@@ -156,7 +156,7 @@ test("maxObservedTimestamp is updated on mutation and transition", async () => {
       if (client.getMaxObservedTimestamp()) {
         break;
       }
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
     expect(client.getMaxObservedTimestamp()).toEqual(Long.fromNumber(1000));
 
@@ -178,7 +178,7 @@ test("maxObservedTimestamp is updated on mutation and transition", async () => {
     });
 
     // Wait a bit and confirm the max timestamp has not been updated.
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     expect(client.getMaxObservedTimestamp()).toEqual(Long.fromNumber(1000));
 
     // Send another transition with higher timestamp. This should resolve the

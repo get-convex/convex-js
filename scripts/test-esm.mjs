@@ -2,6 +2,7 @@
 // (. -> ./index.js, ./foo -> ./foo.js, ./foo.ts -> ./foo.js
 
 import fs from "fs";
+import child_process from "child_process";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -10,7 +11,7 @@ await import("../dist/esm/index.js");
 
 for (const dir of fs.readdirSync(path.join(__dirname, "../dist/esm"))) {
   if (dir.endsWith("cli")) {
-    // CLI doesn't need to be importable as ESM (yet at least)
+    // CLI is tested elsewhere, importing it here exits the process
     continue;
   }
 
@@ -20,3 +21,9 @@ for (const dir of fs.readdirSync(path.join(__dirname, "../dist/esm"))) {
     await import(index);
   }
 }
+
+// ts-node-esm requires respects Node.js import urls (requires .js extensions)
+child_process.execFileSync("node_modules/.bin/ts-node-esm", [
+  "src/cli/index.ts",
+  "--version",
+]);

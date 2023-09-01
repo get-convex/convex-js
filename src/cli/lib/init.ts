@@ -6,11 +6,12 @@ import {
   logFailure,
   logFinishedStep,
   logMessage,
+  logWarning,
   showSpinner,
 } from "../../bundler/context.js";
 import { dashboardUrl } from "../dashboard.js";
 import { DeploymentType, createProjectProvisioningDevOrProd } from "./api.js";
-import { doCodegen, doInitCodegen } from "./codegen";
+import { doCodegen, doInitCodegen } from "./codegen.js";
 import {
   configFilepath,
   getFunctionsDirectoryPath,
@@ -105,7 +106,8 @@ export async function init(
   );
 
   if (projectsRemaining <= 2) {
-    console.error(
+    logWarning(
+      ctx,
       chalk.yellow.bold(
         `Your account now has ${projectsRemaining} project${
           projectsRemaining === 1 ? "" : "s"
@@ -115,7 +117,7 @@ export async function init(
   }
 
   if (modules.length > 0) {
-    console.error(chalk.red("Error: Unexpected modules in new project"));
+    logFailure(ctx, chalk.red("Error: Unexpected modules in new project"));
     return await ctx.crash(1, undefined);
   }
 
@@ -145,12 +147,11 @@ export async function init(
   );
   await writeProjectConfig(ctx, projectConfigWithoutAuthInfo);
 
-  await doInitCodegen(
+  await doInitCodegen({
     ctx,
-    functionsPath,
-    true // quiet
-  );
-
+    functionsDirectoryPath: functionsPath,
+    quiet: true,
+  });
   {
     const functionsDirectoryPath = await getFunctionsDirectoryPath(ctx);
     await doCodegen({
@@ -198,10 +199,9 @@ export async function finalizeConfiguration(
     logMessage(ctx, chalk.gray(`  Added ".env.local" to .gitignore`));
   }
 
-  console.error(
-    `\nWrite your Convex functions in ${chalk.bold(functionsPath)}`
-  );
-  console.error(
-    "Give us feedback at https://convex.dev/community or support@convex.dev\n"
+  logMessage(
+    ctx,
+    `\nWrite your Convex functions in ${chalk.bold(functionsPath)}\n` +
+      "Give us feedback at https://convex.dev/community or support@convex.dev\n"
   );
 }

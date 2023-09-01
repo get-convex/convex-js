@@ -9,7 +9,7 @@ export const update = new Command("update")
     const ctx = oneoffContext;
     let updateInstructions = "npm install convex@latest\n";
     const packages = await loadPackageJson(ctx);
-    const oldPackageNames = Object.keys(packages).filter(name =>
+    const oldPackageNames = Object.keys(packages).filter((name) =>
       name.startsWith("@convex-dev")
     );
     for (const pkg of oldPackageNames) {

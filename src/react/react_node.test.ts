@@ -3,12 +3,12 @@ import { Long } from "../browser/long.js";
 
 import ReactDOM from "react-dom";
 
-import { ConvexReactClient } from "./client";
+import { ConvexReactClient } from "./client.js";
 import {
   ClientMessage,
   QuerySetModification,
   ServerMessage,
-} from "../browser/sync/protocol";
+} from "../browser/sync/protocol.js";
 import {
   nodeWebSocket,
   withInMemoryWebSocket,
@@ -47,7 +47,7 @@ test("ConvexReactClient ends subscriptions on close", async () => {
     // Mocking in Jest like `jest.mock('react-dom')` doesn't work with ESM yet.
     const orig = ReactDOM.unstable_batchedUpdates;
     try {
-      const scheduledCallback = await new Promise<() => void>(resolve => {
+      const scheduledCallback = await new Promise<() => void>((resolve) => {
         ReactDOM.unstable_batchedUpdates = function mock(cb: any) {
           timesReactScheduled++;
           resolve(cb);

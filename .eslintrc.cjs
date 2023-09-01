@@ -4,11 +4,7 @@ module.exports = {
   root: true,
   parser: "@typescript-eslint/parser",
   parserOptions: {
-    project: [
-      "./tsconfig.json",
-      "./src/cli/tsconfig.json",
-      "./post_build_tests/tsconfig.json",
-    ],
+    project: ["./tsconfig.json", "./src/cli/tsconfig.json"],
     tsconfigRootDir: __dirname,
   },
   plugins: ["@typescript-eslint", "react-hooks", "react", "jest"],

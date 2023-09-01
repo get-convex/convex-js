@@ -57,6 +57,41 @@ export type GenericTableSearchIndexes = Record<
 >;
 
 /**
+ * A type describing the configuration of a vector index.
+ * @public
+ */
+export type GenericVectorIndexConfig = {
+  vectorField: string;
+  dimensions: number;
+  filterFields: string;
+};
+
+/**
+ * A type describing all of the vector indexes in a table.
+ *
+ * This is an object mapping each index name to the config for the index.
+ * @public
+ */
+export type GenericTableVectorIndexes = Record<
+  string,
+  GenericVectorIndexConfig
+>;
+/**
+ * If we have A | B | C, this finds A[Key] | B[Key] | C[Key], where we default to
+ * `Default` if the Key isn't found.
+ *
+ * Conditional types apparently loop over the variants in a union, so the `T extends T`
+ * is enough to force this behavior.
+ * https://stackoverflow.com/questions/49401866/all-possible-keys-of-an-union-type
+ */
+
+type ValueFromUnion<T, Key, Default> = T extends T
+  ? Key extends keyof T
+    ? T[Key]
+    : Default
+  : never;
+
+/**
  * The type of a field in a document.
  *
  * Note that this supports both simple fields like "name" and nested fields like
@@ -70,16 +105,17 @@ export type FieldTypeFromFieldPath<
   Document extends GenericDocument,
   FieldPath extends string
 > = FieldPath extends `${infer First}.${infer Second}`
-  ? First extends keyof Document
-    ? // This is slightly incorrect because `GenericDocument` includes some Convex
-      // values that aren't objects like Array and Id.
-      Document[First] extends GenericDocument
-      ? FieldTypeFromFieldPath<Document[First], Second>
-      : undefined
+  ? ValueFromUnion<
+      Document,
+      First,
+      Record<never, never>
+    > extends GenericDocument
+    ? FieldTypeFromFieldPath<
+        ValueFromUnion<Document, First, Record<never, never>>,
+        Second
+      >
     : undefined
-  : FieldPath extends keyof Document
-  ? Document[FieldPath]
-  : undefined;
+  : ValueFromUnion<Document, FieldPath, undefined>;
 
 // Table Types /////////////////////////////////////////////////////////////////
 
@@ -92,6 +128,7 @@ export type GenericTableInfo = {
   fieldPaths: GenericFieldPaths;
   indexes: GenericTableIndexes;
   searchIndexes: GenericTableSearchIndexes;
+  vectorIndexes: GenericTableVectorIndexes;
 };
 
 /**
@@ -152,13 +189,38 @@ export type SearchIndexNames<TableInfo extends GenericTableInfo> =
   keyof SearchIndexes<TableInfo>;
 
 /**
- * Extract the fields of an index from a {@link GenericTableInfo} by name.
+ * Extract the config of a search index from a {@link GenericTableInfo} by name.
  * @public
  */
 export type NamedSearchIndex<
   TableInfo extends GenericTableInfo,
   IndexName extends SearchIndexNames<TableInfo>
 > = SearchIndexes<TableInfo>[IndexName];
+
+/**
+ * The vector indexes in a table for a given {@link GenericTableInfo}.
+ *
+ * This will be an object mapping index names to the vector index config.
+ * @public
+ */
+export type VectorIndexes<TableInfo extends GenericTableInfo> =
+  TableInfo["vectorIndexes"];
+
+/**
+ * The names of vector indexes in a table for a given {@link GenericTableInfo}.
+ * @public
+ */
+export type VectorIndexNames<TableInfo extends GenericTableInfo> =
+  keyof VectorIndexes<TableInfo>;
+
+/**
+ * Extract the config of a vector index from a {@link GenericTableInfo} by name.
+ * @public
+ */
+export type NamedVectorIndex<
+  TableInfo extends GenericTableInfo,
+  IndexName extends VectorIndexNames<TableInfo>
+> = VectorIndexes<TableInfo>[IndexName];
 
 // Data Model Types ////////////////////////////////////////////////////////////
 
@@ -185,6 +247,8 @@ export type AnyDataModel = {
     indexes: {};
     // eslint-disable-next-line @typescript-eslint/ban-types
     searchIndexes: {};
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    vectorIndexes: {};
   };
 };
 

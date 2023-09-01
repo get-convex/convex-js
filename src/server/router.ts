@@ -186,21 +186,21 @@ export class HttpRouter {
     Readonly<[string, RoutableMethod, (...args: any[]) => any]>
   > => {
     const exactPaths: string[] = [...this.exactRoutes.keys()].sort();
-    const exact = exactPaths.flatMap(path =>
+    const exact = exactPaths.flatMap((path) =>
       [...this.exactRoutes.get(path)!.keys()]
         .sort()
         .map(
-          method =>
+          (method) =>
             [path, method, this.exactRoutes.get(path)!.get(method)!] as const
         )
     );
 
     const prefixPathMethods = [...this.prefixRoutes.keys()].sort();
-    const prefixes = prefixPathMethods.flatMap(method =>
+    const prefixes = prefixPathMethods.flatMap((method) =>
       [...this.prefixRoutes.get(method)!.keys()]
         .sort()
         .map(
-          pathPrefix =>
+          (pathPrefix) =>
             [
               `${pathPrefix}*`,
               method,

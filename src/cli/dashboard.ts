@@ -6,7 +6,7 @@ import {
   readProjectConfig,
 } from "./lib/config.js";
 import open from "open";
-import { Context, oneoffContext } from "../bundler/context.js";
+import { Context, logMessage, oneoffContext } from "../bundler/context.js";
 import { fetchTeamAndProject } from "./lib/api.js";
 import { getConfiguredDeploymentOrCrash } from "./lib/utils.js";
 
@@ -16,7 +16,7 @@ export const dashboard = new Command("dashboard")
     "--no-open",
     "Don't automatically open the dashboard in the default browser"
   )
-  .action(async options => {
+  .action(async (options) => {
     const ctx = oneoffContext;
     const configuredDeployment = await getConfiguredDeploymentOrCrash(ctx);
     const loginUrl = await dashboardUrlForConfiguredDeployment(
@@ -25,7 +25,8 @@ export const dashboard = new Command("dashboard")
     );
 
     if (options.open) {
-      console.error(
+      logMessage(
+        ctx,
         chalk.gray(`Opening ${loginUrl} in the default browser...`)
       );
       await open(loginUrl);
@@ -65,7 +66,7 @@ async function dashboardUrlForConfig(
     "prodUrl"
   );
   const host = process.env.CONVEX_PROVISION_HOST
-    ? "http://localhost:3000"
+    ? "http://localhost:6789"
     : "https://dashboard.convex.dev";
 
   // in local dev we don't know the deployment name
@@ -83,7 +84,7 @@ export function dashboardUrl(
   deploymentName: string | null
 ) {
   const host = process.env.CONVEX_PROVISION_HOST
-    ? "http://localhost:3000"
+    ? "http://localhost:6789"
     : "https://dashboard.convex.dev";
   return `${host}/t/${team}/${project}${
     deploymentName !== null ? `/${deploymentName}` : ""

@@ -5,10 +5,10 @@ import {
   logError,
   logFailure,
   showSpinner,
-} from "../../bundler/context";
+} from "../../bundler/context.js";
 import * as Sentry from "@sentry/node";
 import * as semver from "semver";
-import { spawnAsync } from "./utils";
+import { spawnAsync } from "./utils.js";
 
 export type TypecheckResult = "cantTypeCheck" | "success" | "typecheckFailed";
 
@@ -149,8 +149,8 @@ async function runTscInner(
   // output to discover which files it touched.
   const filesTouched = result.stdout
     .split("\n")
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
   let anyPathsFound = false;
   for (const fileTouched of filesTouched) {
     const absPath = path.resolve(fileTouched);

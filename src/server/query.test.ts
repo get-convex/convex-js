@@ -15,6 +15,8 @@ type DataModel = {
     indexes: {};
     // eslint-disable-next-line @typescript-eslint/ban-types
     searchIndexes: {};
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    vectorIndexes: {};
   };
 };
 type DB = DatabaseReader<DataModel>;
@@ -68,7 +70,7 @@ test("order and filter don't change the return type", () => {
     return db
       .query("messages")
       .order("desc")
-      .filter(q => q.eq(q.field("body"), "Hello"))
+      .filter((q) => q.eq(q.field("body"), "Hello"))
       .collect();
   }
   type Result = ReturnType<typeof orderAndFilter>;

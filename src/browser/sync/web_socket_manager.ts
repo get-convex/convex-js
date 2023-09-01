@@ -195,11 +195,11 @@ export class WebSocketManager {
       this.lastCloseReason = null;
     };
     // NB: The WebSocket API calls `onclose` even if connection fails, so we can route all error paths through `onclose`.
-    ws.onerror = error => {
+    ws.onerror = (error) => {
       const message = (error as ErrorEvent).message;
       console.log(`WebSocket error: ${message}`);
     };
-    ws.onmessage = message => {
+    ws.onmessage = (message) => {
       // TODO(CX-1498): We reset the retry counter on any successful message.
       // This is not ideal and we should improve this further.
       this.retries = 0;
@@ -208,7 +208,7 @@ export class WebSocketManager {
       this._logVerbose(`received ws message with type ${serverMessage.type}`);
       this.onMessage(serverMessage);
     };
-    ws.onclose = event => {
+    ws.onclose = (event) => {
       this._logVerbose("begin ws.onclose");
       if (this.lastCloseReason === null) {
         this.lastCloseReason = event.reason ?? "OnCloseInvoked";

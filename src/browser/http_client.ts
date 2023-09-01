@@ -16,15 +16,11 @@ export const STATUS_CODE_BAD_REQUEST = 400;
 // Must match the constant of the same name in the backend.
 export const STATUS_CODE_UDF_FAILED = 560;
 
-/** In browsers, Node.js 18, Deno, etc. `fetch` is a global function */
-type WindowFetch = typeof window.fetch;
-
-const fetch: WindowFetch =
-  globalThis.fetch ||
-  ((...args) =>
-    import("node-fetch").then(({ default: fetch }) =>
-      (fetch as unknown as WindowFetch)(...args)
-    ));
+// Allow fetch to be shimmed in for Node.js < 18
+let localFetch = globalThis.fetch;
+export function setFetch(f: typeof globalThis.fetch) {
+  localFetch = f;
+}
 
 /**
  * A Convex client that runs queries and mutations over HTTP.
@@ -128,7 +124,7 @@ export class ConvexHttpClient {
     } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
-    const response = await fetch(`${this.address}/query`, {
+    const response = await localFetch(`${this.address}/query`, {
       body,
       method: "POST",
       headers: headers,
@@ -181,7 +177,7 @@ export class ConvexHttpClient {
     } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
-    const response = await fetch(`${this.address}/mutation`, {
+    const response = await localFetch(`${this.address}/mutation`, {
       body,
       method: "POST",
       headers: headers,
@@ -233,7 +229,7 @@ export class ConvexHttpClient {
     } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
-    const response = await fetch(`${this.address}/action`, {
+    const response = await localFetch(`${this.address}/action`, {
       body,
       method: "POST",
       headers: headers,
@@ -292,7 +288,7 @@ export class ConvexHttpClient {
     } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
-    const response = await fetch(`${this.address}/function`, {
+    const response = await localFetch(`${this.address}/function`, {
       body,
       method: "POST",
       headers: headers,

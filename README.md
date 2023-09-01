@@ -35,3 +35,7 @@ This package includes several entry points for building apps on Convex:
 
 This package also includes [`convex`](https://docs.convex.dev/using/cli), the
 command-line interface for managing Convex projects.
+
+# Building
+
+`npm pack` produces a public build with internal types removed.

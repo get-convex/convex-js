@@ -7,7 +7,7 @@ import { ConvexReactClient, createMutation, useQuery } from "./client.js";
 import { ConvexProvider } from "./index.js";
 import React from "react";
 import { renderHook } from "@testing-library/react";
-import { anyApi } from "../server/api.js";
+import { anyApi, makeFunctionReference } from "../server/api.js";
 
 const address = "https://127.0.0.1:3001";
 
@@ -74,7 +74,7 @@ describe("useQueryGeneric", () => {
       anyApi.myMutation.default,
       {},
       {
-        optimisticUpdate: localStore => {
+        optimisticUpdate: (localStore) => {
           localStore.setQuery(anyApi.myQuery.default, {}, "queryResult");
         },
       }
@@ -92,6 +92,55 @@ describe("useQueryGeneric", () => {
     });
     expect(result.current).toStrictEqual("queryResult");
   });
+
+  test("returns undefined when skipped", () => {
+    const client = createClientWithQuery();
+    const wrapper = ({ children }: any) => (
+      <ConvexProvider client={client}>{children}</ConvexProvider>
+    );
+    const { result } = renderHook(
+      () => useQuery(anyApi.myQuery.default, "skip"),
+      {
+        wrapper,
+      }
+    );
+    expect(result.current).toStrictEqual(undefined);
+  });
+});
+
+// Intentionally disabled because we're only testing types
+// eslint-disable-next-line jest/no-disabled-tests
+describe.skip("useQuery typing", () => {
+  test("useQuery with no args query", () => {
+    const queryWithNoArgs = makeFunctionReference<
+      "query",
+      Record<string, never>
+    >("foo");
+    useQuery(queryWithNoArgs, {});
+    // @ts-expect-error This should be an error
+    useQuery(queryWithNoArgs, { x: 3 });
+    useQuery(queryWithNoArgs, "skip");
+    const x: number | null = null;
+    useQuery(queryWithNoArgs, x === null ? "skip" : {});
+    // This should be an error, but isn't :(, probably a bug in TypeScript
+    useQuery(queryWithNoArgs, x === null ? "skip" : { x });
+    // @ts-expect-error This should be an error
+    useQuery(queryWithNoArgs, x === null ? "skip" : { x: 3 });
+  });
+
+  test("useQuery with query taking args", () => {
+    const queryWithArgs = makeFunctionReference<"query", { x: number }>("foo");
+    // @ts-expect-error This should be an error
+    useQuery(queryWithArgs);
+    // @ts-expect-error This should be an error
+    useQuery(queryWithArgs, { x: "not a number" });
+    useQuery(queryWithArgs, { x: 42 });
+    useQuery(queryWithArgs, "skip");
+    const x: number | null = null;
+    useQuery(queryWithArgs, x === null ? "skip" : { x });
+    // @ts-expect-error This should be an error
+    useQuery(queryWithArgs, x === null ? null : { x: "not a number" });
+  });
 });
 
 describe("async query fetch", () => {
@@ -103,7 +152,7 @@ describe("async query fetch", () => {
       anyApi.myMutation.default,
       {},
       {
-        optimisticUpdate: localStore => {
+        optimisticUpdate: (localStore) => {
           localStore.setQuery(anyApi.myQuery.default, {}, "queryResult");
         },
       }

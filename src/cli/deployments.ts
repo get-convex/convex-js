@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { readProjectConfig } from "./lib/config.js";
 import chalk from "chalk";
 import { bigBrainAPI } from "./lib/utils.js";
-import { oneoffContext } from "../bundler/context.js";
+import { logError, logMessage, oneoffContext } from "../bundler/context.js";
 
 type Deployment = {
   id: number;
@@ -19,12 +19,10 @@ export const deployments = new Command("deployments")
 
     const url = `/teams/${config.team}/projects/${config.project}/deployments`;
 
-    console.error(
-      chalk.yellow(`Deployments for project ${config.team}/${config.project}`)
-    );
+    logMessage(ctx, `Deployments for project ${config.team}/${config.project}`);
     const deployments = (await bigBrainAPI(ctx, "GET", url)) as Deployment[];
     console.log(deployments);
     if (deployments.length === 0) {
-      console.error(chalk.yellow(`No deployments exist for project`));
+      logError(ctx, chalk.yellow(`No deployments exist for project`));
     }
   });

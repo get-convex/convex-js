@@ -1,7 +1,12 @@
-import { Context, logError, logMessage } from "../../bundler/context";
-import { version } from "../../index";
+import {
+  Context,
+  logError,
+  logMessage,
+  logWarning,
+} from "../../bundler/context.js";
+import { version } from "../../index.js";
 import axios from "axios";
-import { nextBackoff } from "../dev";
+import { nextBackoff } from "../dev.js";
 import chalk from "chalk";
 
 const MAX_UDF_STREAM_FAILURE_COUNT = 5;
@@ -37,11 +42,12 @@ export async function watchLogs(ctx: Context, url: string, adminKey: string) {
 
       // If we exceed a threshold number of failures, warn the user and display backoff.
       if (numFailures > MAX_UDF_STREAM_FAILURE_COUNT) {
-        console.warn(
+        logWarning(
+          ctx,
           `Convex [WARN] Failed to fetch logs. Waiting ${backoff}ms before next retry.`
         );
       }
-      await new Promise(resolve => {
+      await new Promise((resolve) => {
         setTimeout(() => resolve(null), backoff);
       });
     }

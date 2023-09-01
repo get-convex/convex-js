@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import axiosRetry from "axios-retry";
 import chalk from "chalk";
 import equal from "deep-equal";
@@ -25,6 +25,7 @@ import {
   functionsDir,
   getConfiguredDeployment,
   logAndHandleAxiosError,
+  ErrorData,
 } from "./utils.js";
 export { productionProvisionHost, provisionHost } from "./utils.js";
 
@@ -177,19 +178,19 @@ export async function configFilepath(ctx: Context): Promise<string> {
   const preferredLocationExists = ctx.fs.exists(preferredLocation);
   const wrongLocationExists = ctx.fs.exists(wrongLocation);
   if (preferredLocationExists && wrongLocationExists) {
-    console.error(
+    logError(
+      ctx,
       chalk.red(
         `Error: both ${preferredLocation} and ${wrongLocation} files exist!`
       )
     );
-    console.error(`Consolidate these and remove ${wrongLocation}.`);
+    logFailure(ctx, `Consolidate these and remove ${wrongLocation}.`);
     return await ctx.crash(1, "invalid filesystem data");
   }
   if (!preferredLocationExists && wrongLocationExists) {
-    console.error(
-      chalk.red(
-        `Error: Please move ${wrongLocation} to the root of your project`
-      )
+    logFailure(
+      ctx,
+      `Error: Please move ${wrongLocation} to the root of your project`
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -225,17 +226,16 @@ export async function readProjectConfig(ctx: Context): Promise<{
     );
   } catch (err) {
     if (err instanceof ParseError || err instanceof SyntaxError) {
-      console.error(chalk.red(`Error: Parsing "${configPath}" failed`));
-      console.error(chalk.gray(err.toString()));
+      logError(ctx, chalk.red(`Error: Parsing "${configPath}" failed`));
+      logMessage(ctx, chalk.gray(err.toString()));
     } else {
-      console.error(
-        chalk.red(`Error: Unable to read project config file "${configPath}"`)
-      );
-      console.error(
-        "Are you running this command from the root directory of a Convex project? If so, run `npx convex dev` first."
+      logFailure(
+        ctx,
+        `Error: Unable to read project config file "${configPath}"\n` +
+          "  Are you running this command from the root directory of a Convex project? If so, run `npx convex dev` first."
       );
       if (err instanceof Error) {
-        console.error(chalk.gray(err.message));
+        logError(ctx, chalk.red(err.message));
       }
     }
     return await ctx.crash(1, "invalid filesystem data", err);
@@ -256,8 +256,8 @@ export async function enforceDeprecatedConfigField(
     return value;
   }
   const err = new ParseError(`Expected ${field} to be a string`);
-  console.error(chalk.red(`Error: Parsing convex.json failed`));
-  console.error(chalk.gray(err.toString()));
+  logFailure(ctx, `Error: Parsing convex.json failed`);
+  logMessage(ctx, chalk.gray(err.toString()));
   return await ctx.crash(1, "invalid filesystem data", err);
 }
 
@@ -284,7 +284,7 @@ export async function configFromProjectConfig(
     logMessage(
       ctx,
       "Queries and mutations modules: ",
-      modules.map(m => m.path)
+      modules.map((m) => m.path)
     );
   }
 
@@ -302,14 +302,14 @@ export async function configFromProjectConfig(
     logMessage(
       ctx,
       "Node modules: ",
-      nodeResult.modules.map(m => m.path)
+      nodeResult.modules.map((m) => m.path)
     );
     if (projectConfig.externalNodeModules.length > 0) {
       logMessage(
         ctx,
         "Node external npm dependencies: ",
         [...nodeResult.externalDependencies.entries()].map(
-          a => `${a[0]}: ${a[1]}`
+          (a) => `${a[0]}: ${a[1]}`
         )
       );
     }
@@ -376,7 +376,7 @@ export async function upgradeOldAuthInfoToAuthConfig(
         2
       ).split(EOL);
       const indentedProvidersString = [providersStringLines[0]]
-        .concat(providersStringLines.slice(1).map(line => `  ${line}`))
+        .concat(providersStringLines.slice(1).map((line) => `  ${line}`))
         .join(EOL);
       ctx.fs.writeUtf8File(
         authConfigPath,
@@ -412,13 +412,10 @@ export async function writeProjectConfig(
       const contents = JSON.stringify(strippedConfig, undefined, 2) + "\n";
       ctx.fs.writeUtf8File(configPath, contents, 0o644);
     } catch (err) {
-      console.error(
-        chalk.red(
-          `Error: Unable to write project config file "${configPath}" in current directory`
-        )
-      );
-      console.error(
-        "Are you running this command from the root directory of a Convex project?"
+      logFailure(
+        ctx,
+        `Error: Unable to write project config file "${configPath}" in current directory\n` +
+          "  Are you running this command from the root directory of a Convex project?"
       );
       return await ctx.crash(1, "invalid filesystem data", err);
     }
@@ -486,7 +483,7 @@ export async function pullConfig(
   axiosRetry(client, {
     retries: 4,
     retryDelay: axiosRetry.exponentialDelay,
-    retryCondition: error => {
+    retryCondition: (error) => {
       return error.response?.status === 404 || false;
     },
   });
@@ -528,7 +525,8 @@ export async function pullConfig(
 export function configJSON(
   config: Config,
   adminKey: string,
-  schemaId?: string
+  schemaId?: string,
+  pushMetrics?: PushMetrics
 ) {
   // Override origin with the url
   const projectConfig = {
@@ -544,8 +542,18 @@ export function configJSON(
     udfServerVersion: config.udfServerVersion,
     schemaId,
     adminKey,
+    pushMetrics,
   };
 }
+
+// Time in seconds of various spans of time during a push.
+export type PushMetrics = {
+  typecheck: number;
+  bundle: number;
+  schemaPush: number;
+  codePull: number;
+  totalBeforePush: number;
+};
 
 /** Push configuration to the given remote origin. */
 export async function pushConfig(
@@ -553,9 +561,10 @@ export async function pushConfig(
   config: Config,
   adminKey: string,
   url: string,
+  pushMetrics?: PushMetrics,
   schemaId?: string
 ): Promise<void> {
-  const serializedConfig = configJSON(config, adminKey, schemaId);
+  const serializedConfig = configJSON(config, adminKey, schemaId, pushMetrics);
 
   try {
     await axios.post(`${url}/api/push_config`, serializedConfig, {
@@ -567,7 +576,7 @@ export async function pushConfig(
     });
   } catch (error) {
     if (
-      (error as any).response?.data?.code ===
+      (error as AxiosError<ErrorData>).response?.data?.code ===
       "AuthConfigMissingEnvironmentVariable"
     ) {
       (error as any).wasExpected = true;

@@ -11,12 +11,15 @@ import {
   makeFunctionReference,
   PaginationOptions,
   PaginationResult,
-} from "../server";
+} from "../server/index.js";
 import { assert, Equals } from "../test/type_testing.js";
 import { Value } from "../values";
 import { ConvexProvider, ConvexReactClient } from "./client.js";
-import { PaginatedQueryArgs, usePaginatedQuery } from "./use_paginated_query";
-import { PaginatedQueryItem } from "./use_paginated_query";
+import {
+  PaginatedQueryArgs,
+  usePaginatedQuery,
+} from "./use_paginated_query.js";
+import { PaginatedQueryItem } from "./use_paginated_query.js";
 
 const address = "https://127.0.0.1:3001";
 

@@ -53,8 +53,8 @@ export function getMarksReport(sessionId: string): MarkJson[] {
     const marks = (
       performance
         .getEntriesByName(name)
-        .filter(entry => entry.entryType === "mark") as PerformanceMark[]
-    ).filter(mark => mark.detail.sessionId === sessionId);
+        .filter((entry) => entry.entryType === "mark") as PerformanceMark[]
+    ).filter((mark) => mark.detail.sessionId === sessionId);
     allMarks.push(...marks);
   }
   return allMarks.map(performanceMarkToJson);

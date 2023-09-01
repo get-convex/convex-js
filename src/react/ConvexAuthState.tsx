@@ -93,7 +93,7 @@ export function ConvexProviderWithAuth({
     let isThisEffectRelevant = true;
 
     async function setToken() {
-      client.setAuth(fetchAccessToken, isAuthenticated => {
+      client.setAuth(fetchAccessToken, (isAuthenticated) => {
         if (isThisEffectRelevant) {
           setIsConvexAuthenticated(isAuthenticated);
         }
@@ -107,7 +107,7 @@ export function ConvexProviderWithAuth({
 
         // If we haven't finished fetching the token by now
         // we shouldn't transition to a loaded state
-        setIsConvexAuthenticated(isConvexAuthenticated =>
+        setIsConvexAuthenticated((isConvexAuthenticated) =>
           isConvexAuthenticated ? false : null
         );
         client.clearAuth();

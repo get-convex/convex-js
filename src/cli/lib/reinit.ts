@@ -1,4 +1,4 @@
-import { Context, showSpinner } from "../../bundler/context.js";
+import { Context, logFailure, showSpinner } from "../../bundler/context.js";
 import {
   DeploymentType,
   fetchDeploymentCredentialsProvisioningDevOrProd,
@@ -37,7 +37,7 @@ export async function reinit(
     "Project:"
   );
   if (!projectSlug) {
-    console.error("Aborted");
+    logFailure(ctx, "Aborted");
     return;
   }
 

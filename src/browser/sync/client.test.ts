@@ -19,7 +19,7 @@ test("localQueryResult reflects optimistic results", async () => {
     "myUdf",
     {},
     {
-      optimisticUpdate: localQueryStore => {
+      optimisticUpdate: (localQueryStore) => {
         localQueryStore.setQuery(anyApi.myUdf.default, {}, true);
       },
     }

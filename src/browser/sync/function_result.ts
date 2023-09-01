@@ -1,4 +1,4 @@
-import { Value } from "../../values";
+import { Value } from "../../values/index.js";
 
 /**
  * The result of running a function on the server.
@@ -8,10 +8,14 @@ import { Value } from "../../values";
  *
  * @public
  */
-export type FunctionResult =
-  | {
-      success: true;
-      value: Value;
-      logLines: string[];
-    }
-  | { success: false; errorMessage: string; logLines: string[] };
+export type FunctionResult = FunctionSuccess | FunctionFailure;
+export type FunctionSuccess = {
+  success: true;
+  value: Value;
+  logLines: string[];
+};
+export type FunctionFailure = {
+  success: false;
+  errorMessage: string;
+  logLines: string[];
+};

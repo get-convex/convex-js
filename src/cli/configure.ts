@@ -1,22 +1,27 @@
 import chalk from "chalk";
 import inquirer from "inquirer";
-import { Context, logError, logFailure, logMessage } from "../bundler/context";
+import {
+  Context,
+  logError,
+  logFailure,
+  logMessage,
+} from "../bundler/context.js";
 import {
   DeploymentType,
   DeploymentName,
   fetchDeploymentCredentialsForName,
   fetchDeploymentCredentialsProvisioningDevOrProdMaybeThrows,
-} from "./lib/api";
+} from "./lib/api.js";
 import {
   ProjectConfig,
   enforceDeprecatedConfigField,
   readProjectConfig,
   upgradeOldAuthInfoToAuthConfig,
   writeProjectConfig,
-} from "./lib/config";
-import { writeDeploymentEnvVar } from "./lib/deployment";
-import { init } from "./lib/init";
-import { reinit } from "./lib/reinit";
+} from "./lib/config.js";
+import { writeDeploymentEnvVar } from "./lib/deployment.js";
+import { init } from "./lib/init.js";
+import { reinit } from "./lib/reinit.js";
 import {
   functionsDir,
   getConfiguredDeployment,
@@ -24,8 +29,8 @@ import {
   hasProjects,
   hasTeam,
   logAndHandleAxiosError,
-} from "./lib/utils";
-import { writeConvexUrlToEnvFile } from "./lib/envvars";
+} from "./lib/utils.js";
+import { writeConvexUrlToEnvFile } from "./lib/envvars.js";
 
 type DeploymentCredentials = {
   url: string;
@@ -274,7 +279,8 @@ async function askToReconfigure(
       },
     ]);
     if (!confirmed) {
-      console.error(
+      logFailure(
+        ctx,
         "Run `npx convex dev` in a directory with a valid convex.json."
       );
       return await ctx.crash(1, "invalid filesystem data");
@@ -308,7 +314,8 @@ async function askToReconfigureNew(
       },
     ]);
     if (!confirmed) {
-      console.error(
+      logFailure(
+        ctx,
         "Run `npx convex dev` in a directory with a valid CONVEX_DEPLOYMENT set"
       );
       return await ctx.crash(1, "invalid filesystem data");

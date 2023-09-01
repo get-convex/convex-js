@@ -1,9 +1,13 @@
 import chalk from "chalk";
-import { functionsDir, ensureHasConvexDependency } from "./lib/utils";
+import { functionsDir, ensureHasConvexDependency } from "./lib/utils.js";
 import { Command } from "commander";
-import { readConfig } from "./lib/config";
-import { typeCheckFunctions } from "./lib/typecheck";
-import { oneoffContext } from "../bundler/context";
+import { readConfig } from "./lib/config.js";
+import { typeCheckFunctions } from "./lib/typecheck.js";
+import {
+  logFinishedStep,
+  logMessage,
+  oneoffContext,
+} from "../bundler/context.js";
 
 // Experimental (it's going to fail sometimes) TypeScript type checking.
 // Includes a separate command to help users debug their TypeScript configs.
@@ -25,18 +29,18 @@ export const typecheck = new Command("typecheck")
       async (typecheckResult, logSpecificError) => {
         logSpecificError?.();
         if (typecheckResult === "typecheckFailed") {
-          console.error(chalk.gray("Typecheck failed"));
+          logMessage(ctx, chalk.gray("Typecheck failed"));
           return await ctx.crash(1, "invalid filesystem data");
         } else if (typecheckResult === "cantTypeCheck") {
-          console.error(
+          logMessage(
+            ctx,
             chalk.gray("Unable to typecheck; is TypeScript installed?")
           );
           return await ctx.crash(1, "invalid filesystem data");
         } else {
-          console.error(
-            chalk.green(
-              "Typecheck passed: `tsc --noEmit` completed with exit code 0."
-            )
+          logFinishedStep(
+            ctx,
+            "Typecheck passed: `tsc --noEmit` completed with exit code 0."
           );
           return await ctx.crash(0);
         }

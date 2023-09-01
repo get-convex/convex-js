@@ -1,8 +1,8 @@
 import { Command, Option } from "commander";
-import { logFailure, oneoffContext } from "../bundler/context";
+import { logFailure, oneoffContext } from "../bundler/context.js";
 import { watchAndPush } from "./dev.js";
 import { fetchDeploymentCredentialsProvisionProd } from "./lib/api.js";
-import { runFunctionAndLog, subscribeAndLog } from "./lib/run";
+import { runFunctionAndLog, subscribeAndLog } from "./lib/run.js";
 import { ensureHasConvexDependency } from "./lib/utils.js";
 
 export const run = new Command("run")
@@ -82,7 +82,7 @@ Use --no-push to run functions that are already deployed.`
         {
           once: true,
           traceEvents: false,
-          watch: false,
+          untilSuccess: true,
         }
       );
     }

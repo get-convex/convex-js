@@ -22,5 +22,5 @@ export default {
       },
     ],
   },
-  resolver: `./src/test/test_resolver.js`,
+  resolver: `./src/test/test_resolver.cjs`,
 };

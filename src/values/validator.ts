@@ -64,6 +64,7 @@ export type ValidatorJSON =
     }
   | { type: "id"; tableName: string }
   | { type: "array"; value: ValidatorJSON }
+  | { type: "record"; keys: ValidatorJSON; values: ObjectFieldType }
   | { type: "object"; value: Record<string, ObjectFieldType> }
   | { type: "union"; value: ValidatorJSON[] };
 
@@ -135,6 +136,20 @@ export const v = {
       false
     );
   },
+  /** @internal // coming soon! */
+  record<K extends string, ValueValidator extends Validator<any, any, any>>(
+    keys: Validator<K, false, any>,
+    values: ValueValidator
+  ): RecordValidator<K, ValueValidator> {
+    return new Validator(
+      {
+        type: "record",
+        keys: keys.json,
+        values: { fieldType: values.json, optional: values.optional },
+      },
+      false
+    );
+  },
   union<
     T extends [
       Validator<any, false, any>,
@@ -147,7 +162,7 @@ export const v = {
     return new Validator(
       {
         type: "union",
-        value: schemaTypes.map(t => t.json),
+        value: schemaTypes.map((t) => t.json),
       },
       false
     );
@@ -222,6 +237,26 @@ type OptionalKeys<
 type RequiredKeys<
   PropertyValidators extends Record<string, Validator<any, any, any>>
 > = Exclude<keyof PropertyValidators, OptionalKeys<PropertyValidators>>;
+
+/**
+ * Calculate the type of a {@link Validator} for an object that produces indexed types.
+ *
+ * If the value validator is not optional, it produces a `Record` type, which is an alias
+ * for `{[key: K]: V}`.
+ *
+ * If the value validator is optional, it produces a mapped object type,
+ * with optional keys: `{[key in K]?: V}`.
+ *
+ * This is used within the validator builder, {@link v}.
+ */
+export type RecordValidator<
+  K extends string,
+  ValueValidator extends Validator<any, any, any>
+> = Validator<
+  ValueValidator["isOptional"] extends true
+    ? { [key in K]?: ValueValidator["type"] }
+    : Record<K, ValueValidator["type"]>
+>;
 
 /**
  * Join together two index field paths.

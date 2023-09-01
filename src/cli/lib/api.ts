@@ -132,7 +132,7 @@ export async function fetchDeploymentCredentialsForName(
   const url = data.url;
   if (adminKey === undefined || url === undefined) {
     const msg = "Unknown error during authorization: " + JSON.stringify(data);
-    console.error(chalk.red(msg));
+    logError(ctx, chalk.red(msg));
     return await ctx.crash(1, "transient", new Error(msg));
   }
   return { deploymentName, adminKey, url };
@@ -204,7 +204,7 @@ export async function fetchProdDeploymentCredentials(
     prodDeploymentName === undefined
   ) {
     const msg = "Unknown error during authorization: " + JSON.stringify(data);
-    console.error(chalk.red(msg));
+    logError(ctx, chalk.red(msg));
     return await ctx.crash(1, "transient", new Error(msg));
   }
   return {
@@ -295,7 +295,7 @@ export async function fetchDeploymentCredentialsProvisioningDevOrProdMaybeThrows
   const url = data.url;
   if (adminKey === undefined || url === undefined) {
     const msg = "Unknown error during authorization: " + JSON.stringify(data);
-    console.error(chalk.red(msg));
+    logError(ctx, chalk.red(msg));
     return await ctx.crash(1, "transient", new Error(msg));
   }
   return { adminKey, url, deploymentName };

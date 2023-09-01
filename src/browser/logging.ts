@@ -1,4 +1,7 @@
 // This is blue #9 from https://www.radix-ui.com/docs/colors/palette-composition/the-scales
+
+import { FunctionFailure } from "./sync/function_result";
+
 // It must look good in both light and dark mode.
 const INFO_COLOR = "color:rgb(0, 145, 255)";
 
@@ -52,11 +55,11 @@ export function logFatalError(message: string): Error {
   return new Error(errorMessage);
 }
 
-export function createError(
+export function createHybridErrorStacktrace(
   source: UdfType,
   udfPath: string,
-  message: string
-): Error {
+  request: FunctionFailure
+): string {
   const prefix = prefix_for_source(source);
-  return new Error(`[CONVEX ${prefix}(${udfPath})] ${message}`);
+  return `[CONVEX ${prefix}(${udfPath})] ${request.errorMessage}\n  Called by client`;
 }

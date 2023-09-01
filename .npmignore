@@ -7,9 +7,17 @@ convex.build.log
 temp/
 values-api-extractor.json
 jest.config.js
+
 *.test.ts
 *.test.tsx
-client_node_test_helpers.ts
+*.test.d.ts
+*.test.d.ts.map
+client_node_test_helpers.*
+dist/internal-types/test
+dist/types/test
+test_fixtures
+src/test
+
 .eslintrc.*
 *.tgz
 test-esm.mjs
@@ -18,3 +26,8 @@ checkdeps.mjs
 bundle-server.mjs
 build.py
 build.cjs
+tmpPackage
+api-extractor-configs/temp/
+
+# designates development
+scripts/only-exists-in-dev.txt

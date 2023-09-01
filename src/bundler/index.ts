@@ -252,8 +252,8 @@ export async function entryPoints(
       log(chalk.yellow(`Skipping ${fpath}`));
     } else if (base === "schema.ts") {
       log(chalk.yellow(`Skipping ${fpath}`));
-    } else if (base.includes(".test.")) {
-      log(chalk.yellow(`Skipping ${fpath}`));
+    } else if ((base.match(/\./g) || []).length > 1) {
+      log(chalk.yellow(`Skipping ${fpath} that contains multiple dots`));
     } else if (base === "tsconfig.json") {
       log(chalk.yellow(`Skipping ${fpath}`));
     } else if (relPath.endsWith(".config.js")) {
@@ -262,6 +262,8 @@ export async function entryPoints(
       log(chalk.yellow(`Skipping ${relPath} because it contains a space`));
     } else if (base.endsWith(".d.ts")) {
       log(chalk.yellow(`Skipping ${fpath} declaration file`));
+    } else if (base.endsWith(".json")) {
+      log(chalk.yellow(`Skipping ${fpath} json file`));
     } else {
       log(chalk.green(`Preparing ${fpath}`));
       entryPoints.push(fpath);
@@ -296,7 +298,9 @@ function hasUseNodeDirective(
       // here too.
       plugins: ["jsx", "typescript"],
     });
-    return ast.program.directives.map(d => d.value.value).includes("use node");
+    return ast.program.directives
+      .map((d) => d.value.value)
+      .includes("use node");
   } catch (error: any) {
     // Given that we have failed to parse, we are most likely going to fail in
     // the esbuild step, which seem to return better formatted error messages.

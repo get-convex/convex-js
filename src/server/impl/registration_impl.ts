@@ -19,6 +19,7 @@ import {
   ActionBuilder,
 } from "../registration.js";
 import { setupActionCalls } from "./actions_impl.js";
+import { setupActionVectorSearch } from "./vector_search_impl.js";
 import { setupAuth } from "./authentication_impl.js";
 import { setupReader, setupWriter } from "./database_impl.js";
 import { QueryImpl, QueryInitializerImpl } from "./query_impl.js";
@@ -121,7 +122,7 @@ export const mutationGeneric: MutationBuilder<any, "public"> = (
   func.isRegistered = true;
   func.isMutation = true;
   func.isPublic = true;
-  func.invokeMutation = argsStr => invokeMutation(func, argsStr);
+  func.invokeMutation = (argsStr) => invokeMutation(func, argsStr);
   func.exportArgs = exportArgs(functionDefinition);
   return func;
 };
@@ -156,7 +157,7 @@ export const internalMutationGeneric: MutationBuilder<any, "internal"> = (
   func.isRegistered = true;
   func.isMutation = true;
   func.isInternal = true;
-  func.invokeMutation = argsStr => invokeMutation(func, argsStr);
+  func.invokeMutation = (argsStr) => invokeMutation(func, argsStr);
   func.exportArgs = exportArgs(functionDefinition);
   return func;
 };
@@ -249,16 +250,14 @@ export const internalQueryGeneric: QueryBuilder<any, "internal"> = (
   func.isRegistered = true;
   func.isQuery = true;
   func.isInternal = true;
-  func.invokeQuery = argsStr => invokeQuery(func as any, argsStr, false);
+  func.invokeQuery = (argsStr) => invokeQuery(func as any, argsStr, false);
   func.exportArgs = exportArgs(functionDefinition);
   return func;
 };
 
-async function invokeAction<F extends (ctx: ActionCtx, ...args: any) => any>(
-  func: F,
-  requestId: string,
-  argsStr: string
-) {
+async function invokeAction<
+  F extends (ctx: ActionCtx<GenericDataModel>, ...args: any) => any
+>(func: F, requestId: string, argsStr: string) {
   const args = jsonToConvex(JSON.parse(argsStr), false);
   const calls = setupActionCalls(requestId);
   const ctx = {
@@ -266,6 +265,7 @@ async function invokeAction<F extends (ctx: ActionCtx, ...args: any) => any>(
     auth: setupAuth(requestId),
     scheduler: setupActionScheduler(requestId),
     storage: setupStorageActionWriter(requestId),
+    vectorSearch: setupActionVectorSearch(requestId) as any,
   };
   const result = await Promise.resolve(func(ctx, ...(args as any)));
   return JSON.stringify(convexToJson(result === undefined ? null : result));
@@ -282,7 +282,7 @@ async function invokeAction<F extends (ctx: ActionCtx, ...args: any) => any>(
  *
  * @public
  */
-export const actionGeneric: ActionBuilder<"public"> = (
+export const actionGeneric: ActionBuilder<any, "public"> = (
   functionDefinition: FunctionDefinition
 ) => {
   const func = (
@@ -316,7 +316,7 @@ export const actionGeneric: ActionBuilder<"public"> = (
  *
  * @public
  */
-export const internalActionGeneric: ActionBuilder<"internal"> = (
+export const internalActionGeneric: ActionBuilder<any, "internal"> = (
   functionDefinition: FunctionDefinition
 ) => {
   const func = (
@@ -340,7 +340,7 @@ export const internalActionGeneric: ActionBuilder<"internal"> = (
 };
 
 async function invokeHttpAction<
-  F extends (ctx: ActionCtx, request: Request) => any
+  F extends (ctx: ActionCtx<GenericDataModel>, request: Request) => any
 >(func: F, request: Request) {
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since http endpoints are only running in V8.
@@ -351,6 +351,7 @@ async function invokeHttpAction<
     auth: setupAuth(requestId),
     storage: setupStorageActionWriter(requestId),
     scheduler: setupActionScheduler(requestId),
+    vectorSearch: setupActionVectorSearch(requestId) as any,
   };
   return await Promise.resolve(func(ctx, request));
 }
@@ -365,7 +366,10 @@ async function invokeHttpAction<
  * @public
  */
 export const httpActionGeneric = (
-  func: (ctx: ActionCtx, request: Request) => Promise<Response>
+  func: (
+    ctx: ActionCtx<GenericDataModel>,
+    request: Request
+  ) => Promise<Response>
 ): PublicHttpAction => {
   const q = func as unknown as PublicHttpAction;
   // Helpful runtime check that functions are only be registered once
@@ -375,6 +379,6 @@ export const httpActionGeneric = (
   assertNotBrowser();
   q.isRegistered = true;
   q.isHttp = true;
-  q.invokeHttpAction = request => invokeHttpAction(func as any, request);
+  q.invokeHttpAction = (request) => invokeHttpAction(func as any, request);
   return q;
 };

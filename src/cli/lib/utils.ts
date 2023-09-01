@@ -33,15 +33,15 @@ export function prompt(query: string) {
     input: process.stdin,
     output: process.stderr,
   });
-  return new Promise(resolve =>
-    rl.question(query, answer => {
+  return new Promise((resolve) =>
+    rl.question(query, (answer) => {
       rl.close();
       resolve(answer);
     })
   );
 }
 
-type ErrorData = {
+export type ErrorData = {
   code: string;
   message: string;
 };
@@ -164,7 +164,7 @@ type Team = {
 
 export async function hasTeam(ctx: Context, teamSlug: string) {
   const teams: Team[] = await bigBrainAPI(ctx, "GET", "teams");
-  return teams.some(team => team.slug === teamSlug);
+  return teams.some((team) => team.slug === teamSlug);
 }
 
 export async function validateOrSelectTeam(
@@ -174,10 +174,8 @@ export async function validateOrSelectTeam(
 ): Promise<{ teamSlug: string; chosen: boolean }> {
   const teams: Team[] = await bigBrainAPI(ctx, "GET", "teams");
   if (teams.length === 0) {
-    console.error(chalk.red("Error: No teams found"));
-    // Unexpected error
-    // eslint-disable-next-line no-restricted-syntax
-    throw new Error("No teams found");
+    logFailure(ctx, chalk.red("Error: No teams found"));
+    await ctx.crash(1, "fatal", "No teams found");
   }
   if (!teamSlug) {
     // Prompt the user to select if they belong to more than one team.
@@ -204,11 +202,10 @@ export async function validateOrSelectTeam(
     }
   } else {
     // Validate the chosen team.
-    if (!teams.find(team => team.slug === teamSlug)) {
-      console.error(
-        chalk.red(
-          `Error: Team ${teamSlug} not found, fix the --team option or remove it`
-        )
+    if (!teams.find((team) => team.slug === teamSlug)) {
+      logFailure(
+        ctx,
+        `Error: Team ${teamSlug} not found, fix the --team option or remove it`
       );
       await ctx.crash(1, "fatal");
     }
@@ -227,7 +224,7 @@ export async function hasProject(
       "GET",
       `/teams/${teamSlug}/projects`
     );
-    return !!projects.find(project => project.slug === projectSlug);
+    return !!projects.find((project) => project.slug === projectSlug);
   } catch (e) {
     return false;
   }
@@ -255,7 +252,7 @@ export async function validateOrSelectProject(
     throw new Error("No projects found");
   }
   if (!projectSlug) {
-    const nonDemoProjects = projects.filter(project => !project.is_demo);
+    const nonDemoProjects = projects.filter((project) => !project.is_demo);
     if (nonDemoProjects.length === 0) {
       // Unexpected error
       // eslint-disable-next-line no-restricted-syntax
@@ -297,11 +294,10 @@ export async function validateOrSelectProject(
     }
   } else {
     // Validate the chosen project.
-    if (!projects.find(project => project.slug === projectSlug)) {
-      console.error(
-        chalk.red(
-          `Error: Project ${projectSlug} not found, fix the --project option or remove it`
-        )
+    if (!projects.find((project) => project.slug === projectSlug)) {
+      logFailure(
+        ctx,
+        `Error: Project ${projectSlug} not found, fix the --project option or remove it`
       );
       await ctx.crash(1, "fatal");
     }
@@ -321,10 +317,9 @@ export async function loadPackageJson(
   try {
     packageJson = ctx.fs.readUtf8File("package.json");
   } catch (err) {
-    console.error(
-      chalk.red(
-        `Unable to read your package.json: ${err}. Make sure you're running this command from the root directory of a Convex app that contains the package.json`
-      )
+    logFailure(
+      ctx,
+      `Unable to read your package.json: ${err}. Make sure you're running this command from the root directory of a Convex app that contains the package.json`
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -332,7 +327,7 @@ export async function loadPackageJson(
   try {
     obj = JSON.parse(packageJson);
   } catch (err) {
-    console.error(chalk.red(`Unable to parse package.json: ${err}`));
+    logFailure(ctx, `Unable to parse package.json: ${err}`);
     return await ctx.crash(1, "invalid filesystem data", err);
   }
   if (typeof obj !== "object") {
@@ -350,10 +345,9 @@ export async function ensureHasConvexDependency(ctx: Context, cmd: string) {
   const packages = await loadPackageJson(ctx);
   const hasConvexDependency = "convex" in packages;
   if (!hasConvexDependency) {
-    console.error(
-      chalk.red(
-        `In order to ${cmd}, add \`convex\` to your package.json dependencies.`
-      )
+    logFailure(
+      ctx,
+      `In order to ${cmd}, add \`convex\` to your package.json dependencies.`
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -412,7 +406,8 @@ async function readGlobalConfig(ctx: Context): Promise<GlobalConfig | null> {
     return config;
   } catch (err) {
     // Print an error an act as if the file does not exist.
-    console.error(
+    logError(
+      ctx,
       chalk.red(
         `Failed to parse global config in ${configPath} with error ${err}.`
       )
@@ -499,14 +494,14 @@ export const poll = async function <Result>(
 };
 
 const wait = function (waitMs: number) {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     setTimeout(resolve, waitMs);
   });
 };
 
 export function waitForever() {
   // This never resolves
-  return new Promise(_ => {
+  return new Promise((_) => {
     // ignore
   });
 }
@@ -600,13 +595,14 @@ function findUp(ctx: Context, filename: string): string | undefined {
 export async function isInExistingProject(ctx: Context) {
   const { parentPackageJson, parentConvexJson } = findParentConfigs(ctx);
   if (!parentPackageJson) {
-    console.error(
+    logFailure(
+      ctx,
       "No package.json found. To create a new project using Convex, see https://docs.convex.dev/home#quickstarts"
     );
     await ctx.crash(1);
   }
   if (parentPackageJson !== path.resolve("package.json")) {
-    console.error("Run this command from the root directory of a project.");
+    logFailure(ctx, "Run this command from the root directory of a project.");
     return await ctx.crash(1, "invalid filesystem data");
   }
   return !!parentConvexJson;
@@ -629,13 +625,14 @@ export async function getConfiguredDeploymentOrCrash(
 export async function getConfiguredDeployment(ctx: Context) {
   const { parentPackageJson } = findParentConfigs(ctx);
   if (!parentPackageJson) {
-    console.error(
+    logFailure(
+      ctx,
       "No package.json found. To create a new project using Convex, see https://docs.convex.dev/home#quickstarts"
     );
-    await ctx.crash(1);
+    await ctx.crash(1, "invalid filesystem data");
   }
   if (parentPackageJson !== path.resolve("package.json")) {
-    console.error("Run this command from the root directory of a project.");
+    logFailure(ctx, "Run this command from the root directory of a project.");
     return await ctx.crash(1, "invalid filesystem data");
   }
   return readDeploymentEnvVar();
@@ -679,18 +676,18 @@ export function spawnAsync(
     const pipeOutput = options?.stdio === "inherit";
 
     if (pipeOutput) {
-      child.stdout.on("data", text =>
+      child.stdout.on("data", (text) =>
         logMessage(ctx, text.toString("utf-8").trimEnd())
       );
-      child.stderr.on("data", text =>
+      child.stderr.on("data", (text) =>
         logError(ctx, text.toString("utf-8").trimEnd())
       );
     } else {
-      child.stdout.on("data", data => {
+      child.stdout.on("data", (data) => {
         stdout += data.toString("utf-8");
       });
 
-      child.stderr.on("data", data => {
+      child.stderr.on("data", (data) => {
         stderr += data.toString("utf-8");
       });
     }

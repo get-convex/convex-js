@@ -1,5 +1,5 @@
 import { test, expect, beforeEach } from "@jest/globals";
-import { RequestManager } from "./request_manager";
+import { RequestManager } from "./request_manager.js";
 import { Long } from "../long.js";
 import { ActionRequest, MutationRequest } from "./protocol.js";
 

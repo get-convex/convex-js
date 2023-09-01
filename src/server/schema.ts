@@ -33,6 +33,7 @@ import {
   GenericDocument,
   GenericTableIndexes,
   GenericTableSearchIndexes,
+  GenericTableVectorIndexes,
 } from "../server/data_model.js";
 import {
   IdField,
@@ -68,7 +69,7 @@ type ExtractDocument<T extends Validator<any, any, any>> =
   Expand<SystemFields & T["type"]>;
 
 /**
- * The configuration for a search index.
+ * The configuration for a full text search index.
  *
  * @public
  */
@@ -88,6 +89,41 @@ export interface SearchIndexConfig<
    */
   filterFields?: FilterFields[];
 }
+
+/**
+ * The configuration for a vector index.
+ *
+ * @public
+ */
+export interface VectorIndexConfig<
+  VectorField extends string,
+  FilterFields extends string
+> {
+  /**
+   * The field to index for vector search.
+   *
+   * This must be a field of type `v.array(v.float64())` (or a union)
+   */
+  vectorField: VectorField;
+  /**
+   * The length of the vectors indexed. This must be between 2 and 2048 inclusive.
+   */
+  dimensions: number;
+  /**
+   * Additional fields to index for fast filtering when running vector searches.
+   */
+  filterFields?: FilterFields[];
+}
+
+/**
+ * @internal
+ */
+export type VectorIndex = {
+  indexDescriptor: string;
+  vectorField: string;
+  dimensions: number;
+  filterFields: string[];
+};
 
 /**
  * @internal
@@ -117,10 +153,13 @@ export class TableDefinition<
   // eslint-disable-next-line @typescript-eslint/ban-types
   Indexes extends GenericTableIndexes = {},
   // eslint-disable-next-line @typescript-eslint/ban-types
-  SearchIndexes extends GenericTableSearchIndexes = {}
+  SearchIndexes extends GenericTableSearchIndexes = {},
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  VectorIndexes extends GenericTableVectorIndexes = {}
 > {
   private indexes: Index[];
   private searchIndexes: SearchIndex[];
+  private vectorIndexes: VectorIndex[];
   // The type of documents stored in this table.
   private documentType: Validator<any, any, any>;
 
@@ -130,6 +169,7 @@ export class TableDefinition<
   constructor(documentType: Validator<any, any, any>) {
     this.indexes = [];
     this.searchIndexes = [];
+    this.vectorIndexes = [];
     this.documentType = documentType;
   }
 
@@ -162,7 +202,8 @@ export class TableDefinition<
           [FirstFieldPath, ...RestFieldPaths, IndexTiebreakerField]
         >
     >,
-    SearchIndexes
+    SearchIndexes,
+    VectorIndexes
   > {
     this.indexes.push({ indexDescriptor: name, fields });
     return this;
@@ -199,11 +240,54 @@ export class TableDefinition<
             filterFields: FilterFields;
           }
         >
-    >
+    >,
+    VectorIndexes
   > {
     this.searchIndexes.push({
       indexDescriptor: name,
       searchField: indexConfig.searchField,
+      filterFields: indexConfig.filterFields || [],
+    });
+    return this;
+  }
+
+  /**
+   * Define a vector index on this table.
+   *
+   * To learn about vector indexes, see [Vector Search](https://docs.convex.dev/vector-search).
+   *
+   * @param name - The name of the index.
+   * @param indexConfig - The vector index configuration object.
+   * @returns A {@link TableDefinition} with this vector index included.
+   */
+  vectorIndex<
+    IndexName extends string,
+    VectorField extends FieldPaths,
+    FilterFields extends FieldPaths = never
+  >(
+    name: IndexName,
+    indexConfig: Expand<VectorIndexConfig<VectorField, FilterFields>>
+  ): TableDefinition<
+    Document,
+    FieldPaths,
+    Indexes,
+    SearchIndexes,
+    Expand<
+      VectorIndexes &
+        Record<
+          IndexName,
+          {
+            vectorField: VectorField;
+            dimensions: number;
+            filterFields: FilterFields;
+          }
+        >
+    >
+  > {
+    this.vectorIndexes.push({
+      indexDescriptor: name,
+      vectorField: indexConfig.vectorField,
+      dimensions: indexConfig.dimensions,
       filterFields: indexConfig.filterFields || [],
     });
     return this;
@@ -219,6 +303,7 @@ export class TableDefinition<
     return {
       indexes: this.indexes,
       searchIndexes: this.searchIndexes,
+      vectorIndexes: this.vectorIndexes,
       documentType: this.documentType.json,
     };
   }
@@ -344,11 +429,13 @@ export class SchemaDefinition<
   export(): string {
     return JSON.stringify({
       tables: Object.entries(this.tables).map(([tableName, definition]) => {
-        const { indexes, searchIndexes, documentType } = definition.export();
+        const { indexes, searchIndexes, vectorIndexes, documentType } =
+          definition.export();
         return {
           tableName,
           indexes,
           searchIndexes,
+          vectorIndexes,
           documentType,
         };
       }),
@@ -447,7 +534,8 @@ export type DataModelFromSchemaDefinition<
       infer Document,
       infer FieldPaths,
       infer Indexes,
-      infer SearchIndexes
+      infer SearchIndexes,
+      infer VectorIndexes
     >
       ? {
           // We've already added all of the system fields except for `_id`.
@@ -456,6 +544,7 @@ export type DataModelFromSchemaDefinition<
           fieldPaths: keyof IdField<TableName> | FieldPaths;
           indexes: Expand<Indexes & SystemIndexes>;
           searchIndexes: SearchIndexes;
+          vectorIndexes: VectorIndexes;
         }
       : never;
   },

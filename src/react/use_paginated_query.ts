@@ -231,7 +231,7 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
       loadMore: (numItems: number) => {
         if (!alreadyLoadingMore) {
           alreadyLoadingMore = true;
-          setState(prevState => {
+          setState((prevState) => {
             const maxQueryIndex = prevState.maxQueryIndex + 1;
             const queries = { ...prevState.queries };
             queries[maxQueryIndex] = {

@@ -5,26 +5,35 @@ import { performance } from "perf_hooks";
 import {
   Context,
   logFinishedStep,
+  logMessage,
+  logWarning,
   oneoffContext,
   showSpinner,
   showSpinnerIfSlow,
   stopSpinner,
-} from "../bundler/context";
-import { deploymentCredentialsOrConfigure } from "./configure";
-import { checkAuthorization, performLogin } from "./lib/login";
-import { PushOptions, runPush } from "./lib/push";
-import { formatDuration, getCurrentTimeString, waitForever } from "./lib/utils";
-import { Crash, WatchContext, Watcher } from "./lib/watch";
-import { watchLogs } from "./lib/logs";
-import { runFunctionAndLog, subscribe } from "./lib/run";
-import { BaseConvexClient } from "../browser";
-import { Value } from "../values";
+} from "../bundler/context.js";
+import { deploymentCredentialsOrConfigure } from "./configure.js";
+import { checkAuthorization, performLogin } from "./lib/login.js";
+import { PushOptions, runPush } from "./lib/push.js";
+import {
+  formatDuration,
+  getCurrentTimeString,
+  waitForever,
+} from "./lib/utils.js";
+import { Crash, WatchContext, Watcher } from "./lib/watch.js";
+import { watchLogs } from "./lib/logs.js";
+import { runFunctionAndLog, subscribe } from "./lib/run.js";
+import { BaseConvexClient } from "../browser/index.js";
+import { Value } from "../values/index.js";
 
 export const dev = new Command("dev")
   .summary("Develop against a dev deployment, watching for changes")
   .description(
-    "Configures a new or existing project if needed. Watches for local changes and pushes them" +
-      " to the configured dev deployment. Updates generated types."
+    "Develop against a dev deployment, watching for changes\n\n" +
+      "  1. Configures a new or existing project (if needed)\n" +
+      "  2. Updates generated types and pushes code to the configured dev deployment\n" +
+      "  3. Runs the provided function (if `--run` is used)\n" +
+      "  4. Watches for file changes, and repeats step 2\n"
   )
   .option("-v, --verbose", "Show full listing of changes")
   .addOption(
@@ -40,7 +49,6 @@ export const dev = new Command("dev")
       .choices(["enable", "disable"])
       .default("enable")
   )
-  .option("--once", "Run only once, do not watch for changes")
   .addOption(
     new Option(
       "--configure [choice]",
@@ -52,18 +60,15 @@ export const dev = new Command("dev")
     "--project <project_slug>",
     "The name of the project you'd like to configure"
   )
-  .addOption(
-    new Option(
-      "--no-watch",
-      "Run until a successful push (and function call if --run is specified) without watching for changes afterward"
-    ).hideHelp()
+  .option("--once", "Execute only the first 3 steps, stop on any failure")
+  .option(
+    "--until-success",
+    "Execute only the first 3 steps, on failure watch for local and remote changes and retry steps 2 and 3"
   )
-  .addOption(
-    new Option(
-      "--run <functionName>",
-      "The identifier of the function to run after the first code push, " +
-        "like `init` or `dir/file:myFunction`"
-    ).hideHelp()
+  .option(
+    "--run <functionName>",
+    "The identifier of the function to run in step 3, " +
+      "like `init` or `dir/file:myFunction`"
   )
   .addOption(
     new Option(
@@ -86,7 +91,7 @@ export const dev = new Command("dev")
   .addOption(new Option("--override-auth-username <username>").hideHelp())
   .addOption(new Option("--override-auth-password <password>").hideHelp())
   .showHelpAfterError()
-  .action(async cmdOptions => {
+  .action(async (cmdOptions) => {
     const ctx = oneoffContext;
 
     if (!cmdOptions.url || !cmdOptions.adminKey) {
@@ -130,7 +135,7 @@ export async function watchAndPush(
   cmdOptions: {
     run?: string;
     once: boolean;
-    watch: boolean;
+    untilSuccess: boolean;
     traceEvents: boolean;
   }
 ) {
@@ -176,14 +181,15 @@ export async function watchAndPush(
       if (e.errorType === "transient") {
         const delay = nextBackoff(numFailures);
         numFailures += 1;
-        console.error(
+        logWarning(
+          ctx,
           chalk.yellow(
             `Failed due to network error, retrying in ${formatDuration(
               delay
             )}...`
           )
         );
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
 
@@ -212,7 +218,7 @@ export async function watchAndPush(
     if (cmdOptions.once) {
       return;
     }
-    if (pushed && !cmdOptions.watch) {
+    if (pushed && cmdOptions.untilSuccess) {
       return;
     }
     const fileSystemWatch = getFileSystemWatch(ctx, watch, cmdOptions);
@@ -308,7 +314,7 @@ function getFunctionWatch(
         args,
         "first change",
         {
-          onStart: convex => {
+          onStart: (convex) => {
             client = convex;
           },
         }
@@ -330,7 +336,7 @@ function getFileSystemWatch(
     watch: async () => {
       const observations = ctx.fs.finalize();
       if (observations === "invalidated") {
-        console.error("Filesystem changed during push, retrying...");
+        logMessage(ctx, "Filesystem changed during push, retrying...");
         return;
       }
       // Initialize the watcher if we haven't done it already. Chokidar expects to have a
@@ -360,7 +366,8 @@ function getFileSystemWatch(
         }
         for (const event of watch.watcher.drainEvents()) {
           if (cmdOptions.traceEvents) {
-            console.error(
+            logMessage(
+              ctx,
               "Processing",
               event.name,
               path.relative("", event.absPath)
@@ -370,7 +377,7 @@ function getFileSystemWatch(
           if (result.overlaps) {
             const relPath = path.relative("", event.absPath);
             if (cmdOptions.traceEvents) {
-              console.error(`${relPath} ${result.reason}, rebuilding...`);
+              logMessage(ctx, `${relPath} ${result.reason}, rebuilding...`);
             }
             anyChanges = true;
             break;
@@ -390,11 +397,12 @@ function getFileSystemWatch(
         }
         const remaining = deadline - now;
         if (cmdOptions.traceEvents) {
-          console.error(
+          logMessage(
+            ctx,
             `Waiting for ${formatDuration(remaining)} to quiesce...`
           );
         }
-        const remainingWait = new Promise<"timeout">(resolve =>
+        const remainingWait = new Promise<"timeout">((resolve) =>
           setTimeout(() => resolve("timeout"), deadline - now)
         );
         const result = await Promise.race([
@@ -407,7 +415,8 @@ function getFileSystemWatch(
             // Delay another `quiescenceDelay` since we had an overlapping event.
             if (result.overlaps) {
               if (cmdOptions.traceEvents) {
-                console.error(
+                logMessage(
+                  ctx,
                   `Received an overlapping event at ${event.absPath}, delaying push.`
                 );
               }

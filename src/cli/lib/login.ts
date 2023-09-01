@@ -18,6 +18,7 @@ import {
   logError,
   logFailure,
   logFinishedStep,
+  logMessage,
   showSpinner,
 } from "../../bundler/context.js";
 import { Issuer } from "openid-client";
@@ -74,7 +75,7 @@ export async function checkAuthorization(
       // Don't throw an error if this request returns a non-200 status.
       // Big Brain responds with a variety of error codes -- 401 if the token is correctly-formed but not valid, and either 400 or 500 if the token is ill-formed.
       // We only care if this check returns a 200 code (so we can skip logging in again) -- any other errors should be silently skipped and we'll run the whole login flow again.
-      validateStatus: _ => true,
+      validateStatus: (_) => true,
     });
     if (resp.status !== 200) {
       return false;
@@ -152,13 +153,14 @@ async function performDeviceAuthorization(
   // Device Authorization Response - https://tools.ietf.org/html/rfc8628#section-3.2
   // Open authentication URL
   const { verification_uri_complete, user_code, expires_in } = handle;
-  console.error(`Visit ${verification_uri_complete} to finish logging in.`);
-  console.error(
-    `You should see the following code which expires in ${
-      expires_in % 60 === 0
-        ? `${expires_in / 60} minutes`
-        : `${expires_in} seconds`
-    }: ${user_code}`
+  logMessage(
+    ctx,
+    `Visit ${verification_uri_complete} to finish logging in.\n` +
+      `You should see the following code which expires in ${
+        expires_in % 60 === 0
+          ? `${expires_in / 60} minutes`
+          : `${expires_in} seconds`
+      }: ${user_code}`
   );
   if (shouldOpen) {
     shouldOpen = (
@@ -261,9 +263,9 @@ async function performPasswordAuthentication(
       throw Error("Access token is missing");
     }
   } catch (err: any) {
-    console.error(`Password flow failed: ${err}`);
+    logFailure(ctx, `Password flow failed: ${err}`);
     if (err.response) {
-      console.error(`${JSON.stringify(err.response.data)}`);
+      logError(ctx, chalk.red(`${JSON.stringify(err.response.data)}`));
     }
     return await ctx.crash(1, err);
   }
@@ -310,7 +312,8 @@ export async function performLogin(
     deviceName = hostname();
   }
   if (process.stdin.isTTY && !deviceNameOverride) {
-    console.error(
+    logMessage(
+      ctx,
       chalk.bold(`Welcome to developing with Convex, let's get you logged in.`)
     );
     const answers = await inquirer.prompt([
@@ -412,7 +415,7 @@ async function optins(ctx: Context, acceptOptIns: boolean): Promise<boolean> {
       ).confirmed;
 
     if (!confirmed) {
-      console.error("Please accept the Terms of Service to use Convex.");
+      logFailure(ctx, "Please accept the Terms of Service to use Convex.");
       return Promise.resolve(false);
     }
   }

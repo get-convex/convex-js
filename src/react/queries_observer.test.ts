@@ -1,7 +1,7 @@
 import { Value } from "../values/index.js";
 import { test, beforeEach, afterEach, expect, jest } from "@jest/globals";
-import FakeWatch from "../test/fake_watch";
-import { QueriesObserver } from "./queries_observer";
+import FakeWatch from "../test/fake_watch.js";
+import { QueriesObserver } from "./queries_observer.js";
 import { FunctionReference, anyApi } from "../server/api.js";
 
 let queriesObserver: QueriesObserver;

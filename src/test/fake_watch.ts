@@ -1,5 +1,5 @@
-import { QueryJournal } from "../browser/sync/protocol";
-import { Watch } from "../react/client";
+import { QueryJournal } from "../browser/sync/protocol.js";
+import { Watch } from "../react/client.js";
 
 export default class FakeWatch<T> implements Watch<T> {
   callbacks: Set<() => void>;

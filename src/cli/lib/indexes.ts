@@ -121,7 +121,7 @@ async function waitForReadySchema(
     }
   };
   const validate = (result: AxiosResponse<SchemaStateResponse, any>) =>
-    result.data.indexes.every(index => index.backfill.state === "done") &&
+    result.data.indexes.every((index) => index.backfill.state === "done") &&
     result.data.schemaState.state !== "pending";
   const result = await poll(fetch, validate);
   switch (result.data.schemaState.state) {

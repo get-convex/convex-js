@@ -43,8 +43,8 @@ test("bundle finds JavaScript functions", async () => {
         "browser"
       )
     ).modules,
-    b => b.path
-  ).filter(bundle => !bundle.path.includes("_deps"));
+    (b) => b.path
+  ).filter((bundle) => !bundle.path.includes("_deps"));
   expect(bundles).toHaveLength(2);
   expect(bundles[0].path).toEqual("bar.js");
   expect(bundles[1].path).toEqual("foo.js");

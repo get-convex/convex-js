@@ -1,6 +1,6 @@
 import chalk from "chalk";
-import { Context } from "../../bundler/context.js";
-import { doCodegen } from "./codegen";
+import { Context, logMessage } from "../../bundler/context.js";
+import { doCodegen } from "./codegen.js";
 import {
   configFromProjectConfig,
   configJSON,
@@ -25,13 +25,15 @@ export type PushOptions = {
 };
 
 export async function runPush(ctx: Context, options: PushOptions) {
+  const timeRunPushStarts = performance.now();
   const { configPath, projectConfig } = await readProjectConfig(ctx);
   const origin = options.url;
   const verbose = options.verbose || options.dryRun;
   await ensureHasConvexDependency(ctx, "push");
 
   if (!options.codegen) {
-    console.error(
+    logMessage(
+      ctx,
       chalk.gray("Skipping codegen. Remove --codegen=disable to enable.")
     );
     // Codegen includes typechecking, so if we're skipping it, run the type
@@ -48,10 +50,11 @@ export async function runPush(ctx: Context, options: PushOptions) {
       quiet: true,
     });
     if (verbose) {
-      console.error(chalk.green("Codegen finished."));
+      logMessage(ctx, chalk.green("Codegen finished."));
     }
   }
 
+  const timeBundleStarts = performance.now();
   const localConfig = await configFromProjectConfig(
     ctx,
     projectConfig,
@@ -65,6 +68,7 @@ export async function runPush(ctx: Context, options: PushOptions) {
     return;
   }
 
+  const timeSchemaPushStarts = performance.now();
   const { schemaId, schemaState } = await pushSchema(
     ctx,
     origin,
@@ -73,6 +77,7 @@ export async function runPush(ctx: Context, options: PushOptions) {
     options.dryRun
   );
 
+  const timeConfigPullStarts = performance.now();
   const remoteConfig = await pullConfig(
     ctx,
     undefined,
@@ -88,7 +93,8 @@ export async function runPush(ctx: Context, options: PushOptions) {
         localConfig.modules.length === 0
           ? `No functions found in ${localConfig.projectConfig.functions}`
           : "Config already synced";
-      console.error(
+      logMessage(
+        ctx,
         chalk.gray(
           `${
             options.dryRun
@@ -102,19 +108,37 @@ export async function runPush(ctx: Context, options: PushOptions) {
   }
 
   if (verbose) {
-    console.error(
+    logMessage(
+      ctx,
       chalk.bold(
         `Remote config ${
           options.dryRun ? "would" : "will"
         } be overwritten with the following changes:`
       )
     );
-    console.error(diff);
+    logMessage(ctx, diff);
   }
 
   if (options.dryRun) {
     return;
   }
 
-  await pushConfig(ctx, localConfig, options.adminKey, options.url, schemaId);
+  // Note that this is not quite a user pain metric: we're missing any time
+  // spent making and retrying this network request and receiving the response.
+  const timePushStarts = performance.now();
+  const timing = {
+    typecheck: (timeBundleStarts - timeRunPushStarts) / 1000,
+    bundle: (timeSchemaPushStarts - timeBundleStarts) / 1000,
+    schemaPush: (timeConfigPullStarts - timeSchemaPushStarts) / 1000,
+    codePull: (timePushStarts - timeConfigPullStarts) / 1000,
+    totalBeforePush: (timePushStarts - timeRunPushStarts) / 1000,
+  };
+  await pushConfig(
+    ctx,
+    localConfig,
+    options.adminKey,
+    options.url,
+    timing,
+    schemaId
+  );
 }

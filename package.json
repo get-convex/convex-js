@@ -1,68 +1,86 @@
 {
   "name": "convex",
   "description": "Client for the Convex Cloud",
-  "version": "0.19.1",
+  "version": "1.2.1",
   "author": "Convex, Inc. <team@convex.dev>",
   "homepage": "https://convex.dev",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
-  "types": "./dist/types/index.d.ts",
+  "types": "./dist/cjs-types/index.d.ts",
+  "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/types/index.d.ts",
-      "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.js"
+      "require": {
+        "types": "./dist/internal-cjs-types/index.d.ts",
+        "require": "./dist/cjs/index.js"
+      },
+      "import": {
+        "types": "./dist/internal-esm-types/index.d.ts",
+        "import": "./dist/esm/index.js"
+      }
     },
     "./server": {
-      "types": "./dist/types/server/index.d.ts",
-      "import": "./dist/esm/server/index.js",
-      "require": "./dist/cjs/server/index.js"
-    },
-    "./server-internal": {
-      "types": "./dist/internal-types/server/index.d.ts",
-      "import": "./dist/esm/server/index.js",
-      "require": "./dist/cjs/server/index.js"
+      "require": {
+        "types": "./dist/internal-cjs-types/server/index.d.ts",
+        "require": "./dist/cjs/server/index.js"
+      },
+      "import": {
+        "types": "./dist/internal-esm-types/server/index.d.ts",
+        "import": "./dist/esm/server/index.js"
+      }
     },
     "./react": {
-      "types": "./dist/types/react/index.d.ts",
-      "import": "./dist/esm/react/index.js",
-      "require": "./dist/cjs/react/index.js"
-    },
-    "./react-internal": {
-      "types": "./dist/internal-types/react/index.d.ts",
-      "import": "./dist/esm/react/index.js",
-      "require": "./dist/cjs/react/index.js"
+      "require": {
+        "types": "./dist/internal-cjs-types/react/index.d.ts",
+        "require": "./dist/cjs/react/index.js"
+      },
+      "import": {
+        "types": "./dist/internal-esm-types/react/index.d.ts",
+        "import": "./dist/esm/react/index.js"
+      }
     },
     "./react-auth0": {
-      "types": "./dist/types/react-auth0/index.d.ts",
-      "import": "./dist/esm/react-auth0/index.js",
-      "require": "./dist/cjs/react-auth0/index.js"
+      "require": {
+        "types": "./dist/internal-cjs-types/react-auth0/index.d.ts",
+        "require": "./dist/cjs/react-auth0/index.js"
+      },
+      "import": {
+        "types": "./dist/internal-esm-types/react-auth0/index.d.ts",
+        "import": "./dist/esm/react-auth0/index.js"
+      }
     },
     "./react-clerk": {
-      "types": "./dist/types/react-clerk/index.d.ts",
-      "import": "./dist/esm/react-clerk/index.js",
-      "require": "./dist/cjs/react-clerk/index.js"
+      "require": {
+        "types": "./dist/internal-cjs-types/react-clerk/index.d.ts",
+        "require": "./dist/cjs/react-clerk/index.js"
+      },
+      "import": {
+        "types": "./dist/internal-esm-types/react-clerk/index.d.ts",
+        "import": "./dist/esm/react-clerk/index.js"
+      }
     },
     "./browser": {
-      "types": "./dist/types/browser/index.d.ts",
-      "import": "./dist/esm/browser/index.js",
-      "require": "./dist/cjs/browser/index.js"
-    },
-    "./browser-internal": {
-      "types": "./dist/internal-types/browser/index.d.ts",
-      "import": "./dist/esm/browser/index.js",
-      "require": "./dist/cjs/browser/index.js"
+      "require": {
+        "types": "./dist/internal-cjs-types/browser/index.d.ts",
+        "node": "./dist/cjs/browser/index-node.js",
+        "require": "./dist/cjs/browser/index.js"
+      },
+      "import": {
+        "types": "./dist/internal-esm-types/browser/index.d.ts",
+        "node": "./dist/esm/browser/index-node.js",
+        "import": "./dist/esm/browser/index.js"
+      }
     },
     "./values": {
-      "types": "./dist/types/values/index.d.ts",
-      "import": "./dist/esm/values/index.js",
-      "require": "./dist/cjs/values/index.js"
-    },
-    "./values-internal": {
-      "types": "./dist/internal-types/values/index.d.ts",
-      "import": "./dist/esm/values/index.js",
-      "require": "./dist/cjs/values/index.js"
+      "require": {
+        "types": "./dist/internal-cjs-types/values/index.d.ts",
+        "require": "./dist/cjs/values/index.js"
+      },
+      "import": {
+        "types": "./dist/internal-esm-types/values/index.d.ts",
+        "import": "./dist/esm/values/index.js"
+      }
     },
     "./package.json": "./package.json"
   },
@@ -73,50 +91,41 @@
   "typesVersions": {
     "*": {
       "*": [
-        "./dist/types/index.d.ts"
+        "./dist/internal-cjs-types/index.d.ts"
       ],
       "server": [
-        "./dist/types/server/index.d.ts"
-      ],
-      "server-internal": [
-        "./dist/internal-types/server/index.d.ts"
+        "./dist/internal-cjs-types/server/index.d.ts"
       ],
       "react": [
-        "./dist/types/react/index.d.ts"
-      ],
-      "react-internal": [
-        "./dist/internal-types/react/index.d.ts"
+        "./dist/internal-cjs-types/react/index.d.ts"
       ],
       "react-auth0": [
-        "./dist/types/react-auth0/index.d.ts"
+        "./dist/internal-cjs-types/react-auth0/index.d.ts"
       ],
       "react-clerk": [
-        "./dist/types/react-clerk/index.d.ts"
+        "./dist/internal-cjs-types/react-clerk/index.d.ts"
       ],
       "browser": [
-        "./dist/types/browser/internal.d.ts"
-      ],
-      "browser-internal": [
-        "./dist/internal-types/browser/index.d.ts"
+        "./dist/internal-cjs-types/browser/index.d.ts"
       ],
       "values": [
-        "./dist/types/values/index.d.ts"
-      ],
-      "values-internal": [
-        "./dist/internal-types/values/index.d.ts"
+        "./dist/internal-cjs-types/values/index.d.ts"
       ]
     }
   },
   "bin": {
-    "convex": "bin/main.js"
+    "convex": "bin/main-dev",
+    "convex-bundled": "bin/main.js"
   },
   "scripts": {
     "build": "npm run clean && shx mkdir -p dist/ && python3 scripts/build.py 2>&1",
-    "build-types": "tsc",
-    "build-internal-types": "tsc --stripInternal false --outDir ./dist/internal-types",
-    "check-cli-types": "tsc -p src/cli/tsconfig.json",
+    "build-esm-types": "shx mkdir -p dist/esm-types && echo '{\"type\": \"module\"}' > dist/esm-types/package.json && tsc --outDir ./dist/esm-types",
+    "build-internal-esm-types": "shx mkdir -p dist/internal-esm-types && echo '{\"type\": \"module\"}' > dist/internal-esm-types/package.json && tsc --stripInternal false --outDir ./dist/internal-esm-types",
+    "build-cjs-types": "shx mkdir -p dist/cjs-types && echo '{\"type\": \"commonjs\"}' > dist/cjs-types/package.json && tsc --outDir ./dist/cjs-types",
+    "build-internal-cjs-types": "shx mkdir -p dist/internal-cjs-types && echo '{\"type\": \"commonjs\"}' > dist/internal-cjs-types/package.json && tsc --stripInternal false --outDir ./dist/internal-cjs-types",
     "build-esm": "shx mkdir -p dist/esm && echo '{\"type\": \"module\"}' > dist/esm/package.json && node scripts/build.cjs esm",
     "build-cjs": "shx mkdir -p dist/cjs && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json && node scripts/build.cjs cjs",
+    "build-node-esm-and-cjs": "node scripts/node-browser.mjs",
     "build-browser-script-tag": "node scripts/build.cjs browser-script-tag",
     "build-react-script-tag": "node scripts/build.cjs react-script-tag",
     "build-standalone-cli": "node scripts/build.cjs standalone-cli",
@@ -126,8 +135,12 @@
     "format": "prettier -w . && eslint --fix .",
     "format-check": "prettier -c . && eslint . --ext .js,.jsx,.ts,.tsx",
     "prepare": "npm run build",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest && ./scripts/checkdeps.mjs",
-    "test-esm": "node ./scripts/test-esm.mjs"
+    "prepublishOnly": "echo \"publish command should not be used directly, instead pack first then publish the .tgz file.\"; false",
+    "prepack": "node scripts/prepack.mjs",
+    "postpack": "node scripts/postpack.mjs",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test-esm": "node ./scripts/test-esm.mjs && ./scripts/checkdeps.mjs",
+    "pack-internal": "echo TODO maybe set an environment variable"
   },
   "keywords": [
     "convex",
@@ -141,8 +154,7 @@
     "CLI tool dependencies are listed in devDependencies instead."
   ],
   "dependencies": {
-    "encoding": "^0.1.13",
-    "esbuild": "^0.15.16",
+    "esbuild": "^0.17.5",
     "node-fetch": "^2.6.1",
     "jwt-decode": "^3.1.2"
   },
@@ -174,6 +186,7 @@
     "@auth0/auth0-react": "2.0.1",
     "@clerk/clerk-react": "4.18.0",
     "@babel/parser": "^7.21.3",
+    "@microsoft/api-extractor": "~7.36.4",
     "@jest/globals": "^28.1.0",
     "@sentry/node": "^7.23.0",
     "@sentry/tracing": "^7.23.0",
@@ -188,8 +201,9 @@
     "@types/react-dom": "^18.0.0",
     "@types/semver": "^7.3.13",
     "@types/ws": "^8.5.3",
-    "@typescript-eslint/eslint-plugin": "^5.45.0",
-    "@typescript-eslint/parser": "^5.45.0",
+    "@typescript-eslint/eslint-plugin": "^6.5.0",
+    "@typescript-eslint/parser": "^6.2.0",
+    "@swc/core": "~1.3.72",
     "axios": "^0.27.2",
     "axios-retry": "^3.2.4",
     "bufferutil": "^4.0.7",
@@ -199,8 +213,9 @@
     "deep-equal": "2.1.0",
     "depcheck": "~1.4.3",
     "dotenv": "^16.0.3",
+    "encoding": "^0.1.13",
     "envfile": "6.18.0",
-    "esbuild": "^0.15.16",
+    "esbuild": "^0.17.5",
     "esbuild-plugin-external-global": "~1.0.1",
     "eslint": "^8.29.0",
     "eslint-config-prettier": "^8.5.0",
@@ -211,22 +226,23 @@
     "inquirer": "^9.1.4",
     "jest": "^29.5.0",
     "jest-environment-jsdom": "^29.5.0",
+    "jwt-encode": "~1.0.1",
     "open": "^8.3.0",
     "openid-client": "^5.3.1",
     "ora": "^6.1.0",
     "prettier": "2.8.7",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "semver": "^7.3.8",
+    "semver": "^7.5.4",
     "shx": "~0.3.4",
     "strip-ansi": "^7.0.1",
     "ts-jest": "^29.1.1",
+    "ts-node": "~10.9.1",
     "typedoc": "^0.24.6",
     "typescript": "~5.0.3",
     "utf-8-validate": "^5.0.10",
     "ws": "^8.11.0",
     "zod": "^3.21.4",
-    "jwt-encode": "~1.0.1",
     "@testing-library/react": "~14.0.0",
     "@types/jwt-encode": "~1.0.0",
     "wait-for-expect": "~3.0.2",

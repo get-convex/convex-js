@@ -1,6 +1,6 @@
 import { GenericId } from "../values/index.js";
-import { BetterOmit, Expand } from "../type_utils";
-import { GenericDocument } from "./data_model";
+import { BetterOmit, Expand } from "../type_utils.js";
+import { GenericDocument } from "./data_model.js";
 
 /**
  * The fields that Convex automatically adds to documents, not including `_id`.

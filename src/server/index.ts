@@ -23,7 +23,7 @@
  * Convex functions are defined by using either the `query` or
  * `mutation` wrappers.
  *
- * Queries receive a `db` that implements the {@link DatabaseReader} interface.
+ * Queries receive a `db` that implements the {@link GenericDatabaseReader} interface.
  *
  * ```js
  * import { query } from "./_generated/server";
@@ -35,7 +35,7 @@
  *
  * If your function needs to write to the database, such as inserting, updating,
  * or deleting documents, use `mutation` instead which provides a `db` that
- * implements the {@link DatabaseWriter} interface.
+ * implements the {@link GenericDatabaseWriter} interface.
  *
  * ```js
  * import { mutation } from "./_generated/server";
@@ -49,7 +49,35 @@
 
 export type { Auth, UserIdentity } from "./authentication.js";
 export * from "./database.js";
-export * from "./data_model.js";
+export type {
+  GenericDocument,
+  GenericFieldPaths,
+  GenericIndexFields,
+  GenericTableIndexes,
+  GenericSearchIndexConfig,
+  GenericTableSearchIndexes,
+  GenericVectorIndexConfig,
+  GenericTableVectorIndexes,
+  FieldTypeFromFieldPath,
+  GenericTableInfo,
+  DocumentByInfo,
+  FieldPaths,
+  Indexes,
+  IndexNames,
+  NamedIndex,
+  SearchIndexes,
+  SearchIndexNames,
+  NamedSearchIndex,
+  VectorIndexes,
+  VectorIndexNames,
+  NamedVectorIndex,
+  GenericDataModel,
+  AnyDataModel,
+  TableNamesInDataModel,
+  NamedTableInfo,
+  DocumentByName,
+} from "./data_model.js";
+
 export type {
   Expression,
   ExpressionOrValue,
@@ -74,6 +102,9 @@ export type {
   DefaultFunctionArgs,
   HttpActionBuilder,
   FunctionVisibility,
+  GenericActionCtx,
+  GenericMutationCtx,
+  GenericQueryCtx,
   MutationBuilder,
   PublicHttpAction,
   MutationCtx,
@@ -90,7 +121,7 @@ export * from "./storage.js";
 export type { Scheduler, SchedulableFunctionReference } from "./scheduler.js";
 export { cronJobs } from "./cron.js";
 export type { CronJob, Crons } from "./cron.js";
-export type { WithoutSystemFields } from "./system_fields";
+export type { WithoutSystemFields } from "./system_fields.js";
 export { httpRouter, HttpRouter, ROUTABLE_HTTP_METHODS } from "./router.js";
 export type { RoutableMethod } from "./router.js";
 export {
@@ -115,7 +146,7 @@ export type {
 /**
  * @internal
  */
-export type { Index, SearchIndex } from "./schema.js";
+export type { Index, SearchIndex, VectorIndex } from "./schema.js";
 
 export type {
   SearchIndexConfig,
@@ -126,3 +157,10 @@ export type {
   DataModelFromSchemaDefinition,
 } from "./schema.js";
 export { defineTable, defineSchema } from "./schema.js";
+
+export type {
+  VectorSearch,
+  VectorSearchQuery,
+  VectorFilterBuilder,
+  FilterExpression,
+} from "./vector_search.js";

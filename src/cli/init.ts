@@ -21,7 +21,7 @@ export const init = new Command("init")
       "Slug identifier for the team this project will belong to."
     )
   )
-  .action(async options => {
+  .action(async (options) => {
     const ctx = oneoffContext;
 
     if (!(await checkAuthorization(ctx, false))) {

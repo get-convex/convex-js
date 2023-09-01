@@ -21,7 +21,7 @@ export const reinit = new Command("reinit")
       "The identifier of the project you'd like to reinitialize."
     )
   )
-  .action(async options => {
+  .action(async (options) => {
     const ctx = oneoffContext;
 
     await initOrReinitForDeprecatedCommands(ctx, options);

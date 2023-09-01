@@ -199,7 +199,7 @@ export class RecordingFs implements Filesystem {
     }
 
     // Register observing the directory's children.
-    const observedNames = new Set(entries.map(e => e.name));
+    const observedNames = new Set(entries.map((e) => e.name));
     const existingNames = this.observedDirectories.get(absDirPath);
     if (existingNames) {
       if (!setsEqual(observedNames, existingNames)) {

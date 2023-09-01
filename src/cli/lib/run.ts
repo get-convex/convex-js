@@ -1,8 +1,9 @@
 import chalk from "chalk";
 import util from "util";
 import ws from "ws";
-import { BaseConvexClient, ConvexHttpClient } from "../../browser/index.js";
-import { makeFunctionReference } from "../../server";
+import { ConvexHttpClient } from "../../browser/http_client-node.js";
+import { BaseConvexClient } from "../../browser/index.js";
+import { makeFunctionReference } from "../../server/index.js";
 import { Value, convexToJson } from "../../values/value.js";
 import {
   Context,
@@ -11,7 +12,7 @@ import {
   logFinishedStep,
   logMessage,
   logOutput,
-} from "../../bundler/context";
+} from "../../bundler/context.js";
 
 export async function runFunctionAndLog(
   ctx: Context,
@@ -104,7 +105,7 @@ export async function subscribe(
   let changes = 0;
   const client = new BaseConvexClient(
     deploymentUrl,
-    updatedQueries => {
+    (updatedQueries) => {
       // First bump is just the initial results reporting
       for (const _ of updatedQueries) {
         changes++;
@@ -134,7 +135,7 @@ export async function subscribe(
     done = true;
     onDone(null);
   };
-  const doneP = new Promise(resolve => (onDone = resolve));
+  const doneP = new Promise((resolve) => (onDone = resolve));
   function sigintListener() {
     stopWatching();
   }
@@ -144,7 +145,7 @@ export async function subscribe(
     const oneDay = 24 * 60 * 60 * 1000;
     await Promise.race([
       doneP,
-      new Promise(resolve => setTimeout(resolve, oneDay)),
+      new Promise((resolve) => setTimeout(resolve, oneDay)),
     ]);
   }
 }

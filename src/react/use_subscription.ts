@@ -99,7 +99,7 @@ export function useSubscription<Value>({
         return;
       }
 
-      setState(prevState => {
+      setState((prevState) => {
         // Ignore values from stale sources!
         // Since we subscribe an unsubscribe in a passive effect,
         // it's possible that this callback will be invoked for a stale (previous) subscription.

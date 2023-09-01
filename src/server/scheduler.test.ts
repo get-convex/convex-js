@@ -9,9 +9,9 @@ import {
 import { EmptyObject } from "./registration.js";
 
 const myModule = {
-  query: queryGeneric(_ => false),
-  action: actionGeneric(_ => "result"),
-  mutation: mutationGeneric(_ => 123),
+  query: queryGeneric((_) => false),
+  action: actionGeneric((_) => "result"),
+  mutation: mutationGeneric((_) => 123),
 };
 
 type API = ApiFromModules<{

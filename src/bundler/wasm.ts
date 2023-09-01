@@ -6,7 +6,7 @@ export const wasmPlugin = {
   name: "convex-wasm",
   setup(build: PluginBuild) {
     // Resolve ".wasm" files to a path with a namespace
-    build.onResolve({ filter: /\.wasm$/ }, args => {
+    build.onResolve({ filter: /\.wasm$/ }, (args) => {
       // If this is the import inside the stub module, import the
       // binary itself. Put the path in the "wasm-binary" namespace
       // to tell our binary load callback to load the binary file.
@@ -38,7 +38,7 @@ export const wasmPlugin = {
     // Virtual modules in the "wasm-stub" namespace are filled with
     // the JavaScript code for compiling the WebAssembly binary. The
     // binary itself is imported from a second virtual module.
-    build.onLoad({ filter: /.*/, namespace: "wasm-stub" }, async args => ({
+    build.onLoad({ filter: /.*/, namespace: "wasm-stub" }, async (args) => ({
       contents: `import wasm from ${JSON.stringify(args.path)}
           export default new WebAssembly.Module(wasm)`,
     }));
@@ -47,7 +47,7 @@ export const wasmPlugin = {
     // actual bytes of the WebAssembly file. This uses esbuild's
     // built-in "binary" loader instead of manually embedding the
     // binary data inside JavaScript code ourselves.
-    build.onLoad({ filter: /.*/, namespace: "wasm-binary" }, async args => ({
+    build.onLoad({ filter: /.*/, namespace: "wasm-binary" }, async (args) => ({
       contents: await fs.promises.readFile(args.path),
       loader: "binary",
     }));

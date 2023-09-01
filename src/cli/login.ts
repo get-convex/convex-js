@@ -1,6 +1,5 @@
 import { Command, Option } from "commander";
-import chalk from "chalk";
-import { oneoffContext } from "../bundler/context.js";
+import { logFinishedStep, oneoffContext } from "../bundler/context.js";
 import { checkAuthorization, performLogin } from "./lib/login.js";
 
 export const login = new Command("login")
@@ -35,10 +34,9 @@ export const login = new Command("login")
       !options.force &&
       (await checkAuthorization(ctx, options.acceptOptIns))
     ) {
-      console.error(
-        chalk.green(
-          "This device has previously been authorized and is ready for use with Convex."
-        )
+      logFinishedStep(
+        ctx,
+        "This device has previously been authorized and is ready for use with Convex."
       );
       return;
     }

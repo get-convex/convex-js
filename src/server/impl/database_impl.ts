@@ -74,7 +74,7 @@ export function setupWriter(): DatabaseWriter<GenericDataModel> {
         value: convexToJson(value),
       });
     },
-    delete: async id => {
+    delete: async (id) => {
       validateArg(id, 1, "delete", "id");
       await performAsyncSyscall("1.0/remove", { id: convexToJson(id) });
     },

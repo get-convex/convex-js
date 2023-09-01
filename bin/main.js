@@ -1,2 +1,2 @@
 #!/usr/bin/env node
-require("../dist/cli.bundle.cjs");
+import("../dist/cli.bundle.cjs");

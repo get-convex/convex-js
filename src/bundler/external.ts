@@ -1,6 +1,6 @@
 import { PluginBuild } from "esbuild";
 import type { Plugin } from "esbuild";
-import { Context } from "./context";
+import { Context } from "./context.js";
 import path from "path";
 
 import { findUp } from "find-up";
@@ -68,7 +68,7 @@ export function createExternalPlugin(
       name: "convex-node-externals",
       setup(build: PluginBuild) {
         // On every module resolved, we check if the module name should be an external
-        build.onResolve({ namespace: "file", filter: /.*/ }, async args => {
+        build.onResolve({ namespace: "file", filter: /.*/ }, async (args) => {
           const module = getModule(args.path);
 
           // Fallback if this does not look like node module import. Also, we

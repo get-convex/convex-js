@@ -1,5 +1,5 @@
-import { LocalSyncState } from "./local_state";
-import { AuthError, Transition } from "./protocol";
+import { LocalSyncState } from "./local_state.js";
+import { AuthError, Transition } from "./protocol.js";
 import jwtDecode from "jwt-decode";
 
 /**

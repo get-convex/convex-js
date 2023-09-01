@@ -5,7 +5,7 @@ const path = require("path");
 const process = require("process");
 
 // esbuild is a bundler, but we're not bundling
-const allSourceFiles = [...walkSync("src")].filter(name => {
+const allSourceFiles = [...walkSync("src")].filter((name) => {
   if (name.startsWith("api")) {
     console.log("api:", name);
   }

@@ -5,8 +5,8 @@
  * 1. {@link ConvexReactClient}, a client for using Convex in React.
  * 2. {@link ConvexProvider}, a component that stores this client in React context.
  * 3. {@link Authenticated}, {@link Unauthenticated} and {@link AuthLoading} helper auth components.
- * 4. [Hooks](https://docs.convex.dev/generated-api/react#react-hooks) for calling into
- *    this client within your React components.
+ * 4. Hooks {@link useQuery}, {@link useMutation}, {@link useAction} and more for accessing this
+ *    client from your React components.
  *
  * ## Usage
  *
@@ -76,7 +76,6 @@ export {
   ConvexReactClient,
   useConvex,
   ConvexProvider,
-  type UseQueryOptions,
   useQuery,
   useMutation,
   useAction,

@@ -3,7 +3,7 @@ module.exports = (path, options) => {
   return options.defaultResolver(path, {
     ...options,
     // Use packageFilter to process parsed `package.json` before the resolution (see https://www.npmjs.com/package/resolve#resolveid-opts-cb)
-    packageFilter: pkg => {
+    packageFilter: (pkg) => {
       // Force the `ws` import to use CJS in both the jest jsdom browser environment and the
       // jest node environment.
       //

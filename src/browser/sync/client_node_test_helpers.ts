@@ -23,7 +23,7 @@ export async function withInMemoryWebSocket(cb: InMemoryWebSocketTest) {
 
   let received: (msg: string) => void;
   const messages: Promise<string>[] = [
-    new Promise(r => {
+    new Promise((r) => {
       received = r;
     }),
   ];
@@ -34,7 +34,7 @@ export async function withInMemoryWebSocket(cb: InMemoryWebSocketTest) {
       ws.on("message", function message(data: string) {
         received(data);
         messages.push(
-          new Promise(r => {
+          new Promise((r) => {
             received = r;
           })
         );

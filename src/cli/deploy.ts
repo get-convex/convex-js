@@ -7,10 +7,10 @@ import {
   logMessage,
   oneoffContext,
   showSpinner,
-} from "../bundler/context";
-import { fetchProdDeploymentCredentials } from "./lib/api";
-import { suggestedEnvVarName } from "./lib/envvars";
-import { PushOptions, runPush } from "./lib/push";
+} from "../bundler/context.js";
+import { fetchProdDeploymentCredentials } from "./lib/api.js";
+import { suggestedEnvVarName } from "./lib/envvars.js";
+import { PushOptions, runPush } from "./lib/push.js";
 
 export const deploy = new Command("deploy")
   .description("Deploy to a production deployment")
@@ -42,7 +42,7 @@ export const deploy = new Command("deploy")
   .addOption(new Option("--admin-key <adminKey>").hideHelp())
   .addOption(new Option("--url <url>").hideHelp())
   .showHelpAfterError()
-  .action(async cmdOptions => {
+  .action(async (cmdOptions) => {
     const ctx = oneoffContext;
 
     const { adminKey, url, deploymentNames } =

@@ -1,8 +1,8 @@
 import { Command, Option } from "commander";
 import chalk from "chalk";
 import { ensureHasConvexDependency } from "./lib/utils.js";
-import { doInitCodegen, doCodegen } from "./lib/codegen";
-import { oneoffContext } from "../bundler/context.js";
+import { doInitCodegen, doCodegen } from "./lib/codegen.js";
+import { logMessage, oneoffContext } from "../bundler/context.js";
 import { getFunctionsDirectoryPath } from "./lib/config.js";
 
 export const codegen = new Command("codegen")
@@ -25,7 +25,7 @@ export const codegen = new Command("codegen")
   )
   .option(
     "--init",
-    "Also write the default convex/README.md and convex/tsconfig.json, otherwise only written during convex dev."
+    "Also (over-)write the default convex/README.md and convex/tsconfig.json files, otherwise only written when creating a new Convex project."
   )
   // Experimental option
   .addOption(
@@ -34,7 +34,7 @@ export const codegen = new Command("codegen")
       "Generate CommonJS modules (CJS) instead of ECMAScript modules, the default. Bundlers typically take care of this conversion while bundling, so this setting is generally only useful for projects which do not use a bundler, typically Node.js projects. Convex functions can be written with either syntax."
     ).hideHelp()
   )
-  .action(async options => {
+  .action(async (options) => {
     const ctx = oneoffContext;
     const functionsDirectoryPath = await getFunctionsDirectoryPath(ctx);
 
@@ -42,16 +42,17 @@ export const codegen = new Command("codegen")
     await ensureHasConvexDependency(ctx, "codegen");
 
     if (options.init) {
-      await doInitCodegen(
+      await doInitCodegen({
         ctx,
         functionsDirectoryPath,
-        options.dryRun,
-        options.debug
-      );
+        dryRun: options.dryRun,
+        debug: options.debug,
+        overwrite: true,
+      });
     }
 
     if (options.typecheck !== "disable") {
-      console.error(chalk.gray("Running TypeScript typecheck…"));
+      logMessage(ctx, chalk.gray("Running TypeScript typecheck…"));
     }
 
     await doCodegen({

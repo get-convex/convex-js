@@ -76,7 +76,7 @@ import {
   internalQueryGeneric,
   internalActionGeneric,
   internalMutationGeneric,
-} from "../server";
+} from "../server/index.js";
 import { ApiFromModules, ArgsAndOptions, OptionalRestArgs } from "./index.js";
 import { DefaultFunctionArgs, EmptyObject } from "./registration.js";
 
@@ -102,7 +102,9 @@ describe("JustPaginatedQueries", () => {
             }
           ) => null as unknown as PaginationResult<string>
         ),
-        missingArg: query(_ctx => null as unknown as PaginationResult<string>),
+        missingArg: query(
+          (_ctx) => null as unknown as PaginationResult<string>
+        ),
         emptyArg: query(() => null as unknown as PaginationResult<string>),
         wrongReturn: query(
           (_ctx, _args: { paginationOpts: PaginationOptions }) =>
@@ -142,7 +144,7 @@ describe("justType filters", () => {
   test("finds queries, mutations and actions", () => {
     const myModule = {
       query: queryGeneric((_, _args: { arg: number }) => "query result"),
-      mutation: mutationGeneric(_ => "query result"),
+      mutation: mutationGeneric((_) => "query result"),
       importantQuestion: actionGeneric((_, _args: { arg: number }) => 42),
     };
 
@@ -288,8 +290,8 @@ describe("justType filters", () => {
       internalQuery: internalQueryGeneric(
         (_, _args: { arg: number }) => "query result"
       ),
-      mutation: mutationGeneric(_ => "query result"),
-      internalMutation: internalMutationGeneric(_ => "query result"),
+      mutation: mutationGeneric((_) => "query result"),
+      internalMutation: internalMutationGeneric((_) => "query result"),
     };
 
     const myActionsModule = {
@@ -337,7 +339,7 @@ describe("justType filters", () => {
 
   test("correctly infers arguments", () => {
     const myModule = {
-      noArg: queryGeneric(_ => "query result"),
+      noArg: queryGeneric((_) => "query result"),
       oneTypedArg: queryGeneric((_, _args: { arg: number }) => "query result"),
       onUnTypedArg: queryGeneric((_, _args) => "query result"),
     };
@@ -371,7 +373,7 @@ describe("justType filters", () => {
 
 describe("Args", () => {
   const module = {
-    noArgs: mutationGeneric(_ctx => {
+    noArgs: mutationGeneric((_ctx) => {
       /* nop */
     }),
     args: mutationGeneric((_ctx, _args: { property: string }) => {

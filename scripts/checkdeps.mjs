@@ -22,7 +22,7 @@ const options = {
   ],
 };
 
-depcheck(root, options).then(unused => {
+depcheck(root, options).then((unused) => {
   if (unused.dependencies.length) {
     console.log(
       "Some package.json dependencies are only used in CLI (or not at all):"

@@ -1,9 +1,0 @@
-{
-  "include": ["."],
-  "exclude": [],
-  "extends": "../../tsconfig",
-  "target": "node",
-  "compilerOptions": {
-    "outDir": "../../dist/types"
-  }
-}

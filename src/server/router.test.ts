@@ -1,6 +1,6 @@
-import { httpActionGeneric } from "./impl/registration_impl";
-import { HttpActionBuilder } from "./registration";
-import { httpRouter } from "./router";
+import { httpActionGeneric } from "./impl/registration_impl.js";
+import { HttpActionBuilder } from "./registration.js";
+import { httpRouter } from "./router.js";
 
 const httpAction = httpActionGeneric as HttpActionBuilder;
 

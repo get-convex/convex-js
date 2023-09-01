@@ -192,7 +192,7 @@ function jsonToConvexInternal(
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map(value => jsonToConvexInternal(value, allowMapsAndSets));
+    return value.map((value) => jsonToConvexInternal(value, allowMapsAndSets));
   }
   if (typeof value !== "object") {
     throw new Error(`Unexpected type of ${value}`);
@@ -239,7 +239,7 @@ function jsonToConvexInternal(
         );
       }
       return new Set(
-        value.$set.map(value => jsonToConvexInternal(value, allowMapsAndSets))
+        value.$set.map((value) => jsonToConvexInternal(value, allowMapsAndSets))
       ) as any;
     }
     if (key === "$map") {

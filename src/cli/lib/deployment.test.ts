@@ -1,5 +1,5 @@
 import { test, expect } from "@jest/globals";
-import { changesToEnvVarFile, changesToGitIgnore } from "./deployment";
+import { changesToEnvVarFile, changesToGitIgnore } from "./deployment.js";
 
 const DEPLOYMENT = {
   team: "snoops",

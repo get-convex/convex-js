@@ -12,14 +12,10 @@ import {
 } from "./system_fields.js";
 
 /**
- * An interface to read from the database within Convex query functions.
  *
- * The two entry points are {@link DatabaseReader.get}, which fetches a single
- * document by its {@link values.GenericId}, or {@link DatabaseReader.query}, which starts
- * building a query.
- *
- * If you're using code generation, use the `DatabaseReader` type in
+ * @deprecated If you're using code generation, use the `DatabaseReader` type in
  * `convex/_generated/server.d.ts` which is typed for your data model.
+ * If you need an unparameterized DatabaseReader use GenericDatabaseReader.
  *
  * @public
  */
@@ -66,21 +62,29 @@ export interface DatabaseReader<DataModel extends GenericDataModel> {
 }
 
 /**
- * An interface to read from and write to the database within Convex mutation
- * functions.
+ * An interface to read from the database within Convex query functions.
  *
- * Convex guarantees that all writes within a single mutation are
- * executed atomically, so you never have to worry about partial writes leaving
- * your data in an inconsistent state. See [the Convex Guide](https://docs.convex.dev/understanding/convex-fundamentals/functions#atomicity-and-optimistic-concurrency-control)
- * for the guarantees Convex provides your functions.
+ * The two entry points are {@link DatabaseReader.get}, which fetches a single
+ * document by its {@link values.GenericId}, or {@link DatabaseReader.query}, which starts
+ * building a query.
  *
- *  If you're using code generation, use the `DatabaseReader` type in
+ * If you're using code generation, use the `DatabaseReader` type in
  * `convex/_generated/server.d.ts` which is typed for your data model.
  *
  * @public
  */
+export interface GenericDatabaseReader<DataModel extends GenericDataModel>
+  extends DatabaseReader<DataModel> {}
+
+/**
+ * @deprecated If you're using code generation, use the `DatabaseWriter` type in
+ * `convex/_generated/server.d.ts` which is typed for your data model.
+ * If you need an unparameterized DatabaseWriter use GenericDatabaseWriter.
+ *
+ * @public
+ */
 export interface DatabaseWriter<DataModel extends GenericDataModel>
-  extends DatabaseReader<DataModel> {
+  extends GenericDatabaseReader<DataModel> {
   /**
    * Insert a new document into a table.
    *
@@ -128,3 +132,20 @@ export interface DatabaseWriter<DataModel extends GenericDataModel>
    */
   delete(id: GenericId<TableNamesInDataModel<DataModel>>): Promise<void>;
 }
+
+/**
+ * An interface to read from and write to the database within Convex mutation
+ * functions.
+ *
+ * Convex guarantees that all writes within a single mutation are
+ * executed atomically, so you never have to worry about partial writes leaving
+ * your data in an inconsistent state. See [the Convex Guide](https://docs.convex.dev/understanding/convex-fundamentals/functions#atomicity-and-optimistic-concurrency-control)
+ * for the guarantees Convex provides your functions.
+ *
+ *  If you're using code generation, use the `DatabaseReader` type in
+ * `convex/_generated/server.d.ts` which is typed for your data model.
+ *
+ * @public
+ */
+export interface GenericDatabaseWriter<DataModel extends GenericDataModel>
+  extends DatabaseWriter<DataModel> {}

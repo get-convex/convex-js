@@ -1,5 +1,5 @@
 import * as dotenv from "dotenv";
-import { Context } from "../../bundler/context";
+import { Context } from "../../bundler/context.js";
 
 const ENV_VAR_FILE_PATH = ".env.local";
 export const CONVEX_DEPLOYMENT_VAR_NAME = "CONVEX_DEPLOYMENT";
@@ -91,7 +91,7 @@ export function changesToGitIgnore(existingFile: string | null): string | null {
   }
   const gitIgnoreLines = existingFile.split("\n");
   const envVarFileIgnored = gitIgnoreLines.some(
-    line =>
+    (line) =>
       line === ".env.local" ||
       line === ".env.*" ||
       line === ".env*" ||

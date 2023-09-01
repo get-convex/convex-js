@@ -1,7 +1,6 @@
 {
   "include": ["src", ".eslintrc.cjs"],
   /* src/cli uses a different tsconfig.json and .test.ts files should not be compiled */
-  "exclude": ["src/cli"],
   "compileOnSave": true,
   "compilerOptions": {
     /* Basic Options */

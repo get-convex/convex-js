@@ -4,8 +4,8 @@
 import chalk from "chalk";
 import * as dotenv from "dotenv";
 
-import { Context } from "../../bundler/context";
-import { loadPackageJson } from "./utils";
+import { Context, logWarning } from "../../bundler/context.js";
+import { loadPackageJson } from "./utils.js";
 
 const FRAMEWORKS = ["create-react-app", "Next.js", "Vite", "Remix"] as const;
 type Framework = (typeof FRAMEWORKS)[number];
@@ -108,9 +108,12 @@ async function envVarWriteConfig(
   if (existing) {
     const config = dotenv.parse(ctx.fs.readUtf8File(envFile));
 
-    const matching = Object.keys(config).filter(key => EXPECTED_NAMES.has(key));
+    const matching = Object.keys(config).filter((key) =>
+      EXPECTED_NAMES.has(key)
+    );
     if (matching.length > 1) {
-      console.error(
+      logWarning(
+        ctx,
         chalk.yellow(
           `Found multiple CONVEX_URL environment variables in ${envFile} so cannot update automatically.`
         )
@@ -122,7 +125,7 @@ async function envVarWriteConfig(
       if (oldValue === value) {
         return null;
       }
-      if (Object.values(config).filter(v => v === oldValue).length !== 1) {
+      if (Object.values(config).filter((v) => v === oldValue).length !== 1) {
         chalk.yellow(`Can't safely modify ${envFile}, please edit manually.`);
         return null;
       }

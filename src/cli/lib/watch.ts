@@ -24,7 +24,7 @@ export class Watcher {
         waiter();
       }
     });
-    this.readyCb = new Promise<void>(resolve => {
+    this.readyCb = new Promise<void>((resolve) => {
       watch.on("ready", () => resolve());
     });
     this.watch = watch;
@@ -67,7 +67,7 @@ export class Watcher {
 
   async waitForEvent(): Promise<void> {
     while (this.bufferedEvents.length === 0) {
-      const newEvent = new Promise<void>(resolve => {
+      const newEvent = new Promise<void>((resolve) => {
         this.waiters.push(resolve);
       });
       await newEvent;

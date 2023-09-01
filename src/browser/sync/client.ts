@@ -1,6 +1,6 @@
 import { version } from "../../index.js";
 import { convexToJson, Value } from "../../values/index.js";
-import { createError, logFatalError } from "../logging.js";
+import { createHybridErrorStacktrace, logFatalError } from "../logging.js";
 import { LocalSyncState } from "./local_state.js";
 import { RequestManager } from "./request_manager.js";
 import {
@@ -187,12 +187,12 @@ export class BaseConvexClient {
     const wsUri = `${wsProtocol}://${origin}/api/${version}/sync`;
 
     this.state = new LocalSyncState();
-    this.remoteQuerySet = new RemoteQuerySet(queryId =>
+    this.remoteQuerySet = new RemoteQuerySet((queryId) =>
       this.state.queryPath(queryId)
     );
     this.requestManager = new RequestManager();
     this.authenticationManager = new AuthenticationManager(this.state, {
-      authenticate: token => {
+      authenticate: (token) => {
         const message = this.state.setAuth(token);
         this.webSocketManager.sendMessage(message);
       },
@@ -220,7 +220,7 @@ export class BaseConvexClient {
       }
     } else if (unsavedChangesWarning !== false) {
       // Listen for tab close events and notify the user on unsaved changes.
-      window.addEventListener("beforeunload", e => {
+      window.addEventListener("beforeunload", (e) => {
         if (this.requestManager.hasIncompleteRequests()) {
           // There are 3 different ways to trigger this pop up so just try all of
           // them.
@@ -250,7 +250,7 @@ export class BaseConvexClient {
 
         // Throw out our remote query, reissue queries
         // and outstanding mutations, and reauthenticate.
-        this.remoteQuerySet = new RemoteQuerySet(queryId =>
+        this.remoteQuerySet = new RemoteQuerySet((queryId) =>
           this.state.queryPath(queryId)
         );
         const [querySetModification, authModification] = this.state.restart();
@@ -506,7 +506,7 @@ export class BaseConvexClient {
   ): Promise<any> {
     const result = await this.mutationInternal(name, args, options);
     if (!result.success) {
-      throw createError("mutation", name, result.errorMessage);
+      throw new Error(createHybridErrorStacktrace("mutation", name, result));
     }
     return result.value;
   }
@@ -561,7 +561,7 @@ export class BaseConvexClient {
   async action(name: string, args?: Record<string, Value>): Promise<any> {
     const result = await this.actionInternal(name, args);
     if (!result.success) {
-      throw createError("action", name, result.errorMessage);
+      throw new Error(createHybridErrorStacktrace("action", name, result));
     }
     return result.value;
   }
@@ -651,7 +651,7 @@ export class BaseConvexClient {
       },
       body: JSON.stringify({ event: "LongWebsocketDisconnect" }),
     })
-      .then(response => {
+      .then((response) => {
         if (!response.ok) {
           console.warn(
             "Analytics request failed with response:",
@@ -659,7 +659,7 @@ export class BaseConvexClient {
           );
         }
       })
-      .catch(error => {
+      .catch((error) => {
         console.warn("Analytics response failed with error:", error);
       });
   }

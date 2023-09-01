@@ -1,4 +1,4 @@
-import { Value } from "../../values";
+import { Value } from "../../values/index.js";
 import {
   FunctionArgs,
   FunctionReference,

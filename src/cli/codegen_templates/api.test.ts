@@ -1,5 +1,5 @@
 import { test, expect } from "@jest/globals";
-import { importPath, moduleIdentifier } from "./api";
+import { importPath, moduleIdentifier } from "./api.js";
 
 test("importPath", () => {
   expect(importPath("foo.ts")).toEqual("foo");

@@ -10,7 +10,7 @@ import {
   ConnectionState,
 } from "../browser/sync/client.js";
 import type { UserIdentityAttributes } from "../browser/sync/protocol.js";
-import { useQueries } from "./use_queries.js";
+import { RequestForQueries, useQueries } from "./use_queries.js";
 import { parseArgs } from "../common/index.js";
 import {
   ArgsAndOptions,
@@ -21,6 +21,7 @@ import {
   getFunctionName,
   makeFunctionReference,
 } from "../server/api.js";
+import { EmptyObject } from "../server/registration.js";
 
 if (typeof React === "undefined") {
   throw new Error("Required dependency 'react' not found");
@@ -136,8 +137,9 @@ export interface Watch<T> {
    * This will subscribe to this query and call
    * the callback whenever the query result changes.
    *
-   * **Important: If the query is already known on the client this watch will
-   * never be invoked.** To get the current, local result call
+   * **Important: If the client is already subscribed to this query with the
+   * same arguments this callback will not be invoked until the query result is
+   * updated.** To get the current, local result call
    * {@link react.Watch.localQueryResult}.
    *
    * @param callback - Function that is called whenever the query result changes.
@@ -254,7 +256,7 @@ export class ConvexReactClient {
     }
     this.cachedSync = new BaseConvexClient(
       this.address,
-      updatedQueries => this.transition(updatedQueries),
+      (updatedQueries) => this.transition(updatedQueries),
       this.options
     );
     if (this.adminAuth) {
@@ -331,7 +333,7 @@ export class ConvexReactClient {
     const [args, options] = argsAndOptions;
     const name = getFunctionName(query);
     return {
-      onUpdate: callback => {
+      onUpdate: (callback) => {
         const { queryToken, unsubscribe } = this.sync.subscribe(
           name as string,
           args,
@@ -444,10 +446,14 @@ export class ConvexReactClient {
     if (existingResult !== undefined) {
       return existingResult;
     }
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       const unsubscribe = watch.onUpdate(() => {
         unsubscribe();
-        resolve(watch.localQueryResult());
+        try {
+          resolve(watch.localQueryResult());
+        } catch (e) {
+          reject(e);
+        }
       });
     });
   }
@@ -533,13 +539,10 @@ export const ConvexProvider: React.FC<{
   );
 };
 
-/**
- * Options object for {@link useQuery}.
- *
- * @public
- */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
-export interface UseQueryOptions {}
+export type OptionalRestArgsOrSkip<FuncRef extends FunctionReference<any>> =
+  FuncRef["_args"] extends EmptyObject
+    ? [args?: EmptyObject | "skip"]
+    : [args: FuncRef["_args"] | "skip"];
 
 /**
  * Load a reactive query within a React component.
@@ -551,29 +554,35 @@ export interface UseQueryOptions {}
  *
  * @param query - a {@link server.FunctionReference} for the public query to run
  * like `api.dir1.dir2.filename.func`.
- * @param args - The arguments to the query function.
- * @param options - [Optional] The {@link UseQueryOptions} options object.
+ * @param args - The arguments to the query function or the string "skip" if the
+ * query should not be loaded.
  * @returns the result of the query. If the query is loading returns `undefined`.
  *
  * @public
  */
 export function useQuery<Query extends FunctionReference<"query">>(
   query: Query,
-  ...args: OptionalRestArgs<Query>
+  ...args: OptionalRestArgsOrSkip<Query>
 ): Query["_returnType"] | undefined {
-  const argsObject = parseArgs(args[0]);
+  const skip = args[0] === "skip";
+  const argsObject = args[0] === "skip" ? {} : parseArgs(args[0]);
 
   const queryReference =
     typeof query === "string"
       ? makeFunctionReference<"query", any, any>(query)
       : query;
 
+  const queryName = getFunctionName(queryReference);
+
   const queries = useMemo(
-    () => ({ query: { query: queryReference, args: argsObject } }),
+    () =>
+      skip
+        ? ({} as RequestForQueries)
+        : { query: { query: queryReference, args: argsObject } },
     // Stringify args so args that are semantically the same don't trigger a
     // rerender. Saves developers from adding `useMemo` on every args usage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(convexToJson(argsObject)), getFunctionName(queryReference)]
+    [JSON.stringify(convexToJson(argsObject)), queryName, skip]
   );
 
   const results = useQueries(queries);

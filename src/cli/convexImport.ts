@@ -4,7 +4,7 @@ import {
   ensureHasConvexDependency,
   logAndHandleAxiosError,
   formatSize,
-} from "./lib/utils";
+} from "./lib/utils.js";
 import axios, { AxiosResponse } from "axios";
 import { version } from "../index.js";
 import {
@@ -13,8 +13,9 @@ import {
   Context,
   showSpinner,
   logFinishedStep,
-} from "../bundler/context";
-import { fetchDeploymentCredentialsProvisionProd } from "./lib/api";
+  logWarning,
+} from "../bundler/context.js";
+import { fetchDeploymentCredentialsProvisionProd } from "./lib/api.js";
 import path from "path";
 
 export const convexImport = new Command("import")
@@ -118,10 +119,11 @@ async function determineFormat(
       jsonArray: ".json",
     };
     const extensionToFormat = Object.fromEntries(
-      Object.entries(formatToExtension).map(a => a.reverse())
+      Object.entries(formatToExtension).map((a) => a.reverse())
     );
     if (format !== null && fileExtension !== formatToExtension[format]) {
-      console.warn(
+      logWarning(
+        ctx,
         chalk.yellow(
           `Warning: Extension of file ${filePath} (${fileExtension}) does not match specified format: ${format} (${formatToExtension[format]}).`
         )

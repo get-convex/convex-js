@@ -12,7 +12,12 @@ import {
 import { readmeCodegen } from "../codegen_templates/readme.js";
 import { serverCodegen } from "../codegen_templates/server.js";
 import { tsconfigCodegen } from "../codegen_templates/tsconfig.js";
-import { Context, logMessage, logOutput } from "../../bundler/context.js";
+import {
+  Context,
+  logError,
+  logMessage,
+  logOutput,
+} from "../../bundler/context.js";
 import { typeCheckFunctionsInMode, TypeCheckMode } from "./typecheck.js";
 
 /**
@@ -22,7 +27,7 @@ import { typeCheckFunctionsInMode, TypeCheckMode } from "./typecheck.js";
  * (not our user's one) but it's better than nothing.
  */
 function format(source: string, filetype: string): string {
-  return prettier.format(source, { parser: filetype });
+  return prettier.format(source, { parser: filetype, pluginSearchDirs: false });
 }
 
 /**
@@ -149,7 +154,7 @@ async function doApiCodegen(
   commonjs = false
 ) {
   const modulePaths = (await entryPoints(ctx, functionsDir, false)).map(
-    entryPoint => path.relative(functionsDir, entryPoint)
+    (entryPoint) => path.relative(functionsDir, entryPoint)
   );
   await writeJsWithTypes(
     ctx,
@@ -185,10 +190,11 @@ export async function doCodegen({
   const legacyCodegenPath = path.join(functionsDirectoryPath, "_generated.ts");
   if (ctx.fs.exists(legacyCodegenPath)) {
     if (!dryRun) {
-      console.error(`Deleting legacy codegen file: ${legacyCodegenPath}}`);
+      logError(ctx, `Deleting legacy codegen file: ${legacyCodegenPath}}`);
       ctx.fs.unlink(legacyCodegenPath);
     } else {
-      console.error(
+      logError(
+        ctx,
         `Command would delete legacy codegen file: ${legacyCodegenPath}}`
       );
     }
@@ -201,7 +207,7 @@ export async function doCodegen({
   const hasSchemaFile = ctx.fs.exists(schemaPath);
 
   // Recreate the codegen directory in a temp location
-  await mkdtemp("_generated", async tempCodegenDir => {
+  await mkdtemp("_generated", async (tempCodegenDir) => {
     // Do things in a careful order so that we always generate code in
     // dependency order.
     //
@@ -253,7 +259,10 @@ export async function doCodegen({
 }
 
 function zipLongest<T>(a: T[], b: T[]): [T?, T?][] {
-  return [...Array(Math.max(a.length, b.length)).keys()].map(i => [a[i], b[i]]);
+  return [...Array(Math.max(a.length, b.length)).keys()].map((i) => [
+    a[i],
+    b[i],
+  ]);
 }
 
 function canSkipSync(ctx: Context, tempDir: TempDir, destDir: string) {
@@ -335,18 +344,38 @@ function syncFromTemp(
   }
 }
 
-// Code generated on new project init, after which these files are not
-// automatically written again in case developers have modified them.
-export async function doInitCodegen(
-  ctx: Context,
-  functionsDirectoryPath: string,
-  quiet = false,
+export async function doInitCodegen({
+  ctx,
+  functionsDirectoryPath,
   dryRun = false,
-  debug = false
-) {
-  await mkdtemp("convex", async tempFunctionsDir => {
-    doReadmeCodegen(ctx, tempFunctionsDir, dryRun, debug, quiet);
-    doTsconfigCodegen(ctx, tempFunctionsDir, dryRun, debug, quiet);
+  debug = false,
+  quiet = false,
+  overwrite = false,
+}: {
+  ctx: Context;
+  functionsDirectoryPath: string;
+  dryRun?: boolean;
+  debug?: boolean;
+  quiet?: boolean;
+  overwrite?: boolean;
+}): Promise<void> {
+  await mkdtemp("convex", async (tempFunctionsDir) => {
+    doReadmeCodegen(
+      ctx,
+      tempFunctionsDir,
+      dryRun,
+      debug,
+      quiet,
+      overwrite ? undefined : functionsDirectoryPath
+    );
+    doTsconfigCodegen(
+      ctx,
+      tempFunctionsDir,
+      dryRun,
+      debug,
+      quiet,
+      overwrite ? undefined : functionsDirectoryPath
+    );
     syncFromTemp(ctx, tempFunctionsDir, functionsDirectoryPath, false);
   });
 }
@@ -356,8 +385,16 @@ function doReadmeCodegen(
   tempFunctionsDir: TempDir,
   dryRun = false,
   debug = false,
-  quiet = false
+  quiet = false,
+  dontOverwriteFinalDestination?: string
 ) {
+  if (
+    dontOverwriteFinalDestination &&
+    ctx.fs.exists(path.join(dontOverwriteFinalDestination, "README.md"))
+  ) {
+    logMessage(ctx, `not overwriting README.md`);
+    return;
+  }
   writeFile(
     ctx,
     "README.md",
@@ -375,8 +412,16 @@ function doTsconfigCodegen(
   tempFunctionsDir: TempDir,
   dryRun = false,
   debug = false,
-  quiet = false
+  quiet = false,
+  dontOverwriteFinalDestination?: string
 ) {
+  if (
+    dontOverwriteFinalDestination &&
+    ctx.fs.exists(path.join(dontOverwriteFinalDestination, "tsconfig.json"))
+  ) {
+    logMessage(ctx, `not overwriting tsconfig.json`);
+    return;
+  }
   writeFile(
     ctx,
     "tsconfig.json",

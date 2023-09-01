@@ -26,7 +26,7 @@ export function apiCodegen(modulePaths: string[]): GeneratedJsWithTypes {
   import type { ApiFromModules, FilterApi, FunctionReference } from "convex/server";
   ${modulePaths
     .map(
-      modulePath =>
+      (modulePath) =>
         `import type * as ${moduleIdentifier(modulePath)} from "../${importPath(
           modulePath
         )}";`
@@ -44,7 +44,7 @@ export function apiCodegen(modulePaths: string[]): GeneratedJsWithTypes {
   declare const fullApi: ApiFromModules<{
     ${modulePaths
       .map(
-        modulePath =>
+        (modulePath) =>
           `"${importPath(modulePath)}": typeof ${moduleIdentifier(modulePath)},`
       )
       .join("\n")}

@@ -35,7 +35,7 @@ async function main() {
       dsn: "https://f9fa0306e3d540079cf40ce8c2ad9644@o1192621.ingest.sentry.io/6390839",
       release: "cli@" + version,
       tracesSampleRate: 0.2,
-      beforeBreadcrumb: breadcrumb => {
+      beforeBreadcrumb: (breadcrumb) => {
         // Strip ANSI color codes from log lines that are sent as breadcrumbs.
         if (breadcrumb.message) {
           breadcrumb.message = stripAnsi(breadcrumb.message);

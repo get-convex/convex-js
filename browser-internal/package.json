@@ -1,5 +1,0 @@
-{
-  "main": "../dist/cjs/browser/index.js",
-  "module": "../dist/esm/browser/index.js",
-  "types": "../dist/internal-types/browser/index.d.ts"
-}

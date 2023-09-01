@@ -7,7 +7,7 @@ import {
 } from "../../server/api.js";
 import { parseArgs } from "../../common/index.js";
 import { Value } from "../../values/index.js";
-import { createError } from "../logging.js";
+import { createHybridErrorStacktrace } from "../logging.js";
 import { FunctionResult } from "./function_result.js";
 import { OptimisticLocalStore } from "./optimistic_updates.js";
 import { RequestId } from "./protocol.js";
@@ -155,7 +155,7 @@ export class OptimisticQueryResults {
     serverQueryResults: QueryResultsMap,
     optimisticUpdatesToDrop: Set<RequestId>
   ): ChangedQueries {
-    this.optimisticUpdates = this.optimisticUpdates.filter(updateAndId => {
+    this.optimisticUpdates = this.optimisticUpdates.filter((updateAndId) => {
       return !optimisticUpdatesToDrop.has(updateAndId.mutationId);
     });
 
@@ -207,7 +207,9 @@ export class OptimisticQueryResults {
     } else if (result.success) {
       return result.value;
     } else {
-      throw createError("query", query.udfPath, result.errorMessage);
+      throw new Error(
+        createHybridErrorStacktrace("query", query.udfPath, result)
+      );
     }
   }
 

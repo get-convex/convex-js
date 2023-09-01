@@ -5,6 +5,6 @@ export function validateArg(
   argName: string
 ) {
   if (arg === undefined) {
-    throw new Error(`Must provide arg ${idx} \`${argName}\` to ${method}`);
+    throw new Error(`Must provide arg ${idx} \`${argName}\` to \`${method}\``);
   }
 }

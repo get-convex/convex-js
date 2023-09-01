@@ -1,3 +1,5 @@
 temp
 .git/
 dist/
+api-extractor-configs/reports
+api-extractor-configs/temp

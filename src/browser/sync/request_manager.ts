@@ -41,7 +41,7 @@ export class RequestManager {
     message: MutationRequest | ActionRequest,
     sent: boolean
   ): Promise<FunctionResult> {
-    const result = new Promise<FunctionResult>(resolve => {
+    const result = new Promise<FunctionResult>((resolve) => {
       const status = sent ? "Requested" : "NotSent";
       this.inflightRequests.set(message.requestId, {
         message,
