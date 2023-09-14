@@ -63,6 +63,7 @@ async function doEsbuild(
       target: "esnext",
       outdir: "out",
       outbase: dir,
+      conditions: ["convex", "module"],
       // The wasmPlugin should be last so it doesn't run on external modules.
       plugins: [external.plugin, wasmPlugin],
       write: false,

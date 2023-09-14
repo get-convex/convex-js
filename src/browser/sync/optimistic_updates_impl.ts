@@ -7,7 +7,7 @@ import {
 } from "../../server/api.js";
 import { parseArgs } from "../../common/index.js";
 import { Value } from "../../values/index.js";
-import { createHybridErrorStacktrace } from "../logging.js";
+import { createHybridErrorStacktrace, forwardData } from "../logging.js";
 import { FunctionResult } from "./function_result.js";
 import { OptimisticLocalStore } from "./optimistic_updates.js";
 import { RequestId } from "./protocol.js";
@@ -16,6 +16,7 @@ import {
   QueryToken,
   serializePathAndArgs,
 } from "./udf_path_utils.js";
+import { ConvexError } from "../../values/errors.js";
 
 /**
  * An optimistic update function that has been curried over its arguments.
@@ -207,10 +208,22 @@ export class OptimisticQueryResults {
     } else if (result.success) {
       return result.value;
     } else {
+      if (result.errorData !== undefined) {
+        throw forwardData(
+          result,
+          new ConvexError(
+            createHybridErrorStacktrace("query", query.udfPath, result)
+          )
+        );
+      }
       throw new Error(
         createHybridErrorStacktrace("query", query.udfPath, result)
       );
     }
+  }
+
+  hasQueryResult(queryToken: QueryToken): boolean {
+    return this.queryResults.get(queryToken) !== undefined;
   }
 
   /**

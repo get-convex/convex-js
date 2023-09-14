@@ -87,7 +87,7 @@ export interface PaginationOptions {
    * As with {@link PaginationOptions.maximumRowsRead}, this affects the number
    * of rows entering a query's pipeline.
    *
-   * Once a paginated query hits it's bytes read budget, an incomplete page
+   * Once a paginated query hits its bytes read budget, an incomplete page
    * will be returned.
    *
    * Currently this is not enforced for search queries.
@@ -102,7 +102,7 @@ export interface PaginationOptions {
  *
  * This includes the standard {@link PaginationOptions.numItems} and
  *  {@link PaginationOptions.cursor} properties along with
- * an optional cache-busting `id` property used by {@link react.usePaginatedQueryGeneric}.
+ * an optional cache-busting `id` property used by {@link react.usePaginatedQuery}.
  *
  * @public
  */

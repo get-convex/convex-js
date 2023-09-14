@@ -24,25 +24,30 @@ afterEach(() => {
   queriesObserver.destroy();
 });
 
-test("setting queries updates `getCurrentQueries`", () => {
-  // Adding a query changes the current queries.
-  queriesObserver.setQueries({
+test("`getLocalResults`", () => {
+  const queries = {
     query: {
       query: anyApi.myQuery.default,
       args: {},
     },
-  });
-  expect(queriesObserver.getCurrentQueries()).toStrictEqual({
+  };
+  queriesObserver.setQueries(queries);
+  expect(queriesObserver.getLocalResults(queries)).toStrictEqual({
     query: undefined,
   });
   // The listener isn't notified for our own changes.
   expect(listener.mock.calls.length).toBe(0);
 
   // If we update the value of the query, the listener is notified and the
-  // current queries include the update.
+  // local results include the update.
   createWatch.mock.results[0].value.setValue("query value");
   expect(listener.mock.calls.length).toBe(1);
-  expect(queriesObserver.getCurrentQueries()).toStrictEqual({
+  createWatch.mockImplementation(() => {
+    const watch = new FakeWatch<any>();
+    watch.value = "query value";
+    return watch;
+  });
+  expect(queriesObserver.getLocalResults(queries)).toStrictEqual({
     query: "query value",
   });
 });

@@ -6,7 +6,7 @@ import ReactDOM from "react-dom";
 import { QueryJournal } from "../browser/sync/protocol.js";
 import {
   AuthTokenFetcher,
-  ClientOptions,
+  BaseConvexClientOptions,
   ConnectionState,
 } from "../browser/sync/client.js";
 import type { UserIdentityAttributes } from "../browser/sync/protocol.js";
@@ -204,6 +204,13 @@ export interface MutationOptions<Args extends Record<string, Value>> {
 }
 
 /**
+ * Options for {@link ConvexReactClient}.
+ *
+ * @public
+ */
+export interface ConvexReactClientOptions extends BaseConvexClientOptions {}
+
+/**
  * A Convex client for use within React.
  *
  * This loads reactive queries and executes mutations over a WebSocket.
@@ -214,7 +221,7 @@ export class ConvexReactClient {
   private address: string;
   private cachedSync?: BaseConvexClient;
   private listeners: Map<QueryToken, Set<() => void>>;
-  private options: ClientOptions;
+  private options: ConvexReactClientOptions;
   private closed = false;
 
   private adminAuth?: string;
@@ -223,9 +230,9 @@ export class ConvexReactClient {
   /**
    * @param address - The url of your Convex deployment, often provided
    * by an environment variable. E.g. `https://small-mouse-123.convex.cloud`.
-   * @param options - See {@link ClientOptions} for a full description.
+   * @param options - See {@link ConvexReactClientOptions} for a full description.
    */
-  constructor(address: string, options?: ClientOptions) {
+  constructor(address: string, options?: ConvexReactClientOptions) {
     // Validate address immediately since validation by the lazily-instantiated
     // internal client does not occur synchronously.
     if (typeof address !== "string") {

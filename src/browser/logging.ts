@@ -1,5 +1,6 @@
 // This is blue #9 from https://www.radix-ui.com/docs/colors/palette-composition/the-scales
 
+import { ConvexError, Value } from "../values";
 import { FunctionFailure } from "./sync/function_result";
 
 // It must look good in both light and dark mode.
@@ -24,10 +25,13 @@ export function logToConsole(
   type: "info" | "error",
   source: UdfType,
   udfPath: string,
-  message: string
+  message: string | { errorData: Value }
 ) {
   const prefix = prefix_for_source(source);
 
+  if (typeof message === "object") {
+    message = `ConvexError ${JSON.stringify(message.errorData, null, 2)}`;
+  }
   if (type === "info") {
     const match = message.match(/^\[.*?\] /);
     if (match === null) {
@@ -58,8 +62,16 @@ export function logFatalError(message: string): Error {
 export function createHybridErrorStacktrace(
   source: UdfType,
   udfPath: string,
-  request: FunctionFailure
+  result: FunctionFailure
 ): string {
   const prefix = prefix_for_source(source);
-  return `[CONVEX ${prefix}(${udfPath})] ${request.errorMessage}\n  Called by client`;
+  return `[CONVEX ${prefix}(${udfPath})] ${result.errorMessage}\n  Called by client`;
+}
+
+export function forwardData(
+  result: FunctionFailure,
+  error: ConvexError<string>
+) {
+  (error as ConvexError<any>).data = result.errorData;
+  return error;
 }

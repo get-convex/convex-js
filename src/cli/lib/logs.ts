@@ -68,8 +68,6 @@ type UdfExecutionResponse = {
   timestamp: number;
   // UDF execution duration (in seconds)
   executionTime: number;
-  // Response status
-  success: any;
   error: string | null;
 };
 

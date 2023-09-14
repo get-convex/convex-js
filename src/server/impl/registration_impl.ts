@@ -1,4 +1,5 @@
 import {
+  ConvexError,
   convexToJson,
   jsonToConvex,
   v,
@@ -46,7 +47,7 @@ async function invokeMutation<
     storage: setupStorageWriter(requestId),
     scheduler: setupMutationScheduler(),
   };
-  const result = await Promise.resolve(func(mutationCtx, ...(args as any)));
+  const result = await invokeFunction(func, mutationCtx, args as any);
   validateReturnValue(result);
   return JSON.stringify(convexToJson(result === undefined ? null : result));
 }
@@ -56,6 +57,38 @@ function validateReturnValue(v: any) {
     throw new Error(
       "Return value is a Query. Results must be retrieved with `.collect()`, `.take(n), `.unique()`, or `.first()`."
     );
+  }
+}
+
+async function invokeFunction<
+  Ctx,
+  Args extends any[],
+  F extends (ctx: Ctx, ...args: Args) => any
+>(func: F, ctx: Ctx, args: Args) {
+  let result;
+  try {
+    result = await Promise.resolve(func(ctx, ...args));
+  } catch (thrown: unknown) {
+    throw serializeConvexErrorData(thrown);
+  }
+  return result;
+}
+
+// Keep in sync with node executor
+function serializeConvexErrorData(thrown: unknown) {
+  if (
+    typeof thrown === "object" &&
+    thrown !== null &&
+    Symbol.for("ConvexError") in thrown
+  ) {
+    const error = thrown as ConvexError<any>;
+    error.data = JSON.stringify(
+      convexToJson(error.data === undefined ? null : error.data)
+    );
+    (error as any).ConvexErrorSymbol = Symbol.for("ConvexError");
+    return error;
+  } else {
+    return thrown;
   }
 }
 
@@ -174,7 +207,7 @@ async function invokeQuery<
     auth: setupAuth(requestId),
     storage: setupStorageReader(requestId),
   };
-  const result = await Promise.resolve(func(queryCtx, ...(args as any)));
+  const result = await invokeFunction(func, queryCtx, args as any);
   validateReturnValue(result);
   return JSON.stringify(
     convexToJson(
@@ -267,7 +300,7 @@ async function invokeAction<
     storage: setupStorageActionWriter(requestId),
     vectorSearch: setupActionVectorSearch(requestId) as any,
   };
-  const result = await Promise.resolve(func(ctx, ...(args as any)));
+  const result = await invokeFunction(func, ctx, args as any);
   return JSON.stringify(convexToJson(result === undefined ? null : result));
 }
 
@@ -353,7 +386,7 @@ async function invokeHttpAction<
     scheduler: setupActionScheduler(requestId),
     vectorSearch: setupActionVectorSearch(requestId) as any,
   };
-  return await Promise.resolve(func(ctx, request));
+  return await invokeFunction(func, ctx, [request]);
 }
 
 /**

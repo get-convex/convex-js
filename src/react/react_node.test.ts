@@ -36,7 +36,7 @@ test("ConvexReactClient ends subscriptions on close", async () => {
         args: [{}],
         queryId: 0,
         type: "Add",
-        udfPath: "myQuery.js:default",
+        udfPath: "myQuery:default",
       },
     ]);
     expect(timesCallbackRan).toEqual(0);

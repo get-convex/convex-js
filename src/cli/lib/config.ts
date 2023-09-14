@@ -41,6 +41,7 @@ export interface AuthInfo {
 export interface ProjectConfig {
   functions: string;
   externalNodeModules: string[];
+  generateCommonJSApi: boolean;
   // deprecated
   project?: string;
   // deprecated
@@ -102,6 +103,15 @@ export async function parseProjectConfig(
     logError(
       ctx,
       "Expected `externalNodeModules` in `convex.json` to be an array of strings"
+    );
+    return await ctx.crash(1, "invalid filesystem data");
+  }
+  if (typeof obj.generateCommonJSApi === "undefined") {
+    obj.generateCommonJSApi = false;
+  } else if (typeof obj.generateCommonJSApi !== "boolean") {
+    logError(
+      ctx,
+      "Expected `generateCommonJSApi` in `convex.json` to be true or false"
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -213,6 +223,7 @@ export async function readProjectConfig(ctx: Context): Promise<{
       projectConfig: {
         functions: DEFAULT_FUNCTIONS_PATH,
         externalNodeModules: [],
+        generateCommonJSApi: false,
       },
       configPath: configName(),
     };
@@ -447,6 +458,9 @@ function stripDefaults(projectConfig: ProjectConfig): any {
   ) {
     delete stripped.externalNodeModules;
   }
+  if (stripped.generateCommonJSApi === false) {
+    delete stripped.generateCommonJSApi;
+  }
   return stripped;
 }
 
@@ -505,6 +519,8 @@ export async function pullConfig(
       // This field is not stored in the backend, which is ok since it is also
       // not used to diff configs.
       externalNodeModules: [],
+      // This field is not stored in the backend, it only affects the client.
+      generateCommonJSApi: false,
       project,
       team,
       prodUrl: origin,

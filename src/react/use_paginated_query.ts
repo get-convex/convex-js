@@ -168,7 +168,7 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
           currResult.message.includes("TooManyDocumentsRead") ||
           currResult.message.includes("ReadsTooLarge")
         ) {
-          // `usePaginatedQueryGeneric` handles a few types of query errors:
+          // `usePaginatedQuery` handles a few types of query errors:
 
           // - InvalidCursor: If the cursor is invalid, probably the paginated
           // database query was data-dependent and changed underneath us. The
@@ -266,10 +266,10 @@ let paginationId = 0;
 /**
  * Generate a new, unique ID for a pagination session.
  *
- * Every usage of {@link usePaginatedQueryGeneric} puts a unique ID into the
+ * Every usage of {@link usePaginatedQuery} puts a unique ID into the
  * query function arguments as a "cache-buster". This serves two purposes:
  *
- * 1. All calls to {@link usePaginatedQueryGeneric} have independent query
+ * 1. All calls to {@link usePaginatedQuery} have independent query
  * journals.
  *
  * Every time we start a new pagination session, we'll load the first page of
@@ -293,7 +293,7 @@ function nextPaginationId(): number {
 }
 
 /**
- * The result of calling the {@link usePaginatedQueryGeneric} hook.
+ * The result of calling the {@link usePaginatedQuery} hook.
  *
  * This includes:
  * - `results` - An array of the currently loaded results.
@@ -369,7 +369,7 @@ export type UsePaginatedQueryReturnType<Query extends PaginatedQueryReference> =
  * Optimistically update the values in a paginated list.
  *
  * This optimistic update is designed to be used to update data loaded with
- * {@link usePaginatedQueryGeneric}. It updates the list by applying
+ * {@link usePaginatedQuery}. It updates the list by applying
  * `updateValue` to each element of the list across all of the loaded pages.
  *
  * This will only apply to queries with a matching names and arguments.

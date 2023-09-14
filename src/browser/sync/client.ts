@@ -1,6 +1,10 @@
 import { version } from "../../index.js";
 import { convexToJson, Value } from "../../values/index.js";
-import { createHybridErrorStacktrace, logFatalError } from "../logging.js";
+import {
+  createHybridErrorStacktrace,
+  forwardData,
+  logFatalError,
+} from "../logging.js";
 import { LocalSyncState } from "./local_state.js";
 import { RequestManager } from "./request_manager.js";
 import {
@@ -33,13 +37,23 @@ import {
 export { type AuthTokenFetcher } from "./authentication_manager.js";
 import { getMarksReport, mark, MarkName } from "./metrics.js";
 import { parseArgs, validateDeploymentUrl } from "../../common/index.js";
+import { ConvexError } from "../../values/errors.js";
+
+/**
+ * Options for {@link BaseConvexClient}.
+ *
+ * @deprecated Use ConvexReactClientOptions, ConvexClientOptions, or BaseConvexClientOptions.
+ *
+ * @public
+ */
+export interface ClientOptions extends BaseConvexClientOptions {}
 
 /**
  * Options for {@link BaseConvexClient}.
  *
  * @public
  */
-export interface ClientOptions {
+export interface BaseConvexClientOptions {
   /**
    * Whether to prompt the user if they have unsaved changes pending
    * when navigating away or closing a web page.
@@ -144,12 +158,12 @@ export class BaseConvexClient {
    * by an environment variable. E.g. `https://small-mouse-123.convex.cloud`.
    * @param onTransition - A callback receiving an array of query tokens
    * corresponding to query results that have changed.
-   * @param options - See {@link ClientOptions} for a full description.
+   * @param options - See {@link BaseConvexClientOptions} for a full description.
    */
   constructor(
     address: string,
     onTransition: (updatedQueries: QueryToken[]) => void,
-    options?: ClientOptions
+    options?: BaseConvexClientOptions
   ) {
     if (typeof address === "object") {
       throw new Error(
@@ -367,6 +381,14 @@ export class BaseConvexClient {
     );
   }
 
+  /**
+   * Set the authentication token to be used for subsequent queries and mutations.
+   * `fetchToken` will be called automatically again if a token expires.
+   * `fetchToken` should return `null` if the token cannot be retrieved, for example
+   * when the user's rights were permanently revoked.
+   * @param fetchToken - an async function returning the JWT-encoded OpenID Connect Identity Token
+   * @param onChange - a callback that will be called when the authentication status changes
+   */
   setAuth(
     fetchToken: AuthTokenFetcher,
     onChange: (isAuthenticated: boolean) => void
@@ -445,6 +467,29 @@ export class BaseConvexClient {
   }
 
   /**
+   * Get query result by query token based on current, local state
+   *
+   * The only way this will return a value is if we're already subscribed to the
+   * query or its value has been set optimistically.
+   *
+   * @internal
+   */
+  localQueryResultByToken(queryToken: QueryToken): Value | undefined {
+    return this.optimisticQueryResults.queryResult(queryToken);
+  }
+
+  /**
+   * Whether local query result is available for a toke.
+   *
+   * This method does not throw if the result is an error.
+   *
+   * @internal
+   */
+  hasLocalQueryResultByToken(queryToken: QueryToken): boolean {
+    return this.optimisticQueryResults.hasQueryResult(queryToken);
+  }
+
+  /**
    * @internal
    */
   localQueryLogs(
@@ -506,6 +551,12 @@ export class BaseConvexClient {
   ): Promise<any> {
     const result = await this.mutationInternal(name, args, options);
     if (!result.success) {
+      if (result.errorData !== undefined) {
+        throw forwardData(
+          result,
+          new ConvexError(createHybridErrorStacktrace("mutation", name, result))
+        );
+      }
       throw new Error(createHybridErrorStacktrace("mutation", name, result));
     }
     return result.value;
@@ -561,6 +612,12 @@ export class BaseConvexClient {
   async action(name: string, args?: Record<string, Value>): Promise<any> {
     const result = await this.actionInternal(name, args);
     if (!result.success) {
+      if (result.errorData !== undefined) {
+        throw forwardData(
+          result,
+          new ConvexError(createHybridErrorStacktrace("action", name, result))
+        );
+      }
       throw new Error(createHybridErrorStacktrace("action", name, result));
     }
     return result.value;

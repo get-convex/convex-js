@@ -1,9 +1,9 @@
-import esbuild from "esbuild";
 import path from "path";
 import prettier from "prettier";
 import { mkdtemp, nodeFs, TempDir } from "../../bundler/fs.js";
 import { entryPoints, walkDir } from "../../bundler/index.js";
 import { apiCodegen } from "../codegen_templates/api.js";
+import { apiCjsCodegen } from "../codegen_templates/api_cjs.js";
 import { GeneratedJsWithTypes } from "../codegen_templates/common.js";
 import {
   dataModel,
@@ -19,6 +19,7 @@ import {
   logOutput,
 } from "../../bundler/context.js";
 import { typeCheckFunctionsInMode, TypeCheckMode } from "./typecheck.js";
+import { readProjectConfig } from "./config.js";
 
 /**
  * Run prettier so we don't have to think about formatting!
@@ -28,21 +29,6 @@ import { typeCheckFunctionsInMode, TypeCheckMode } from "./typecheck.js";
  */
 function format(source: string, filetype: string): string {
   return prettier.format(source, { parser: filetype, pluginSearchDirs: false });
-}
-
-/**
- * Compile ESM-format (import/export) to CJS (require/exports).
- *
- * Codegen output is generally ESM format, but in some Node zero-bundle
- * setups it's useful to use CommonJS format for JavaScript output.
- */
-async function compileToCommonJS(source: string): Promise<string> {
-  const { code } = await esbuild.transform(source, {
-    format: "cjs",
-    target: "node14",
-    minify: false,
-  });
-  return code;
 }
 
 function writeFile(
@@ -88,15 +74,18 @@ async function writeJsWithTypes(
   codegenDir: TempDir,
   dryRun: boolean,
   debug: boolean,
-  quiet: boolean,
-  commonjs: boolean
+  quiet: boolean
 ) {
-  // Writing the same .d.ts for commonJS should work as long as we don't use
-  // default exports.
-  writeFile(ctx, `${name}.d.ts`, content.DTS, codegenDir, dryRun, debug, quiet);
+  const [jsName, dtsName] = name.endsWith(".cjs")
+    ? [name, `${name.slice(0, -4)}.d.cts`]
+    : name.endsWith(".mjs")
+    ? [name, `${name.slice(0, -4)}.d.mts`]
+    : name.endsWith(".js")
+    ? [name, `${name.slice(0, -3)}.d.ts`]
+    : [`${name}.js`, `${name}.d.ts`];
+  writeFile(ctx, dtsName, content.DTS, codegenDir, dryRun, debug, quiet);
   if (content.JS) {
-    const js = commonjs ? await compileToCommonJS(content.JS) : content.JS;
-    writeFile(ctx, `${name}.js`, js, codegenDir, dryRun, debug, quiet);
+    writeFile(ctx, jsName, content.JS, codegenDir, dryRun, debug, quiet);
   }
 }
 
@@ -106,8 +95,7 @@ async function doServerCodegen(
   dryRun: boolean,
   hasSchemaFile: boolean,
   debug: boolean,
-  quiet = false,
-  commonjs = false
+  quiet = false
 ) {
   if (hasSchemaFile) {
     await writeJsWithTypes(
@@ -117,8 +105,7 @@ async function doServerCodegen(
       codegenDir,
       dryRun,
       debug,
-      quiet,
-      commonjs
+      quiet
     );
   } else {
     await writeJsWithTypes(
@@ -128,8 +115,7 @@ async function doServerCodegen(
       codegenDir,
       dryRun,
       debug,
-      quiet,
-      commonjs
+      quiet
     );
   }
   await writeJsWithTypes(
@@ -139,8 +125,7 @@ async function doServerCodegen(
     codegenDir,
     dryRun,
     debug,
-    quiet,
-    commonjs
+    quiet
   );
 }
 
@@ -163,9 +148,21 @@ async function doApiCodegen(
     codegenDir,
     dryRun,
     debug,
-    quiet,
-    commonjs
+    quiet
   );
+  if (commonjs) {
+    // We might generate a .d.ts file too if users need it
+    // since .d.cts may not be supported in older versions of TypeScript
+    await writeJsWithTypes(
+      ctx,
+      "api_cjs.cjs",
+      apiCjsCodegen(modulePaths),
+      codegenDir,
+      dryRun,
+      debug,
+      quiet
+    );
+  }
 }
 
 export async function doCodegen({
@@ -175,7 +172,7 @@ export async function doCodegen({
   dryRun = false,
   debug = false,
   quiet = false,
-  commonjs = false,
+  generateCommonJSApi = false,
 }: {
   ctx: Context;
   functionsDirectoryPath: string;
@@ -183,8 +180,9 @@ export async function doCodegen({
   dryRun?: boolean;
   debug?: boolean;
   quiet?: boolean;
-  commonjs?: boolean;
+  generateCommonJSApi?: boolean;
 }): Promise<void> {
+  const { projectConfig } = await readProjectConfig(ctx);
   // Delete the old _generated.ts because v0.1.2 used to put the react generated
   // code there
   const legacyCodegenPath = path.join(functionsDirectoryPath, "_generated.ts");
@@ -230,8 +228,7 @@ export async function doCodegen({
       dryRun,
       hasSchemaFile,
       debug,
-      quiet,
-      commonjs
+      quiet
     );
 
     // 2. Generate API
@@ -242,7 +239,7 @@ export async function doCodegen({
       dryRun,
       debug,
       quiet,
-      commonjs
+      generateCommonJSApi || projectConfig.generateCommonJSApi
     );
 
     // If any files differ replace the codegen directory with its new contents

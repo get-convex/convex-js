@@ -19,9 +19,12 @@
 export { BaseConvexClient } from "./sync/client.js";
 export type {
   ClientOptions,
+  BaseConvexClientOptions,
   MutationOptions,
   SubscribeOptions,
 } from "./sync/client.js";
+export type { ConvexClientOptions } from "./simple_client.js";
+export { ConvexClient } from "./simple_client.js";
 export type {
   OptimisticUpdate,
   OptimisticLocalStore,

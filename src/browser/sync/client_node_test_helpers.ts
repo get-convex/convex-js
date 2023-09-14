@@ -18,7 +18,10 @@ export type InMemoryWebSocketTest = (args: {
 }) => Promise<void>;
 
 // Run a test with a real node WebSocket instance connected
-export async function withInMemoryWebSocket(cb: InMemoryWebSocketTest) {
+export async function withInMemoryWebSocket(
+  cb: InMemoryWebSocketTest,
+  debug = false
+) {
   let wss = new ws.WebSocketServer({ port: 0 });
 
   let received: (msg: string) => void;
@@ -33,6 +36,7 @@ export async function withInMemoryWebSocket(cb: InMemoryWebSocketTest) {
       socket = ws;
       ws.on("message", function message(data: string) {
         received(data);
+        if (debug) console.debug(`client --${JSON.parse(data).type}--> `);
         messages.push(
           new Promise((r) => {
             received = r;
@@ -50,6 +54,7 @@ export async function withInMemoryWebSocket(cb: InMemoryWebSocketTest) {
     return JSON.parse(await msgP);
   }
   function send(message: ServerMessage) {
+    if (debug) console.debug(`      <--${message.type}-- server`);
     socket!.send(encodeServerMessage(message));
   }
 

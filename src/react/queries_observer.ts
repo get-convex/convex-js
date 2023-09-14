@@ -80,12 +80,24 @@ export class QueriesObserver {
     };
   }
 
-  getCurrentQueries(): Record<Identifier, Value | undefined | Error> {
+  getLocalResults(
+    queries: Record<
+      Identifier,
+      { query: FunctionReference<"query">; args: Record<string, Value> }
+    >
+  ): Record<Identifier, Value | undefined | Error> {
     const result: Record<Identifier, Value | Error | undefined> = {};
-    for (const identifier of Object.keys(this.queries)) {
+    for (const identifier of Object.keys(queries)) {
+      const { query, args } = queries[identifier];
+      if (!getFunctionName(query)) {
+        throw new Error(`query ${name} is not a FunctionReference`);
+      }
+      // Note: We're not gonna watch, we could save some allocations
+      // by getting a reference to the client directly instead.
+      const watch = this.createWatch(query, args);
       let value: Value | undefined | Error;
       try {
-        value = this.queries[identifier].watch.localQueryResult();
+        value = watch.localQueryResult();
       } catch (e) {
         // Only collect instances of `Error` because thats how callers
         // will distinguish errors from normal results.

@@ -4,7 +4,17 @@ const fs = require("fs");
 const path = require("path");
 const process = require("process");
 
-// esbuild is a bundler, but we're not bundling
+// when browser/index-node.ts imports simple_client, don't bundle it
+const importPathPlugin = {
+  name: "import-path",
+  setup(build) {
+    build.onResolve({ filter: /^\.\/simple_client/ }, (args) => {
+      return { path: args.path, external: true };
+    });
+  },
+};
+
+// esbuild is a bundler, but we're not bundling: we're compiling per-file
 const allSourceFiles = [...walkSync("src")].filter((name) => {
   if (name.startsWith("api")) {
     console.log("api:", name);
@@ -21,26 +31,65 @@ const allSourceFiles = [...walkSync("src")].filter((name) => {
 });
 
 if (process.argv.includes("esm")) {
+  const opts = {
+    entryPoints: allSourceFiles.filter(
+      (f) => !f.includes("simple_client-node")
+    ),
+    bundle: false,
+    sourcemap: true,
+    outdir: "dist/esm",
+    target: "es2020",
+  };
+  require("esbuild")
+    .build(opts)
+    .catch(() => process.exit(1));
+
+  // bundle a WebSocket implementation into Node.js build
   require("esbuild")
     .build({
-      entryPoints: allSourceFiles,
-      bundle: false,
-      sourcemap: true,
-      outdir: "dist/esm",
-      target: "es2020",
+      ...opts,
+      entryPoints: ["src/browser/simple_client-node.ts"],
+      outdir: undefined,
+      outfile: "dist/esm/browser/simple_client-node.js",
+      platform: "node",
+      format: "esm",
+      bundle: true,
+      external: ["./src/browser/simple_client.ts", "stream"],
+      plugins: [importPathPlugin],
+      banner: {
+        // https://github.com/evanw/esbuild/issues/1921
+        js: "import {createRequire} from 'module';import {resolve as nodePathResolve} from 'path';const require=createRequire(nodePathResolve('.'));",
+      },
     })
     .catch(() => process.exit(1));
 }
 
 if (process.argv.includes("cjs")) {
+  const opts = {
+    entryPoints: allSourceFiles.filter(
+      (f) => !f.includes("simple_client-node")
+    ),
+    format: "cjs",
+    bundle: false,
+    sourcemap: true,
+    outdir: "dist/cjs",
+    target: "es2020",
+  };
+  require("esbuild")
+    .build(opts)
+    .catch(() => process.exit(1));
+
+  // bundle a WebSocket implementation into Node.js build
   require("esbuild")
     .build({
-      entryPoints: allSourceFiles,
-      format: "cjs",
-      bundle: false,
-      sourcemap: true,
-      outdir: "dist/cjs",
-      target: "es2020",
+      ...opts,
+      bundle: true,
+      outdir: undefined,
+      entryPoints: ["src/browser/simple_client-node.ts"],
+      outfile: "dist/cjs/browser/simple_client-node.js",
+      platform: "node",
+      external: ["./src/browser/simple_client.ts"],
+      plugins: [importPathPlugin],
     })
     .catch(() => process.exit(1));
 }
@@ -48,7 +97,7 @@ if (process.argv.includes("cjs")) {
 if (process.argv.includes("browser-script-tag")) {
   require("esbuild")
     .build({
-      entryPoints: ["src/browser/index.ts"],
+      entryPoints: ["browser-bundle.js"],
       bundle: true,
       platform: "browser",
       sourcemap: true,
@@ -83,6 +132,7 @@ if (process.argv.includes("react-script-tag")) {
 }
 
 if (process.argv.includes("standalone-cli")) {
+  // Bundle in all dependencies except binaries like esbuild and fsevents.
   require("esbuild")
     .build({
       entryPoints: ["src/cli/index.ts"],

@@ -1,3 +1,5 @@
+import { ConvexError } from "../../values/errors.js";
+
 declare const Convex: {
   syscall: (op: string, jsonArgs: string) => string;
   asyncSyscall: (op: string, jsonArgs: string) => Promise<string>;
@@ -36,8 +38,16 @@ export async function performAsyncSyscall(
   try {
     resultStr = await Convex.asyncSyscall(op, JSON.stringify(arg));
   } catch (e: any) {
-    // Rethrow the exception since the error coming from the async syscall layer
-    // doesn't have a stack trace associated with it.
+    // Rethrow the exception to attach stack trace starting from here.
+    // If the error came from JS it will include its own stack trace in the message.
+    // If it came from Rust it won't.
+
+    // This only happens if we're propagating ConvexErrors
+    if (e.data !== undefined) {
+      const rethrown = new ConvexError(e.message);
+      rethrown.data = e.data;
+      throw rethrown;
+    }
     throw new Error(e.message);
   }
   return JSON.parse(resultStr);

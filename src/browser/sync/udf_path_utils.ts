@@ -11,8 +11,8 @@ export function canonicalizeUdfPath(udfPath: string): string {
     moduleName = pieces.slice(0, pieces.length - 1).join(":");
     functionName = pieces[pieces.length - 1];
   }
-  if (!moduleName.endsWith(".js")) {
-    moduleName = `${moduleName}.js`;
+  if (moduleName.endsWith(".js")) {
+    moduleName = moduleName.slice(0, -3);
   }
   return `${moduleName}:${functionName}`;
 }

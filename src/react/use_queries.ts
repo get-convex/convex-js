@@ -90,56 +90,26 @@ export function useQueriesHelper(
   createWatch: CreateWatch
 ): Record<string, any | undefined | Error> {
   const [observer] = useState(() => new QueriesObserver(createWatch));
-  const [effectRan, setEffectRan] = useState(false);
 
   if (observer.createWatch !== createWatch) {
     observer.setCreateWatch(createWatch);
   }
 
   // Unsubscribe from all queries on unmount.
-  useEffect(() => {
-    setEffectRan(true);
-    return () => {
-      observer.destroy();
-    };
-  }, [observer]);
+  useEffect(() => () => observer.destroy(), [observer]);
 
-  const subscription = useMemo(() => {
-    // Any time the queries change, update our observer.
-    // Correctness notes:
-    // 1. `observer.setQueries` could subscribe us to new queries. They are
-    // cleaned up in `observer.destroy()`, but that may never get called!
-    // React may render a component and then throw it out without running
-    // the effects or their destructors. For satefy, we should only subscribe
-    // if the effects have run and the destructor has been configured.
-    // 2. We're calling this during render so it could happen multiple times!
-    // This is okay though because `setQueries` is written to be idempotent.
-    // 3. When the queries change, we want to immediately return the results of
-    // the new queries. This happens because we recreate the `getCurrentValue`
-    // callback and `useSubscription` re-executes it.
-    if (effectRan) {
-      observer.setQueries(queries);
-    }
-
-    return {
+  const subscription = useMemo(
+    () => ({
       getCurrentValue: () => {
-        if (effectRan) {
-          return observer.getCurrentQueries();
-        } else {
-          // If the effect hasn't run yet, our `observer` doesn't have the
-          // current queries. Manually set all the results to `undefined`.
-          // Once the effect runs, we'll rerender and actually pull the results
-          // from the Convex client.
-          const value: Record<string, undefined> = {};
-          for (const identifier in Object.keys(queries)) {
-            value[identifier] = undefined;
-          }
-          return value;
-        }
+        return observer.getLocalResults(queries);
       },
-      subscribe: (callback: () => void) => observer.subscribe(callback),
-    };
-  }, [observer, queries, effectRan]);
+      subscribe: (callback: () => void) => {
+        observer.setQueries(queries);
+        return observer.subscribe(callback);
+      },
+    }),
+    [observer, queries]
+  );
 
   return useSubscription(subscription);
 }

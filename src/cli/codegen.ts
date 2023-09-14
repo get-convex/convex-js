@@ -61,6 +61,6 @@ export const codegen = new Command("codegen")
       typeCheckMode: options.typecheck,
       dryRun: options.dryRun,
       debug: options.debug,
-      commonjs: options.commonjs,
+      generateCommonJSApi: options.commonjs,
     });
   });

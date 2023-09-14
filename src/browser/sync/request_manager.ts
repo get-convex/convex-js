@@ -105,11 +105,15 @@ export class RequestManager {
           value: jsonToConvex(response.result, true),
         });
     } else {
-      logToConsole("error", udfType, udfPath, response.result);
+      const errorMessage = response.result as string;
+      const { errorData } = response;
+      logToConsole("error", udfType, udfPath, errorMessage);
       onResolve = () =>
         status.onResult({
           success: false,
-          errorMessage: response.result,
+          errorMessage,
+          errorData:
+            errorData !== undefined ? jsonToConvex(errorData) : undefined,
           logLines: response.logLines,
         });
     }

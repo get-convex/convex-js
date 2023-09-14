@@ -237,6 +237,7 @@ type StateModification =
       queryId: QueryId;
       errorMessage: string;
       logLines: LogLines;
+      errorData: JSONValue;
       // Optional because old backend versions don't send this.
       journal?: QueryJournal;
     }
@@ -266,6 +267,7 @@ type MutationFailed = {
   success: false;
   result: string;
   logLines: LogLines;
+  errorData?: JSONValue;
 };
 export type MutationResponse = MutationSuccess | MutationFailed;
 type ActionSuccess = {
@@ -281,6 +283,7 @@ type ActionFailed = {
   success: false;
   result: string;
   logLines: LogLines;
+  errorData?: JSONValue;
 };
 export type ActionResponse = ActionSuccess | ActionFailed;
 export type AuthError = {

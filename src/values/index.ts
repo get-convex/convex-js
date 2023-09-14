@@ -20,3 +20,4 @@ export type { ValidatorJSON, ObjectFieldType } from "./validator.js";
 import * as Base64 from "./base64.js";
 export { Base64 };
 export type { Infer } from "./validator.js";
+export * from "./errors.js";

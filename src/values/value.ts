@@ -293,7 +293,7 @@ export function jsonToConvex(
   return jsonToConvexInternal(value, allowMapsAndSets);
 }
 
-function stringifyValueForError(value: any) {
+export function stringifyValueForError(value: any) {
   return JSON.stringify(value, (_key, value) => {
     if (value === undefined) {
       // By default `JSON.stringify` converts undefined, functions, symbols,

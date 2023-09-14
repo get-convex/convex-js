@@ -80,7 +80,7 @@ export const dev = new Command("dev")
     new Option(
       "--tail-logs",
       "Tail this project's Convex logs in this terminal."
-    ).hideHelp()
+    )
   )
   .addOption(new Option("--trace-events").hideHelp())
   .addOption(new Option("--admin-key <adminKey>").hideHelp())

@@ -52,10 +52,12 @@ export class RemoteQuerySet {
               logToConsole("info", "query", queryPath, line);
             }
           }
-
+          const { errorData } = modification;
           this.remoteQuerySet.set(modification.queryId, {
             success: false,
             errorMessage: modification.errorMessage,
+            errorData:
+              errorData !== undefined ? jsonToConvex(errorData) : undefined,
             logLines: modification.logLines,
           });
           break;

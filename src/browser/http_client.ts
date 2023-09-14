@@ -6,7 +6,12 @@ import {
 } from "../server/api.js";
 import { parseArgs, validateDeploymentUrl } from "../common/index.js";
 import { version } from "../index.js";
-import { convexToJson, jsonToConvex } from "../values/index.js";
+import {
+  ConvexError,
+  JSONValue,
+  convexToJson,
+  jsonToConvex,
+} from "../values/index.js";
 import { logToConsole } from "./logging.js";
 
 export const STATUS_CODE_OK = 200;
@@ -144,6 +149,12 @@ export class ConvexHttpClient {
       case "success":
         return jsonToConvex(respJSON.value, true);
       case "error":
+        if (respJSON.errorData !== undefined) {
+          throw forwardErrorData(
+            respJSON.errorData,
+            new ConvexError(respJSON.errorMessage)
+          );
+        }
         throw new Error(respJSON.errorMessage);
       default:
         throw new Error(`Invalid response: ${JSON.stringify(respJSON)}`);
@@ -196,6 +207,12 @@ export class ConvexHttpClient {
       case "success":
         return jsonToConvex(respJSON.value, true);
       case "error":
+        if (respJSON.errorData !== undefined) {
+          throw forwardErrorData(
+            respJSON.errorData,
+            new ConvexError(respJSON.errorMessage)
+          );
+        }
         throw new Error(respJSON.errorMessage);
       default:
         throw new Error(`Invalid response: ${JSON.stringify(respJSON)}`);
@@ -248,6 +265,12 @@ export class ConvexHttpClient {
       case "success":
         return jsonToConvex(respJSON.value, true);
       case "error":
+        if (respJSON.errorData !== undefined) {
+          throw forwardErrorData(
+            respJSON.errorData,
+            new ConvexError(respJSON.errorMessage)
+          );
+        }
         throw new Error(respJSON.errorMessage);
       default:
         throw new Error(`Invalid response: ${JSON.stringify(respJSON)}`);
@@ -307,9 +330,20 @@ export class ConvexHttpClient {
       case "success":
         return jsonToConvex(respJSON.value, true);
       case "error":
+        if (respJSON.errorData !== undefined) {
+          throw forwardErrorData(
+            respJSON.errorData,
+            new ConvexError(respJSON.errorMessage)
+          );
+        }
         throw new Error(respJSON.errorMessage);
       default:
         throw new Error(`Invalid response: ${JSON.stringify(respJSON)}`);
     }
   }
+}
+
+function forwardErrorData(errorData: JSONValue, error: ConvexError<string>) {
+  (error as ConvexError<any>).data = jsonToConvex(errorData);
+  return error;
 }

@@ -110,18 +110,16 @@ test("Initially returns LoadingFirstPage", () => {
     { wrapper }
   );
 
-  expect(watchQuerySpy.mock.calls).toEqual([
-    [
-      makeFunctionReference("myQuery"),
-      {
-        paginationOpts: {
-          cursor: null,
-          id: expect.anything(),
-          numItems: 10,
-        },
+  expect(watchQuerySpy.mock.calls[1]).toEqual([
+    makeFunctionReference("myQuery"),
+    {
+      paginationOpts: {
+        cursor: null,
+        id: expect.anything(),
+        numItems: 10,
       },
-      { journal: undefined },
-    ],
+    },
+    { journal: undefined },
   ]);
   expect(result.current).toMatchObject({
     isLoading: true,
@@ -148,8 +146,8 @@ test("Updates to a new query if query name or args change", () => {
   });
 
   // Starts with just the initial query.
-  expect(watchQuerySpy.mock.calls.length).toBe(1);
-  expect(watchQuerySpy.mock.calls[0]).toEqual([
+  expect(watchQuerySpy.mock.calls.length).toBe(3);
+  expect(watchQuerySpy.mock.calls[1]).toEqual([
     makeFunctionReference("myQuery"),
     {
       paginationOpts: {
@@ -168,8 +166,8 @@ test("Updates to a new query if query name or args change", () => {
     { initialNumItems: 10 },
   ];
   rerender();
-  expect(watchQuerySpy.mock.calls.length).toBe(2);
-  expect(watchQuerySpy.mock.calls[1]).toEqual([
+  expect(watchQuerySpy.mock.calls.length).toBe(6);
+  expect(watchQuerySpy.mock.calls[4]).toEqual([
     makeFunctionReference("myQuery2"),
     {
       paginationOpts: {
@@ -188,8 +186,8 @@ test("Updates to a new query if query name or args change", () => {
     { initialNumItems: 10 },
   ];
   rerender();
-  expect(watchQuerySpy.mock.calls.length).toBe(3);
-  expect(watchQuerySpy.mock.calls[2]).toEqual([
+  expect(watchQuerySpy.mock.calls.length).toBe(9);
+  expect(watchQuerySpy.mock.calls[7]).toEqual([
     makeFunctionReference("myQuery2"),
     {
       paginationOpts: { cursor: null, id: expect.anything(), numItems: 10 },
@@ -206,7 +204,7 @@ test("Updates to a new query if query name or args change", () => {
     { initialNumItems: 10 },
   ];
   rerender();
-  expect(watchQuerySpy.mock.calls.length).toBe(3);
+  expect(watchQuerySpy.mock.calls.length).toBe(9);
 });
 
 describe("PaginatedQueryArgs", () => {
