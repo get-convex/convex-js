@@ -4,9 +4,10 @@ import {
   ensureHasConvexDependency,
   logAndHandleAxiosError,
   formatSize,
+  deploymentClient,
 } from "./lib/utils.js";
-import axios, { AxiosResponse } from "axios";
-import { version } from "../index.js";
+import { AxiosResponse } from "axios";
+import { version } from "./version.js";
 import {
   logFailure,
   oneoffContext,
@@ -69,7 +70,7 @@ export const convexImport = new Command("import")
 
     const urlName = encodeURIComponent(tableName);
     const urlFormat = encodeURIComponent(format);
-    const client = axios.create();
+    const client = deploymentClient(deploymentUrl);
     let resp: AxiosResponse;
     let mode = "requireEmpty";
     if (options.append) {
@@ -81,7 +82,7 @@ export const convexImport = new Command("import")
       ? ` in your ${chalk.bold("prod")} deployment`
       : "";
     try {
-      const url = `${deploymentUrl}/api/import?tableName=${urlName}&format=${urlFormat}&mode=${mode}`;
+      const url = `/api/import?tableName=${urlName}&format=${urlFormat}&mode=${mode}`;
       resp = await client.post(url, data, {
         headers: {
           Authorization: `Convex ${adminKey}`,

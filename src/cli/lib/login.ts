@@ -3,14 +3,14 @@ import {
   globalConfigPath,
   rootDirectory,
   GlobalConfig,
-  getAuthHeader,
+  getAuthHeaderFromGlobalConfig,
   bigBrainAPI,
   logAndHandleAxiosError,
 } from "./utils.js";
 import open from "open";
 import chalk from "chalk";
 import { provisionHost } from "./config.js";
-import { version } from "../../index.js";
+import { version } from "../version.js";
 import axios, { AxiosRequestConfig } from "axios";
 import {
   Context,
@@ -31,7 +31,7 @@ const SCOPE = "openid email profile";
 
 // Per https://github.com/panva/node-openid-client/tree/main/docs#customizing
 custom.setHttpOptionsDefaults({
-  timeout: 10000,
+  timeout: parseInt(process.env.OPENID_CLIENT_TIMEOUT || "10000"),
 });
 
 async function writeGlobalConfig(ctx: Context, config: GlobalConfig) {
@@ -43,7 +43,9 @@ async function writeGlobalConfig(ctx: Context, config: GlobalConfig) {
   } catch (err) {
     logFailure(
       ctx,
-      chalk.red(`Failed to write auth config to ${path} with error: ${err}`)
+      chalk.red(
+        `Failed to write auth config to ${path} with error: ${err as any}`
+      )
     );
     return await ctx.crash(1, "invalid filesystem data", err);
   }
@@ -62,7 +64,7 @@ export async function checkAuthorization(
   ctx: Context,
   acceptOptIns: boolean
 ): Promise<boolean> {
-  const header = await getAuthHeader(ctx);
+  const header = await getAuthHeaderFromGlobalConfig(ctx);
   if (!header) {
     return false;
   }
@@ -368,7 +370,12 @@ export async function performLogin(
     authnToken: accessToken,
     deviceName: deviceName,
   };
-  const data = await bigBrainAPI(ctx, "POST", "authorize", authorizeArgs);
+  const data = await bigBrainAPI({
+    ctx,
+    method: "POST",
+    url: "authorize",
+    data: authorizeArgs,
+  });
   const globalConfig = { accessToken: data.accessToken };
   try {
     await writeGlobalConfig(ctx, globalConfig);
@@ -397,7 +404,11 @@ type AcceptOptInsArgs = {
 
 // Returns whether we can proceed or not.
 async function optins(ctx: Context, acceptOptIns: boolean): Promise<boolean> {
-  const data = await bigBrainAPI(ctx, "POST", "check_opt_ins", {});
+  const data = await bigBrainAPI({
+    ctx,
+    method: "POST",
+    url: "check_opt_ins",
+  });
   if (data.optInsToAccept.length === 0) {
     return true;
   }
@@ -422,6 +433,6 @@ async function optins(ctx: Context, acceptOptIns: boolean): Promise<boolean> {
 
   const optInsAccepted = data.optInsToAccept.map((o: OptInToAccept) => o.optIn);
   const args: AcceptOptInsArgs = { optInsAccepted };
-  await bigBrainAPI(ctx, "POST", "accept_opt_ins", args);
+  await bigBrainAPI({ ctx, method: "POST", url: "accept_opt_ins", data: args });
   return true;
 }

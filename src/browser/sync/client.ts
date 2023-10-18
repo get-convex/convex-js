@@ -264,10 +264,15 @@ export class BaseConvexClient {
 
         // Throw out our remote query, reissue queries
         // and outstanding mutations, and reauthenticate.
+        const oldRemoteQueryResults = new Set(
+          this.remoteQuerySet.remoteQueryResults().keys()
+        );
         this.remoteQuerySet = new RemoteQuerySet((queryId) =>
           this.state.queryPath(queryId)
         );
-        const [querySetModification, authModification] = this.state.restart();
+        const [querySetModification, authModification] = this.state.restart(
+          oldRemoteQueryResults
+        );
         if (authModification) {
           this.webSocketManager.sendMessage(authModification);
         }
@@ -289,7 +294,7 @@ export class BaseConvexClient {
             this.observedTimestamp(serverMessage.endVersion.ts);
             this.authenticationManager.onTransition(serverMessage);
             this.remoteQuerySet.transition(serverMessage);
-            this.state.saveQueryJournals(serverMessage);
+            this.state.transition(serverMessage);
             const completedRequests = this.requestManager.removeCompleted(
               this.remoteQuerySet.timestamp()
             );
@@ -326,11 +331,27 @@ export class BaseConvexClient {
             const _typeCheck: never = serverMessage;
           }
         }
+
+        return {
+          hasSyncedPastLastReconnect: this.hasSyncedPastLastReconnect(),
+        };
       },
       webSocketConstructor,
       this.verbose
     );
     this.mark("convexClientConstructed");
+  }
+
+  /**
+   * Return true if there is outstanding work from prior to the time of the most recent restart.
+   * This indicates that the client has not proven itself to have gotten past the issue that
+   * potentially led to the restart. Use this to influence when to reset backoff after a failure.
+   */
+  private hasSyncedPastLastReconnect() {
+    const hasSyncedPastLastReconnect =
+      this.requestManager.hasSyncedPastLastReconnect() ||
+      this.state.hasSyncedPastLastReconnect();
+    return hasSyncedPastLastReconnect;
   }
 
   private observedTimestamp(observedTs: TS) {

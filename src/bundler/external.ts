@@ -1,42 +1,40 @@
 import { PluginBuild } from "esbuild";
 import type { Plugin } from "esbuild";
-import { Context } from "./context.js";
+import { Context, logFailure } from "./context.js";
 import path from "path";
 
 import { findUp } from "find-up";
+import { findParentConfigs } from "../cli/lib/utils.js";
 
 /**
  * Mimics Node.js node_modules resolution. Ideally we would be able to
  * reuse the logic in esbuild but calling build.resolve() from onResolve()
  * results in infinite recursion. See https://esbuild.github.io/plugins/#resolve
  */
-async function findNodeModuleDirectories(
+async function resolveNodeModule(
+  ctx: Context,
+  moduleDir: string,
   resolveDir: string
-): Promise<string[]> {
+): Promise<string | null> {
   let nodeModulesPath: string | undefined;
 
-  const allPaths: string[] = [];
   while (
     (nodeModulesPath = await findUp("node_modules", {
       type: "directory",
       cwd: resolveDir,
     }))
   ) {
-    allPaths.push(nodeModulesPath);
+    const maybePath = path.join(nodeModulesPath, moduleDir);
+    if (ctx.fs.exists(maybePath)) {
+      return maybePath;
+    }
     resolveDir = path.dirname(path.dirname(nodeModulesPath));
   }
 
-  return allPaths;
+  return null;
 }
 
-function getModule(
-  importPath: string
-): { name: string; dirName: string } | undefined {
-  if (importPath.startsWith(".")) {
-    // Relative import.
-    return undefined;
-  }
-
+function getModule(importPath: string): { name: string; dirName: string } {
   // In case of scoped package
   if (importPath.startsWith("@")) {
     const split = importPath.split("/");
@@ -53,125 +51,147 @@ function getModule(
   }
 }
 
+export type ExternalPackage = {
+  path: string;
+};
+
 // Inspired by https://www.npmjs.com/package/esbuild-node-externals.
 export function createExternalPlugin(
   ctx: Context,
-  externalNodeModules: string[]
+  externalPackages: Map<string, ExternalPackage>
 ): {
   plugin: Plugin;
-  externalModulePaths: Map<string, string[]>;
+  externalModuleNames: Set<string>;
+  bundledModuleNames: Set<string>;
 } {
-  const externalModulePaths = new Map<string, string[]>();
-
+  const externalModuleNames = new Set<string>();
+  const bundledModuleNames = new Set<string>();
   return {
     plugin: {
       name: "convex-node-externals",
       setup(build: PluginBuild) {
         // On every module resolved, we check if the module name should be an external
         build.onResolve({ namespace: "file", filter: /.*/ }, async (args) => {
+          if (args.path.startsWith(".")) {
+            // Relative import.
+            return null;
+          }
+
           const module = getModule(args.path);
-
-          // Fallback if this does not look like node module import. Also, we
-          // always bundle in Convex.
-          if (module === undefined || module.name === "convex") {
-            return null;
-          }
-
-          // Bundle if not in the allow list.
-          if (
-            !externalNodeModules.includes(module.name) &&
-            !externalNodeModules.includes("*")
-          ) {
-            return null;
-          }
-
-          for (const dir of await findNodeModuleDirectories(args.resolveDir)) {
-            // Note that module.name and module.dirName might differ on Windows.
-            const maybePath = path.join(dir, module.dirName);
-            // TODO(presley): Make this async.
-            if (ctx.fs.exists(maybePath)) {
-              let version: string | undefined = undefined;
-              try {
-                version = await findExactVersion(ctx, module.name, maybePath);
-                if (version === undefined) {
-                  // If version is undefined, we bundle instead of marking as
-                  // external dependency.
-                  return null;
-                }
-              } catch (e: any) {
-                // Don't throw an error here and instead mark as external
-                // dependency and continue. Throwing errors from the plugin
-                // doesn't result in clean errors, you can also get multiple ones.
-              }
-              const paths = externalModulePaths.get(module.name);
-              if (paths !== undefined) {
-                if (!paths.includes(maybePath)) {
-                  paths.push(maybePath);
-                }
-              } else {
-                externalModulePaths.set(module.name, [maybePath]);
-              }
-
+          const externalPackage = externalPackages.get(module.name);
+          if (externalPackage) {
+            const resolved = await resolveNodeModule(
+              ctx,
+              module.dirName,
+              args.resolveDir
+            );
+            if (resolved && externalPackage.path === resolved) {
+              // Mark as external.
+              externalModuleNames.add(module.name);
               return { path: args.path, external: true };
             }
           }
 
+          bundledModuleNames.add(module.name);
           return null;
         });
       },
     },
-    externalModulePaths: externalModulePaths,
+    externalModuleNames: externalModuleNames,
+    bundledModuleNames: bundledModuleNames,
   };
 }
 
-export async function findExactVersion(
+// Returns the versions of the packages referenced by the package.json.
+export async function computeExternalPackages(
   ctx: Context,
-  moduleName: string,
-  modulePath: string
-): Promise<string | undefined> {
-  let nodeModulesPath = modulePath;
-  for (const _ of moduleName.split("/")) {
-    nodeModulesPath = path.dirname(nodeModulesPath);
+  externalPackagesAllowList: string[]
+): Promise<Map<string, ExternalPackage>> {
+  if (externalPackagesAllowList.length === 0) {
+    // No external packages in the allow list.
+    return new Map<string, ExternalPackage>();
   }
-  const packageJsonPath = path.join(nodeModulesPath, "../package.json");
-  if (!ctx.fs.exists(packageJsonPath)) {
-    // eslint-disable-next-line no-restricted-syntax
-    throw new Error(`${packageJsonPath} is missing`);
-  }
-  const dependencies = new Map();
+
+  const { parentPackageJson: packageJsonPath } = await findParentConfigs(ctx);
+  const externalPackages = new Map<string, ExternalPackage>();
+  let packageJson: any;
   try {
-    // TODO(presley): Cache this, so we don't parse multiple times.
     const packageJsonString = ctx.fs.readUtf8File(packageJsonPath);
-    const packageJson = JSON.parse(packageJsonString);
-    for (const key of [
-      "dependencies",
-      "devDependencies",
-      "peerDependencies",
-      "optionalDependencies",
-    ]) {
-      for (const [packageName, packageVersion] of Object.entries(
-        packageJson[key] ?? {}
-      )) {
-        if (!dependencies.has(packageName)) {
-          dependencies.set(packageName, packageVersion);
-        }
+    packageJson = JSON.parse(packageJsonString);
+  } catch (error: any) {
+    logFailure(
+      ctx,
+      `Couldn't parse "${packageJsonPath}". Make sure it's a valid JSON. Error: ${error}`
+    );
+    return await ctx.crash(1, "invalid filesystem data");
+  }
+
+  for (const key of [
+    "dependencies",
+    "devDependencies",
+    "peerDependencies",
+    "optionalDependencies",
+  ]) {
+    for (const [packageName, packageJsonVersion] of Object.entries(
+      packageJson[key] ?? {}
+    )) {
+      if (externalPackages.has(packageName)) {
+        // Package version and path already found.
+        continue;
+      }
+
+      if (typeof packageJsonVersion !== "string") {
+        logFailure(
+          ctx,
+          `Invalid "${packageJsonPath}". "${key}.${packageName}" version has type ${typeof packageJsonVersion}.`
+        );
+        return await ctx.crash(1, "invalid filesystem data");
+      }
+
+      if (
+        !shouldMarkExternal(
+          packageName,
+          packageJsonVersion,
+          externalPackagesAllowList
+        )
+      ) {
+        // Package should be bundled.
+        continue;
+      }
+
+      // Check if the package path is referenced.
+      const packagePath = path.join(
+        path.dirname(packageJsonPath),
+        "node_modules",
+        getModule(packageName).dirName
+      );
+      if (ctx.fs.exists(packagePath)) {
+        externalPackages.set(packageName, {
+          path: packagePath,
+        });
       }
     }
-  } catch (e: any) {
-    // eslint-disable-next-line no-restricted-syntax
-    throw new Error(`Failed to parse ${packageJsonPath}: ${e.toString()}`);
   }
-  const packageJsonVersion = dependencies.get(moduleName);
-  if (packageJsonVersion === undefined) {
-    // eslint-disable-next-line no-restricted-syntax
-    throw new Error(`${moduleName} is missing from ${packageJsonPath}`);
+
+  return externalPackages;
+}
+
+export function shouldMarkExternal(
+  packageName: string,
+  packageJsonVersion: string,
+  externalPackagesAllowList: string[]
+): boolean {
+  // Always bundle convex.
+  if (packageName === "convex") {
+    return false;
   }
+
   if (
-    packageJsonVersion.startsWith("file://") ||
+    packageJsonVersion.startsWith("file:") ||
     packageJsonVersion.startsWith("git+file://")
   ) {
-    // Bundle instead of installing on the server.
-    return undefined;
+    // Bundle instead of marking as external.
+    return false;
   }
   if (
     packageJsonVersion.startsWith("http://") ||
@@ -181,26 +201,65 @@ export async function findExactVersion(
     packageJsonVersion.startsWith("git+http://") ||
     packageJsonVersion.startsWith("git+https://")
   ) {
-    // Assume the version in package.json can be installed. Note there are
-    // corner cases like http://127.0.0.1/... where this might not be true.
-    return packageJsonVersion;
+    // Installing those might or might not work. There are some corner cases
+    // like http://127.0.0.1/. Lets bundle for time being.
+    return false;
   }
-  // We now pick the exact version installed locally. We might switch this for a
-  // lock file in the future.
-  // TODO(presley): Parse the packageJsonVersion and make sure it matches the
-  // installed one.
+
+  return (
+    externalPackagesAllowList.includes(packageName) ||
+    externalPackagesAllowList.includes("*")
+  );
+}
+
+export async function findExactVersionAndDependencies(
+  ctx: Context,
+  moduleName: string,
+  modulePath: string
+): Promise<{
+  version: string;
+  peerAndOptionalDependencies: Set<string>;
+}> {
   const modulePackageJsonPath = path.join(modulePath, "package.json");
   let modulePackageJson: any;
   try {
     const packageJsonString = ctx.fs.readUtf8File(modulePackageJsonPath);
     modulePackageJson = JSON.parse(packageJsonString);
   } catch (error: any) {
-    // eslint-disable-next-line no-restricted-syntax
-    throw new Error(`Missing ${modulePackageJsonPath}.`);
+    logFailure(
+      ctx,
+      `Missing "${modulePackageJsonPath}", which is required for
+      installing external package "${moduleName}" configured in convex.json.`
+    );
+    return await ctx.crash(1, "invalid filesystem data");
   }
   if (modulePackageJson["version"] === undefined) {
-    // eslint-disable-next-line no-restricted-syntax
-    throw new Error(`${packageJsonPath} misses a 'version' field.`);
+    logFailure(
+      ctx,
+      `"${modulePackageJsonPath}" misses a 'version' field. which is required for
+      installing external package "${moduleName}" configured in convex.json.`
+    );
+    return await ctx.crash(1, "invalid filesystem data");
   }
-  return modulePackageJson["version"];
+
+  const peerAndOptionalDependencies = new Set<string>();
+  for (const key of ["peerDependencies", "optionalDependencies"]) {
+    for (const [packageName, packageJsonVersion] of Object.entries(
+      modulePackageJson[key] ?? {}
+    )) {
+      if (typeof packageJsonVersion !== "string") {
+        logFailure(
+          ctx,
+          `Invalid "${modulePackageJsonPath}". "${key}.${packageName}" version has type ${typeof packageJsonVersion}.`
+        );
+        return await ctx.crash(1, "invalid filesystem data");
+      }
+      peerAndOptionalDependencies.add(packageName);
+    }
+  }
+
+  return {
+    version: modulePackageJson["version"],
+    peerAndOptionalDependencies: peerAndOptionalDependencies,
+  };
 }

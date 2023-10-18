@@ -16,10 +16,11 @@ import {
   logMessage,
   logWarning,
 } from "../../bundler/context.js";
-import { version } from "../../index.js";
+import { version } from "../version.js";
 import { Project } from "./api.js";
 import { spawn } from "child_process";
 import { readDeploymentEnvVar } from "./deployment.js";
+import axiosRetry from "axios-retry";
 
 export const productionProvisionHost = "https://provision.convex.dev";
 export const provisionHost =
@@ -163,7 +164,7 @@ type Team = {
 };
 
 export async function hasTeam(ctx: Context, teamSlug: string) {
-  const teams: Team[] = await bigBrainAPI(ctx, "GET", "teams");
+  const teams: Team[] = await bigBrainAPI({ ctx, method: "GET", url: "teams" });
   return teams.some((team) => team.slug === teamSlug);
 }
 
@@ -172,7 +173,7 @@ export async function validateOrSelectTeam(
   teamSlug: string | null,
   promptMessage: string
 ): Promise<{ teamSlug: string; chosen: boolean }> {
-  const teams: Team[] = await bigBrainAPI(ctx, "GET", "teams");
+  const teams: Team[] = await bigBrainAPI({ ctx, method: "GET", url: "teams" });
   if (teams.length === 0) {
     logFailure(ctx, chalk.red("Error: No teams found"));
     await ctx.crash(1, "fatal", "No teams found");
@@ -219,11 +220,11 @@ export async function hasProject(
   projectSlug: string
 ) {
   try {
-    const projects: Project[] = await bigBrainAPIMaybeThrows(
+    const projects: Project[] = await bigBrainAPIMaybeThrows({
       ctx,
-      "GET",
-      `/teams/${teamSlug}/projects`
-    );
+      method: "GET",
+      url: `/teams/${teamSlug}/projects`,
+    });
     return !!projects.find((project) => project.slug === projectSlug);
   } catch (e) {
     return false;
@@ -231,7 +232,7 @@ export async function hasProject(
 }
 
 export async function hasProjects(ctx: Context) {
-  return !!(await bigBrainAPI(ctx, "GET", `/has_projects`));
+  return !!(await bigBrainAPI({ ctx, method: "GET", url: `/has_projects` }));
 }
 
 export async function validateOrSelectProject(
@@ -241,18 +242,18 @@ export async function validateOrSelectProject(
   singleProjectPrompt: string,
   multiProjectPrompt: string
 ): Promise<string | null> {
-  const projects: Project[] = await bigBrainAPI(
+  const projects: Project[] = await bigBrainAPI({
     ctx,
-    "GET",
-    `/teams/${teamSlug}/projects`
-  );
+    method: "GET",
+    url: `/teams/${teamSlug}/projects`,
+  });
   if (projects.length === 0) {
     // Unexpected error
     // eslint-disable-next-line no-restricted-syntax
     throw new Error("No projects found");
   }
   if (!projectSlug) {
-    const nonDemoProjects = projects.filter((project) => !project.is_demo);
+    const nonDemoProjects = projects.filter((project) => !project.isDemo);
     if (nonDemoProjects.length === 0) {
       // Unexpected error
       // eslint-disable-next-line no-restricted-syntax
@@ -319,7 +320,9 @@ export async function loadPackageJson(
   } catch (err) {
     logFailure(
       ctx,
-      `Unable to read your package.json: ${err}. Make sure you're running this command from the root directory of a Convex app that contains the package.json`
+      `Unable to read your package.json: ${
+        err as any
+      }. Make sure you're running this command from the root directory of a Convex app that contains the package.json`
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -327,7 +330,7 @@ export async function loadPackageJson(
   try {
     obj = JSON.parse(packageJson);
   } catch (err) {
-    logFailure(ctx, `Unable to parse package.json: ${err}`);
+    logFailure(ctx, `Unable to parse package.json: ${err as any}`);
     return await ctx.crash(1, "invalid filesystem data", err);
   }
   if (typeof obj !== "object") {
@@ -409,14 +412,18 @@ async function readGlobalConfig(ctx: Context): Promise<GlobalConfig | null> {
     logError(
       ctx,
       chalk.red(
-        `Failed to parse global config in ${configPath} with error ${err}.`
+        `Failed to parse global config in ${configPath} with error ${
+          err as any
+        }.`
       )
     );
     return null;
   }
 }
 
-export async function getAuthHeader(ctx: Context): Promise<string | null> {
+export async function getAuthHeaderFromGlobalConfig(
+  ctx: Context
+): Promise<string | null> {
   if (process.env.CONVEX_OVERRIDE_ACCESS_TOKEN) {
     return `Bearer ${process.env.CONVEX_OVERRIDE_ACCESS_TOKEN}`;
   }
@@ -427,7 +434,10 @@ export async function getAuthHeader(ctx: Context): Promise<string | null> {
   return null;
 }
 
-export async function bigBrainClient(ctx: Context): Promise<AxiosInstance> {
+export async function bigBrainClient(
+  ctx: Context,
+  getAuthHeader: (ctx: Context) => Promise<string | null>
+): Promise<AxiosInstance> {
   const authHeader = await getAuthHeader(ctx);
   const headers: Record<string, string> = authHeader
     ? {
@@ -443,26 +453,49 @@ export async function bigBrainClient(ctx: Context): Promise<AxiosInstance> {
   });
 }
 
-export async function bigBrainAPI(
-  ctx: Context,
-  method: Method,
-  url: string,
-  data?: any
-): Promise<any> {
+export async function bigBrainAPI({
+  ctx,
+  method,
+  url,
+  getAuthHeader,
+  data,
+}: {
+  ctx: Context;
+  method: Method;
+  url: string;
+  getAuthHeader?: (ctx: Context) => Promise<string | null>;
+  data?: any;
+}): Promise<any> {
   try {
-    return await bigBrainAPIMaybeThrows(ctx, method, url, data);
+    return await bigBrainAPIMaybeThrows({
+      ctx,
+      method,
+      url,
+      getAuthHeader: getAuthHeader,
+      data,
+    });
   } catch (err) {
     return await logAndHandleAxiosError(ctx, err);
   }
 }
 
-export async function bigBrainAPIMaybeThrows(
-  ctx: Context,
-  method: Method,
-  url: string,
-  data?: any
-): Promise<any> {
-  const client = await bigBrainClient(ctx);
+export async function bigBrainAPIMaybeThrows({
+  ctx,
+  method,
+  url,
+  getAuthHeader,
+  data,
+}: {
+  ctx: Context;
+  method: Method;
+  url: string;
+  getAuthHeader?: (ctx: Context) => Promise<string | null>;
+  data?: any;
+}): Promise<any> {
+  const client = await bigBrainClient(
+    ctx,
+    getAuthHeader ?? getAuthHeaderFromGlobalConfig
+  );
   const res = await client.request({ url, method, data });
   deprecationCheckWarning(ctx, res);
   return res.data;
@@ -551,11 +584,18 @@ export function getCurrentTimeString() {
 
 // We don't allow running commands in project subdirectories yet,
 // but we can provide better errors if we look around.
-function findParentConfigs(ctx: Context): {
-  parentPackageJson?: string;
+export async function findParentConfigs(ctx: Context): Promise<{
+  parentPackageJson: string;
   parentConvexJson?: string;
-} {
+}> {
   const parentPackageJson = findUp(ctx, "package.json");
+  if (!parentPackageJson) {
+    logFailure(
+      ctx,
+      "No package.json found. To create a new project using Convex, see https://docs.convex.dev/home#quickstarts"
+    );
+    return await ctx.crash(1, "invalid filesystem data");
+  }
   const candidateConvexJson =
     parentPackageJson &&
     path.join(path.dirname(parentPackageJson), "convex.json");
@@ -593,14 +633,7 @@ function findUp(ctx: Context, filename: string): string | undefined {
  * if this is not a valid directory for a project config.
  */
 export async function isInExistingProject(ctx: Context) {
-  const { parentPackageJson, parentConvexJson } = findParentConfigs(ctx);
-  if (!parentPackageJson) {
-    logFailure(
-      ctx,
-      "No package.json found. To create a new project using Convex, see https://docs.convex.dev/home#quickstarts"
-    );
-    await ctx.crash(1);
-  }
+  const { parentPackageJson, parentConvexJson } = await findParentConfigs(ctx);
   if (parentPackageJson !== path.resolve("package.json")) {
     logFailure(ctx, "Run this command from the root directory of a project.");
     return await ctx.crash(1, "invalid filesystem data");
@@ -623,14 +656,7 @@ export async function getConfiguredDeploymentOrCrash(
 }
 
 export async function getConfiguredDeployment(ctx: Context) {
-  const { parentPackageJson } = findParentConfigs(ctx);
-  if (!parentPackageJson) {
-    logFailure(
-      ctx,
-      "No package.json found. To create a new project using Convex, see https://docs.convex.dev/home#quickstarts"
-    );
-    await ctx.crash(1, "invalid filesystem data");
-  }
+  const { parentPackageJson } = await findParentConfigs(ctx);
   if (parentPackageJson !== path.resolve("package.json")) {
     logFailure(ctx, "Run this command from the root directory of a project.");
     return await ctx.crash(1, "invalid filesystem data");
@@ -730,4 +756,19 @@ export function spawnAsync(
     }
     child.once("error", errorListener);
   });
+}
+
+export function deploymentClient(deploymentURL: string) {
+  const client = axios.create({
+    baseURL: deploymentURL,
+  });
+  axiosRetry(client, {
+    retries: 6,
+    retryDelay: axiosRetry.exponentialDelay,
+    retryCondition: (error) => {
+      // Retry on 404s since these can sometimes happen with newly created deployments
+      return error.response?.status === 404 || false;
+    },
+  });
+  return client;
 }

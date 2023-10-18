@@ -88,6 +88,10 @@ export type ReconnectMetadata = {
   lastCloseReason: string | null;
 };
 
+export type OnMessageResponse = {
+  hasSyncedPastLastReconnect: boolean;
+};
+
 /**
  * A wrapper around a websocket that handles errors, reconnection, and message
  * parsing.
@@ -117,14 +121,14 @@ export class WebSocketManager {
 
   private readonly uri: string;
   private readonly onOpen: (reconnectMetadata: ReconnectMetadata) => void;
-  private readonly onMessage: (message: ServerMessage) => void;
+  private readonly onMessage: (message: ServerMessage) => OnMessageResponse;
   private readonly webSocketConstructor: typeof WebSocket;
   private readonly verbose: boolean;
 
   constructor(
     uri: string,
     onOpen: (reconnectMetadata: ReconnectMetadata) => void,
-    onMessage: (message: ServerMessage) => void,
+    onMessage: (message: ServerMessage) => OnMessageResponse,
     webSocketConstructor: typeof WebSocket,
     verbose: boolean
   ) {
@@ -200,13 +204,14 @@ export class WebSocketManager {
       console.log(`WebSocket error: ${message}`);
     };
     ws.onmessage = (message) => {
-      // TODO(CX-1498): We reset the retry counter on any successful message.
-      // This is not ideal and we should improve this further.
-      this.retries = 0;
       this.resetServerInactivityTimeout();
       const serverMessage = parseServerMessage(JSON.parse(message.data));
       this._logVerbose(`received ws message with type ${serverMessage.type}`);
-      this.onMessage(serverMessage);
+      const response = this.onMessage(serverMessage);
+      if (response.hasSyncedPastLastReconnect) {
+        // Reset backoff to 0 once all outstanding requests are complete.
+        this.retries = 0;
+      }
     };
     ws.onclose = (event) => {
       this._logVerbose("begin ws.onclose");

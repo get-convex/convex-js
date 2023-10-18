@@ -263,6 +263,13 @@ export class Long {
     return new Long(value % TWO_PWR_32_DBL | 0, (value / TWO_PWR_32_DBL) | 0);
   }
 
+  toString() {
+    return (
+      BigInt(this.high) * BigInt(TWO_PWR_32_DBL) +
+      BigInt(this.low)
+    ).toString();
+  }
+
   equals(other: Long) {
     if (!Long.isLong(other)) other = Long.fromValue(other);
     if (this.high >>> 31 === 1 && other.high >>> 31 === 1) return false;

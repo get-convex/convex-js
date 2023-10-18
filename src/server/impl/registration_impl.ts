@@ -99,9 +99,17 @@ function serializeConvexErrorData(thrown: unknown) {
  */
 function assertNotBrowser() {
   if (
-    typeof window !== "undefined" &&
+    typeof window === "undefined" ||
     !(window as any).__convexAllowFunctionsInBrowser
   ) {
+    return;
+  }
+  // JSDom doesn't count, developers are allowed to use JSDom in Convex functions.
+  const isRealBrowser =
+    Object.getOwnPropertyDescriptor(globalThis, "window")
+      ?.get?.toString()
+      .includes("[native code]") ?? false;
+  if (isRealBrowser) {
     throw new Error("Convex functions should not be imported in the browser.");
   }
 }

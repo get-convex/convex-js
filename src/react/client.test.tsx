@@ -66,7 +66,7 @@ describe("createMutation", () => {
   });
 });
 
-describe("useQueryGeneric", () => {
+describe("useQuery", () => {
   function createClientWithQuery() {
     const client = new ConvexReactClient(address);
     // Use an optimistic update to set up a query to have a result.

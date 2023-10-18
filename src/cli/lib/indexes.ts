@@ -1,8 +1,8 @@
-import axios, { AxiosResponse } from "axios";
+import { AxiosResponse } from "axios";
 import chalk from "chalk";
 import path from "path";
 import { bundleSchema } from "../../bundler/index.js";
-import { version } from "../../index.js";
+import { version } from "../version.js";
 import {
   Context,
   changeSpinner,
@@ -14,6 +14,7 @@ import {
   poll,
   logAndHandleAxiosError,
   deprecationCheckWarning,
+  deploymentClient,
 } from "./utils.js";
 
 type IndexMetadata = {
@@ -63,9 +64,10 @@ export async function pushSchema(
   changeSpinner(ctx, "Checking for index or schema changes...");
 
   let data: PrepareSchemaResponse;
+  const client = deploymentClient(origin);
   try {
-    const res = await axios.post<PrepareSchemaResponse>(
-      `${origin}/api/prepare_schema`,
+    const res = await client.post<PrepareSchemaResponse>(
+      "/api/prepare_schema",
       {
         bundle: bundles[0],
         adminKey,
@@ -102,10 +104,11 @@ async function waitForReadySchema(
   adminKey: string,
   schemaId: string
 ): Promise<SchemaState> {
-  const url = `${origin}/api/schema_state/${schemaId}`;
+  const path = `/api/schema_state/${schemaId}`;
+  const client = deploymentClient(origin);
   const fetch = async () => {
     try {
-      return await axios.get<SchemaStateResponse>(url, {
+      return await client.get<SchemaStateResponse>(path, {
         headers: {
           Authorization: `Convex ${adminKey}`,
           "Convex-Client": `npm-cli-${version}`,

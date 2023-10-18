@@ -77,11 +77,13 @@ test("mutation retries", async () => {
     ts: Long.fromNumber(0),
     logLines: [],
   });
+  expect(requestManager.hasSyncedPastLastReconnect()).toBe(true);
 
   // Pretend that we become disconnected and reconnect.
   // We should request the mutation because we haven't transitioned past the
   // timestamp the mutation was committed at yet.
   expect(requestManager.restart()).toEqual([message]);
+  expect(requestManager.hasSyncedPastLastReconnect()).toBe(false);
 
   // Receive another response (because we restarted and requested it again)
   requestManager.onResponse({
@@ -95,6 +97,7 @@ test("mutation retries", async () => {
 
   // Transition to ts=1
   requestManager.removeCompleted(Long.fromNumber(1));
+  expect(requestManager.hasSyncedPastLastReconnect()).toBe(true);
 
   // Return the result of the mutation now that we've transitioned past the
   // mutation timestamp.
@@ -130,14 +133,17 @@ test("mutation retries with transition", async () => {
     ts: Long.fromNumber(0),
     logLines: [],
   });
+  expect(requestManager.hasSyncedPastLastReconnect()).toBe(true);
 
   // Pretend that we become disconnected and reconnect.
   // We should request the mutation because we haven't transitioned past the
   // timestamp the mutation was committed at yet.
   expect(requestManager.restart()).toEqual([message]);
+  expect(requestManager.hasSyncedPastLastReconnect()).toBe(false);
 
   // Transition to ts=1
   requestManager.removeCompleted(Long.fromNumber(1));
+  expect(requestManager.hasSyncedPastLastReconnect()).toBe(true);
 
   // Return the result of the mutation now that we've transitioned past the
   // mutation timestamp.
@@ -147,6 +153,7 @@ test("mutation retries with transition", async () => {
   // The if we restart now, the mutation should no longer be re-requested because
   // we've already observed it.
   expect(requestManager.restart()).toEqual([]);
+  expect(requestManager.hasSyncedPastLastReconnect()).toBe(true);
 
   // Receive another response (because we requested it again).
   // This response just needs to not crash the client.

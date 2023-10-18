@@ -17,7 +17,9 @@ export function setupReader(): DatabaseReader<GenericDataModel> {
       validateArg(id, 1, "get", "id");
       if (typeof id !== "string") {
         throw new Error(
-          `Invalid argument \`id\` for \`db.get\`, expected string but got '${typeof id}': ${id}`
+          `Invalid argument \`id\` for \`db.get\`, expected string but got '${typeof id}': ${
+            id as any
+          }`
         );
       }
       const args = { id: convexToJson(id) };

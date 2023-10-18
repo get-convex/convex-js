@@ -31,10 +31,10 @@ export class RequestManager {
       status: RequestStatus;
     }
   >;
-  private _timeOfOldestInflightRequest: null | Date;
+  private requestsOlderThanRestart: Set<RequestId>;
   constructor() {
     this.inflightRequests = new Map();
-    this._timeOfOldestInflightRequest = null;
+    this.requestsOlderThanRestart = new Set();
   }
 
   request(
@@ -125,6 +125,7 @@ export class RequestManager {
     if (response.type === "ActionResponse" || !response.success) {
       onResolve();
       this.inflightRequests.delete(response.requestId);
+      this.requestsOlderThanRestart.delete(response.requestId);
       return response.requestId;
     }
 
@@ -148,6 +149,7 @@ export class RequestManager {
         status.onResolve();
         completeRequests.add(requestId);
         this.inflightRequests.delete(requestId);
+        this.requestsOlderThanRestart.delete(requestId);
       }
     }
     return completeRequests;
@@ -157,6 +159,7 @@ export class RequestManager {
     // When we reconnect to the backend, re-request all requests that are safe
     // to be resend.
 
+    this.requestsOlderThanRestart = new Set(this.inflightRequests.keys());
     const allMessages = [];
     for (const [requestId, value] of this.inflightRequests) {
       if (value.status.status === "NotSent") {
@@ -175,6 +178,7 @@ export class RequestManager {
         // backend, we don't know if it is safe to resend in-flight actions, so we
         // cancel them and consider them failed.
         this.inflightRequests.delete(requestId);
+        this.requestsOlderThanRestart.delete(requestId);
         if (value.status.status === "Completed") {
           throw new Error("Action should never be in 'Completed' state");
         }
@@ -189,9 +193,9 @@ export class RequestManager {
   }
 
   /**
-   ** @returns true if there are any requests that have been requested but have
-   ** not be completed yet.
-   **/
+   * @returns true if there are any requests that have been requested but have
+   * not be completed yet.
+   */
   hasIncompleteRequests(): boolean {
     for (const requestInfo of this.inflightRequests.values()) {
       if (requestInfo.status.status === "Requested") {
@@ -202,11 +206,19 @@ export class RequestManager {
   }
 
   /**
-   ** @returns true if there are any inflight requests, including ones that have
-   ** completed on the server, but have not been applied.
-   **/
+   * @returns true if there are any inflight requests, including ones that have
+   * completed on the server, but have not been applied.
+   */
   hasInflightRequests(): boolean {
     return this.inflightRequests.size > 0;
+  }
+
+  /**
+   * @returns true if there are any inflight requests, that have been hanging around
+   * since prior to the most recent restart.
+   */
+  hasSyncedPastLastReconnect(): boolean {
+    return this.requestsOlderThanRestart.size === 0;
   }
 
   timeOfOldestInflightRequest(): Date | null {

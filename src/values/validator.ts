@@ -75,6 +75,7 @@ export type ValidatorJSON =
  *
  * Validators can be used in [schema definitions](https://docs.convex.dev/database/schemas)
  * and as input validators for Convex functions.
+ *
  * @public
  */
 export const v = {
@@ -136,7 +137,8 @@ export const v = {
       false
     );
   },
-  /** @internal // coming soon! */
+
+  /** @internal */
   record<K extends string, ValueValidator extends Validator<any, any, any>>(
     keys: Validator<K, false, any>,
     values: ValueValidator
@@ -150,6 +152,7 @@ export const v = {
       false
     );
   },
+
   union<
     T extends [
       Validator<any, false, any>,

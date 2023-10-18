@@ -88,7 +88,7 @@ export function getFunctionName(
   // function reference objects returned from makeFunctionReference.
   const name = (functionReference as any)[functionName];
   if (!name) {
-    throw new Error(`${functionReference} is not a functionReference`);
+    throw new Error(`${functionReference as any} is not a functionReference`);
   }
   return name;
 }

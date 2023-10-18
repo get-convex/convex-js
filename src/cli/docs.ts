@@ -1,7 +1,11 @@
 import { Command } from "commander";
 import open from "open";
 import chalk from "chalk";
-import { bigBrainClient, deprecationCheckWarning } from "./lib/utils.js";
+import {
+  bigBrainClient,
+  deprecationCheckWarning,
+  getAuthHeaderFromGlobalConfig,
+} from "./lib/utils.js";
 import { oneoffContext } from "../bundler/context.js";
 import { readDeploymentEnvVar } from "./lib/deployment.js";
 
@@ -14,7 +18,7 @@ export const docs = new Command("docs")
     // command we don't care at all if the user is in the right directory
     const configuredDeployment = readDeploymentEnvVar();
     const getCookieUrl = `get_cookie/${configuredDeployment}`;
-    const client = await bigBrainClient(ctx);
+    const client = await bigBrainClient(ctx, getAuthHeaderFromGlobalConfig);
     try {
       const res = await client.get(getCookieUrl);
       deprecationCheckWarning(ctx, res);

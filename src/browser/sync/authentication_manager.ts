@@ -369,6 +369,10 @@ export class AuthenticationManager {
   private setAuthState(newAuth: AuthState) {
     if (this.authState.state === "waitingForScheduledRefetch") {
       clearTimeout(this.authState.refetchTokenTimeoutId);
+
+      // The waitingForScheduledRefetch state is the most quiesced authed state.
+      // Let the syncState know that auth is in a good state, so it can reset failure backoffs
+      this.syncState.markAuthCompletion();
     }
     this.authState = newAuth;
   }

@@ -28,6 +28,9 @@ module.exports = {
     // asserting that values aren't null is risky but useful.
     "@typescript-eslint/no-non-null-assertion": "off",
 
+    // Warn against interpolating objects
+    "@typescript-eslint/restrict-template-expressions": "error",
+
     // allow (_arg: number) => {}
     "@typescript-eslint/no-unused-vars": [
       "error",

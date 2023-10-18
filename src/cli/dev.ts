@@ -110,7 +110,9 @@ export const dev = new Command("dev")
 
     const promises = [];
     if (cmdOptions.tailLogs) {
-      promises.push(watchLogs(ctx, credentials.url, credentials.adminKey));
+      promises.push(
+        watchLogs(ctx, credentials.url, credentials.adminKey, "stderr")
+      );
     }
     promises.push(
       watchAndPush(

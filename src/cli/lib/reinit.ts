@@ -6,6 +6,7 @@ import {
 import { doCodegen } from "./codegen.js";
 import {
   configName,
+  mergeWithLocalConfig,
   pullConfig,
   readProjectConfig,
   upgradeOldAuthInfoToAuthConfig,
@@ -56,6 +57,12 @@ export async function reinit(
     url,
     adminKey
   );
+  // Merge remote config with local config
+  const mergedProjectConfig = await mergeWithLocalConfig(
+    ctx,
+    projectConfigFromBackend
+  );
+
   const { wroteToGitIgnore } = await writeDeploymentEnvVar(
     ctx,
     deploymentType,
@@ -69,7 +76,7 @@ export async function reinit(
   const functionsPath = functionsDir(configName(), projectConfigFromBackend);
   const projectConfigWithoutAuthInfo = await upgradeOldAuthInfoToAuthConfig(
     ctx,
-    projectConfigFromBackend,
+    mergedProjectConfig,
     functionsPath
   );
   await writeProjectConfig(ctx, projectConfigWithoutAuthInfo, {

@@ -21,10 +21,9 @@ export const run = new Command("run")
     "-w, --watch",
     "Watch a query, printing its result if the underlying data changes. Given function must be a query."
   )
-  .option(
-    "--no-push",
-    "Do not push code to deployment before running the function."
-  )
+  .option("--push", "Push code to deployment before running the function.")
+  // For backwards compatibility we still support --no-push which is a noop
+  .addOption(new Option("--no-push").hideHelp())
   .option(
     "--prod",
     "Run the function on this project's production deployment, instead of the configured deployment. Can only be used with --no-push."
@@ -61,8 +60,8 @@ export const run = new Command("run")
     if (options.prod && options.push) {
       logFailure(
         ctx,
-        `\`convex run\` doesn't push functions to prod automatically.
-Use --no-push to run functions that are already deployed.`
+        `\`convex run\` doesn't support pushing functions to prod deployments. ` +
+          `Remove the --push flag. To push to production use \`npx convex deploy\`.`
       );
       return await ctx.crash(1, "fatal");
     }

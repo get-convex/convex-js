@@ -26,7 +26,6 @@ export function canonicalizeUdfPath(udfPath: string): string {
  */
 export type QueryToken = string;
 
-// TODO(CX-749): Make this a unique representation (sort sets, dicts, objects)
 export function serializePathAndArgs(
   udfPath: string,
   args: Record<string, Value>

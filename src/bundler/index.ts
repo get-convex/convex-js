@@ -5,7 +5,12 @@ import esbuild from "esbuild";
 import { Filesystem } from "./fs.js";
 import { Context, logFailure, logWarning } from "./context.js";
 import { wasmPlugin } from "./wasm.js";
-import { createExternalPlugin, findExactVersion } from "./external.js";
+import {
+  ExternalPackage,
+  computeExternalPackages,
+  createExternalPlugin,
+  findExactVersionAndDependencies,
+} from "./external.js";
 export { nodeFs, RecordingFs } from "./fs.js";
 export type { Filesystem } from "./fs.js";
 
@@ -41,7 +46,10 @@ export interface Bundle {
 
 type EsBuildResult = esbuild.BuildResult & {
   outputFiles: esbuild.OutputFile[];
-  externalModulePaths: Map<string, string[]>;
+  // Set of referenced external modules.
+  externalModuleNames: Set<string>;
+  // Set of bundled modules.
+  bundledModuleNames: Set<string>;
 };
 
 async function doEsbuild(
@@ -51,9 +59,9 @@ async function doEsbuild(
   generateSourceMaps: boolean,
   platform: esbuild.Platform,
   chunksFolder: string,
-  externalNodeModules: string[]
+  externalPackages: Map<string, ExternalPackage>
 ): Promise<EsBuildResult> {
-  const external = createExternalPlugin(ctx, externalNodeModules);
+  const external = createExternalPlugin(ctx, externalPackages);
   try {
     const result = await esbuild.build({
       entryPoints,
@@ -101,7 +109,8 @@ async function doEsbuild(
     }
     return {
       ...result,
-      externalModulePaths: external.externalModulePaths,
+      externalModuleNames: external.externalModuleNames,
+      bundledModuleNames: external.bundledModuleNames,
     };
   } catch (err) {
     // We don't print any error because esbuild already printed
@@ -117,8 +126,16 @@ export async function bundle(
   generateSourceMaps: boolean,
   platform: esbuild.Platform,
   chunksFolder = "_deps",
-  externalNodeModules: string[] = []
-): Promise<{ modules: Bundle[]; externalDependencies: Map<string, string> }> {
+  externalPackagesAllowList: string[] = []
+): Promise<{
+  modules: Bundle[];
+  externalDependencies: Map<string, string>;
+  bundledModuleNames: Set<string>;
+}> {
+  const availableExternalPackages = await computeExternalPackages(
+    ctx,
+    externalPackagesAllowList
+  );
   const result = await doEsbuild(
     ctx,
     dir,
@@ -126,7 +143,7 @@ export async function bundle(
     generateSourceMaps,
     platform,
     chunksFolder,
-    externalNodeModules
+    availableExternalPackages
   );
   if (result.errors.length) {
     for (const error of result.errors) {
@@ -157,45 +174,52 @@ export async function bundle(
     }
   }
 
-  const externalDependencies = new Map<string, string>();
-  for (const [moduleName, modulePaths] of result.externalModulePaths) {
-    const versions: string[] = [];
-    for (const modulePath of modulePaths) {
-      try {
-        const version = await findExactVersion(ctx, moduleName, modulePath);
-        // If there is no version, we should have bundled, and not add to the list.
-        if (version === undefined) {
-          logFailure(
-            ctx,
-            `${moduleName} at ${modulePath} should have been bundled`
-          );
-          return await ctx.crash(1, "invalid filesystem data");
-        }
-        if (!versions.includes(version)) {
-          versions.push(version);
-        }
-      } catch (e: any) {
-        logFailure(
-          ctx,
-          `Failed to determine version of ${moduleName} at ${modulePath}: ${e.toString()}`
-        );
-        return await ctx.crash(1, "invalid filesystem data");
-      }
-    }
-    if (versions.length > 1) {
-      console.log(
-        chalk.yellow(
-          `warning: ${moduleName} has multiple installed versions: ${versions}. Using ${versions[0]}`
-        )
-      );
-    }
-    externalDependencies.set(moduleName, versions[0]);
-  }
-
   return {
     modules,
-    externalDependencies,
+    externalDependencies: await externalPackageVersions(
+      ctx,
+      availableExternalPackages,
+      result.externalModuleNames
+    ),
+    bundledModuleNames: result.bundledModuleNames,
   };
+}
+
+// We could return the full list of availableExternalPackages, but this would be
+// installing more packages that we need. Instead, we collect all external
+// dependencies we found during bundling the /convex function, as well as their
+// respective peer and optional dependencies.
+async function externalPackageVersions(
+  ctx: Context,
+  availableExternalPackages: Map<string, ExternalPackage>,
+  referencedPackages: Set<string>
+): Promise<Map<string, string>> {
+  const versions = new Map<string, string>();
+  const referencedPackagesQueue = Array.from(referencedPackages.keys());
+
+  for (let i = 0; i < referencedPackagesQueue.length; i++) {
+    const moduleName = referencedPackagesQueue[i];
+    // This assertion is safe because referencedPackages can only contain
+    // packages in availableExternalPackages.
+    const modulePath = availableExternalPackages.get(moduleName)!.path;
+    // Since we don't support lock files and different install commands yet, we
+    // pick up the exact version installed on the local filesystem.
+    const { version, peerAndOptionalDependencies } =
+      await findExactVersionAndDependencies(ctx, moduleName, modulePath);
+    versions.set(moduleName, version);
+
+    for (const dependency of peerAndOptionalDependencies) {
+      if (
+        availableExternalPackages.has(dependency) &&
+        !referencedPackages.has(dependency)
+      ) {
+        referencedPackagesQueue.push(dependency);
+        referencedPackages.add(dependency);
+      }
+    }
+  }
+
+  return versions;
 }
 
 export async function bundleSchema(ctx: Context, dir: string) {
@@ -224,18 +248,19 @@ export async function entryPoints(
   verbose: boolean
 ): Promise<string[]> {
   const entryPoints = [];
+
+  const log = (line: string) => {
+    if (verbose) {
+      console.log(line);
+    }
+  };
+
   for (const { isDir, path: fpath } of walkDir(ctx.fs, dir)) {
     if (isDir) {
       continue;
     }
     const relPath = path.relative(dir, fpath);
     const base = path.parse(fpath).base;
-
-    const log = (line: string) => {
-      if (verbose) {
-        console.log(line);
-      }
-    };
 
     if (relPath.startsWith("_deps" + path.sep)) {
       logFailure(
@@ -270,7 +295,26 @@ export async function entryPoints(
       entryPoints.push(fpath);
     }
   }
-  return entryPoints;
+
+  // If using TypeScript, require that at least one line starts with `export` or `import`,
+  // a TypeScript requirement. This prevents confusing type errors described in CX-5067.
+  const nonEmptyEntryPoints = entryPoints.filter((fpath) => {
+    // This check only makes sense for TypeScript files
+    if (!fpath.endsWith(".ts") && !fpath.endsWith(".tsx")) {
+      return true;
+    }
+    const contents = ctx.fs.readUtf8File(fpath);
+    if (/^\s{0,100}(import|export)/m.test(contents)) {
+      return true;
+    }
+    log(
+      chalk.yellow(
+        `Skipping ${fpath} because it has no export or import to make it a valid TypeScript module`
+      )
+    );
+  });
+
+  return nonEmptyEntryPoints;
 }
 
 // A fallback regex in case we fail to parse the AST.

@@ -17,6 +17,7 @@ export function tsconfigCodegen() {
     "module": "ESNext",
     "moduleResolution": "Node",
     "isolatedModules": true,
+    "skipLibCheck": true,
     "noEmit": true,
   },
   "include": ["./**/*"],

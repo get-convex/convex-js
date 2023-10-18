@@ -9,7 +9,7 @@ import { FunctionReference } from "../server/api.js";
 /**
  * Load a variable number of reactive Convex queries.
  *
- * `useQueriesGeneric` is similar to {@link useQueryGeneric} but it allows
+ * `useQueries` is similar to {@link useQuery} but it allows
  * loading multiple queries which can be useful for loading a dynamic number
  * of queries without violating the rules of React hooks.
  *
@@ -24,7 +24,7 @@ import { FunctionReference } from "../server/api.js";
  *
  * For example if you loaded a query like:
  * ```typescript
- * const results = useQueriesGeneric({
+ * const results = useQueries({
  *   messagesInGeneral: {
  *     query: "listMessages",
  *     args: { channel: "#general" }
@@ -83,7 +83,7 @@ export function useQueries(
 }
 
 /**
- * Internal version of `useQueriesGeneric` that is exported for testing.
+ * Internal version of `useQueries` that is exported for testing.
  */
 export function useQueriesHelper(
   queries: RequestForQueries,
@@ -120,7 +120,7 @@ export function useQueriesHelper(
  * The keys of this object are identifiers and the values are objects containing
  * the query function and the arguments to pass to it.
  *
- * This is used as an argument to {@link useQueriesGeneric}.
+ * This is used as an argument to {@link useQueries}.
  * @public
  */
 export type RequestForQueries = Record<

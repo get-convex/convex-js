@@ -12,7 +12,9 @@ export function parseArgs(
   }
   if (!isSimpleObject(args)) {
     throw new Error(
-      `The arguments to a Convex function must be an object. Received: ${args}`
+      `The arguments to a Convex function must be an object. Received: ${
+        args as any
+      }`
     );
   }
   return args;
@@ -27,7 +29,9 @@ export function validateDeploymentUrl(deploymentUrl: string) {
     );
   }
   if (typeof deploymentUrl !== "string") {
-    throw new Error(`Invalid deployment address: found ${deploymentUrl}".`);
+    throw new Error(
+      `Invalid deployment address: found ${deploymentUrl as any}".`
+    );
   }
   if (
     !(deploymentUrl.startsWith("http:") || deploymentUrl.startsWith("https:"))

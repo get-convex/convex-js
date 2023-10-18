@@ -1,4 +1,4 @@
-import { convexToJson, JSONValue } from "../../values/value.js";
+import { JSONValue, convexOrUndefinedToJson } from "../../values/value.js";
 import {
   FieldTypeFromFieldPath,
   GenericDocument,
@@ -69,14 +69,17 @@ export class SearchFilterBuilderImpl
     fieldName: FieldName,
     value: FieldTypeFromFieldPath<GenericDocument, FieldName>
   ): SearchFilterFinalizer<GenericDocument, GenericSearchIndexConfig> {
-    validateArg(fieldName, 1, "search", "fieldName");
-    validateArg(value, 2, "search", "value");
+    validateArg(fieldName, 1, "eq", "fieldName");
+    // when `undefined` is passed explicitly, it is allowed.
+    if (arguments.length !== 2) {
+      validateArg(value, 2, "search", "value");
+    }
     this.consume();
     return new SearchFilterBuilderImpl(
       this.filters.concat({
         type: "Eq",
         fieldPath: fieldName,
-        value: convexToJson(value),
+        value: convexOrUndefinedToJson(value),
       })
     );
   }

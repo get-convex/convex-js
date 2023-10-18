@@ -1,15 +1,16 @@
-import axios, { AxiosError } from "axios";
-import axiosRetry from "axios-retry";
+import { AxiosError } from "axios";
 import chalk from "chalk";
 import equal from "deep-equal";
 import { EOL } from "os";
 import path from "path";
 import {
+  changeSpinner,
   Context,
   logError,
   logFailure,
   logFinishedStep,
   logMessage,
+  showSpinner,
 } from "../../bundler/context.js";
 import {
   Bundle,
@@ -17,7 +18,7 @@ import {
   bundleAuthConfig,
   entryPointsByEnvironment,
 } from "../../bundler/index.js";
-import { version } from "../../index.js";
+import { version } from "../version.js";
 import { dashboardUrlForConfiguredDeployment } from "../dashboard.js";
 import {
   deprecationCheckWarning,
@@ -26,6 +27,7 @@ import {
   getConfiguredDeployment,
   logAndHandleAxiosError,
   ErrorData,
+  deploymentClient,
 } from "./utils.js";
 export { productionProvisionHost, provisionHost } from "./utils.js";
 
@@ -40,7 +42,9 @@ export interface AuthInfo {
 /** Type representing Convex project configuration. */
 export interface ProjectConfig {
   functions: string;
-  externalNodeModules: string[];
+  node: {
+    externalPackages: string[];
+  };
   generateCommonJSApi: boolean;
   // deprecated
   project?: string;
@@ -94,15 +98,19 @@ export async function parseProjectConfig(
     logError(ctx, "Expected `convex.json` to contain an object");
     return await ctx.crash(1, "invalid filesystem data");
   }
-  if (typeof obj.externalNodeModules === "undefined") {
-    obj.externalNodeModules = [];
+  if (typeof obj.node === "undefined") {
+    obj.node = {
+      externalPackages: [],
+    };
+  } else if (typeof obj.node.externalPackages === "undefined") {
+    obj.node.externalPackages = [];
   } else if (
-    !Array.isArray(obj.externalNodeModules) ||
-    !obj.externalNodeModules.every((item: any) => typeof item === "string")
+    !Array.isArray(obj.node.externalPackages) ||
+    !obj.node.externalPackages.every((item: any) => typeof item === "string")
   ) {
     logError(
       ctx,
-      "Expected `externalNodeModules` in `convex.json` to be an array of strings"
+      "Expected `node.externalPackages` in `convex.json` to be an array of strings"
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -213,6 +221,27 @@ export async function getFunctionsDirectoryPath(ctx: Context): Promise<string> {
   return functionsDir(configPath, projectConfig);
 }
 
+/** Merge configurations between a ProjectConfig and the local `convex.json` file.
+ *  If local config contains a more privileged project configuration value that
+ *  is not populated by /api/get_config, this method will select the more
+ *  privileged value.
+ * */
+export async function mergeWithLocalConfig(
+  ctx: Context,
+  remoteConfig: ProjectConfig
+): Promise<ProjectConfig> {
+  const newConfig = { ...remoteConfig };
+  const { projectConfig: localConfig } = await readProjectConfig(ctx);
+
+  if (newConfig.generateCommonJSApi === false) {
+    newConfig.generateCommonJSApi = localConfig.generateCommonJSApi;
+  }
+  if (newConfig.node.externalPackages.length === 0) {
+    newConfig.node.externalPackages = localConfig.node.externalPackages;
+  }
+  return newConfig;
+}
+
 /** Read configuration from a local `convex.json` file. */
 export async function readProjectConfig(ctx: Context): Promise<{
   projectConfig: ProjectConfig;
@@ -222,7 +251,9 @@ export async function readProjectConfig(ctx: Context): Promise<{
     return {
       projectConfig: {
         functions: DEFAULT_FUNCTIONS_PATH,
-        externalNodeModules: [],
+        node: {
+          externalPackages: [],
+        },
         generateCommonJSApi: false,
       },
       configPath: configName(),
@@ -281,25 +312,38 @@ export async function configFromProjectConfig(
   projectConfig: ProjectConfig,
   configPath: string,
   verbose: boolean
-): Promise<Config> {
+): Promise<{
+  config: Config;
+  bundledModuleInfos: BundledModuleInfo[];
+}> {
   const baseDir = functionsDir(configPath, projectConfig);
   // We bundle functions entry points separately since they execute on different
   // platforms.
   const entryPoints = await entryPointsByEnvironment(ctx, baseDir, verbose);
   // es-build prints errors to console which would clobber
   // our spinner.
-  const modules = (
-    await bundle(ctx, baseDir, entryPoints.isolate, true, "browser")
-  ).modules;
+  if (verbose) {
+    showSpinner(ctx, "Bundling modules for Convex's runtime...");
+  }
+  const convexResult = await bundle(
+    ctx,
+    baseDir,
+    entryPoints.isolate,
+    true,
+    "browser"
+  );
   if (verbose) {
     logMessage(
       ctx,
-      "Queries and mutations modules: ",
-      modules.map((m) => m.path)
+      "Convex's runtime modules: ",
+      convexResult.modules.map((m) => m.path)
     );
   }
 
   // Bundle node modules.
+  if (verbose) {
+    showSpinner(ctx, "Bundling modules for Node.js runtime...");
+  }
   const nodeResult = await bundle(
     ctx,
     baseDir,
@@ -307,24 +351,25 @@ export async function configFromProjectConfig(
     true,
     "node",
     path.join("_deps", "node"),
-    projectConfig.externalNodeModules
+    projectConfig.node.externalPackages
   );
   if (verbose) {
     logMessage(
       ctx,
-      "Node modules: ",
+      "Node.js runtime modules: ",
       nodeResult.modules.map((m) => m.path)
     );
-    if (projectConfig.externalNodeModules.length > 0) {
+    if (projectConfig.node.externalPackages.length > 0) {
       logMessage(
         ctx,
-        "Node external npm dependencies: ",
+        "Node.js runtime external dependencies (to be installed on the server): ",
         [...nodeResult.externalDependencies.entries()].map(
           (a) => `${a[0]}: ${a[1]}`
         )
       );
     }
   }
+  const modules = convexResult.modules;
   modules.push(...nodeResult.modules);
   modules.push(...(await bundleAuthConfig(ctx, baseDir)));
 
@@ -333,14 +378,36 @@ export async function configFromProjectConfig(
     nodeDependencies.push({ name: moduleName, version: moduleVersion });
   }
 
+  const bundledModuleInfos: BundledModuleInfo[] = Array.from(
+    convexResult.bundledModuleNames.keys()
+  ).map((moduleName) => {
+    return {
+      name: moduleName,
+      platform: "convex",
+    };
+  });
+  bundledModuleInfos.push(
+    ...Array.from(nodeResult.bundledModuleNames.keys()).map(
+      (moduleName): BundledModuleInfo => {
+        return {
+          name: moduleName,
+          platform: "node",
+        };
+      }
+    )
+  );
+
   return {
-    projectConfig: projectConfig,
-    modules: modules,
-    nodeDependencies: nodeDependencies,
-    // We're just using the version this CLI is running with for now.
-    // This could be different than the version of `convex` the app runs with
-    // if the CLI is installed globally.
-    udfServerVersion: version,
+    config: {
+      projectConfig: projectConfig,
+      modules: modules,
+      nodeDependencies: nodeDependencies,
+      // We're just using the version this CLI is running with for now.
+      // This could be different than the version of `convex` the app runs with
+      // if the CLI is installed globally.
+      udfServerVersion: version,
+    },
+    bundledModuleInfos,
   };
 }
 
@@ -350,15 +417,19 @@ export async function configFromProjectConfig(
 export async function readConfig(
   ctx: Context,
   verbose: boolean
-): Promise<{ config: Config; configPath: string }> {
+): Promise<{
+  config: Config;
+  configPath: string;
+  bundledModuleInfos: BundledModuleInfo[];
+}> {
   const { projectConfig, configPath } = await readProjectConfig(ctx);
-  const config = await configFromProjectConfig(
+  const { config, bundledModuleInfos } = await configFromProjectConfig(
     ctx,
     projectConfig,
     configPath,
     verbose
   );
-  return { config, configPath };
+  return { config, configPath, bundledModuleInfos };
 }
 
 export async function upgradeOldAuthInfoToAuthConfig(
@@ -452,14 +523,15 @@ function stripDefaults(projectConfig: ProjectConfig): any {
   if (Array.isArray(stripped.authInfo) && stripped.authInfo.length === 0) {
     delete stripped.authInfo;
   }
-  if (
-    Array.isArray(stripped.externalNodeModules) &&
-    stripped.externalNodeModules.length === 0
-  ) {
-    delete stripped.externalNodeModules;
+  if (stripped.node.externalPackages.length === 0) {
+    delete stripped.node.externalPackages;
   }
   if (stripped.generateCommonJSApi === false) {
     delete stripped.generateCommonJSApi;
+  }
+  // Remove "node" field if it has nothing nested under it
+  if (Object.keys(stripped.node).length === 0) {
+    delete stripped.node;
   }
   return stripped;
 }
@@ -493,17 +565,10 @@ export async function pullConfig(
   origin: string,
   adminKey: string
 ): Promise<Config> {
-  const client = axios.create();
-  axiosRetry(client, {
-    retries: 4,
-    retryDelay: axiosRetry.exponentialDelay,
-    retryCondition: (error) => {
-      return error.response?.status === 404 || false;
-    },
-  });
+  const client = deploymentClient(origin);
   try {
     const res = await client.post(
-      `${origin}/api/get_config`,
+      "/api/get_config",
       { version, adminKey },
       {
         maxContentLength: Infinity,
@@ -518,7 +583,9 @@ export async function pullConfig(
       ...backendConfig,
       // This field is not stored in the backend, which is ok since it is also
       // not used to diff configs.
-      externalNodeModules: [],
+      node: {
+        externalPackages: [],
+      },
       // This field is not stored in the backend, it only affects the client.
       generateCommonJSApi: false,
       project,
@@ -538,11 +605,17 @@ export async function pullConfig(
   }
 }
 
+interface BundledModuleInfo {
+  name: string;
+  platform: "node" | "convex";
+}
+
 export function configJSON(
   config: Config,
   adminKey: string,
   schemaId?: string,
-  pushMetrics?: PushMetrics
+  pushMetrics?: PushMetrics,
+  bundledModuleInfos?: BundledModuleInfo[]
 ) {
   // Override origin with the url
   const projectConfig = {
@@ -559,6 +632,7 @@ export function configJSON(
     schemaId,
     adminKey,
     pushMetrics,
+    bundledModuleInfos,
   };
 }
 
@@ -578,12 +652,27 @@ export async function pushConfig(
   adminKey: string,
   url: string,
   pushMetrics?: PushMetrics,
-  schemaId?: string
+  schemaId?: string,
+  bundledModuleInfos?: BundledModuleInfo[]
 ): Promise<void> {
-  const serializedConfig = configJSON(config, adminKey, schemaId, pushMetrics);
-
+  const serializedConfig = configJSON(
+    config,
+    adminKey,
+    schemaId,
+    pushMetrics,
+    bundledModuleInfos
+  );
+  const client = deploymentClient(url);
   try {
-    await axios.post(`${url}/api/push_config`, serializedConfig, {
+    if (config.nodeDependencies.length > 0) {
+      changeSpinner(
+        ctx,
+        "Installing external packages and deploying source code..."
+      );
+    } else {
+      changeSpinner(ctx, "Analyzing and deploying source code...");
+    }
+    await client.post("/api/push_config", serializedConfig, {
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
       headers: {

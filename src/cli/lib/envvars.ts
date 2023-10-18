@@ -7,7 +7,13 @@ import * as dotenv from "dotenv";
 import { Context, logWarning } from "../../bundler/context.js";
 import { loadPackageJson } from "./utils.js";
 
-const FRAMEWORKS = ["create-react-app", "Next.js", "Vite", "Remix"] as const;
+const FRAMEWORKS = [
+  "create-react-app",
+  "Next.js",
+  "Vite",
+  "Remix",
+  "SvelteKit",
+] as const;
 type Framework = (typeof FRAMEWORKS)[number];
 
 type ConvexUrlWriteConfig = {
@@ -83,8 +89,17 @@ export async function suggestedEnvVarName(ctx: Context): Promise<{
     };
   }
 
+  const isSvelteKit = "@sveltejs/kit" in packages;
+  if (isSvelteKit) {
+    return {
+      detectedFramework: "SvelteKit",
+      envVar: "PUBLIC_CONVEX_URL",
+    };
+  }
+
   // Vite is a dependency of a lot of things; vite appearing in dependencies is not a strong indicator.
   const isVite = "vite" in packages;
+
   if (isVite) {
     return {
       detectedFramework: "Vite",
@@ -168,6 +183,7 @@ function suggestedDevEnvFile(
 
 const EXPECTED_NAMES = new Set([
   "CONVEX_URL",
+  "PUBLIC_CONVEX_URL",
   "NEXT_PUBLIC_CONVEX_URL",
   "VITE_CONVEX_URL",
   "REACT_APP_CONVEX_URL",

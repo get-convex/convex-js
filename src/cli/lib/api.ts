@@ -2,7 +2,7 @@ import chalk from "chalk";
 import {
   bigBrainAPI,
   bigBrainAPIMaybeThrows,
-  getAuthHeader,
+  getAuthHeaderFromGlobalConfig,
   getConfiguredDeploymentOrCrash,
   logAndHandleAxiosError,
 } from "./utils.js";
@@ -21,8 +21,7 @@ export type Project = {
   id: string;
   name: string;
   slug: string;
-  active_instances: number;
-  is_demo: boolean;
+  isDemo: boolean;
 };
 
 type AdminKey = string;
@@ -50,12 +49,12 @@ export async function createProjectProvisioningDevOrProd(
     deploymentType: firstDeploymentType,
     backendVersionOverride: process.env.CONVEX_BACKEND_VERSION_OVERRIDE,
   };
-  const data = await bigBrainAPI(
+  const data = await bigBrainAPI({
     ctx,
-    "POST",
-    "create_project",
-    provisioningArgs
-  );
+    method: "POST",
+    url: "create_project",
+    data: provisioningArgs,
+  });
   const {
     projectSlug,
     teamSlug,
@@ -116,15 +115,15 @@ export async function fetchDeploymentCredentialsForName(
 ) {
   let data;
   try {
-    data = await bigBrainAPIMaybeThrows(
+    data = await bigBrainAPIMaybeThrows({
       ctx,
-      "POST",
-      "deployment/authorize_for_name",
-      {
+      method: "POST",
+      url: "deployment/authorize_for_name",
+      data: {
         deploymentName,
         deploymentType,
-      }
-    );
+      },
+    });
   } catch (error) {
     return { error };
   }
@@ -170,7 +169,7 @@ export async function fetchProdDeploymentCredentials(
       );
       await ctx.crash(1);
     }
-    const header = await getAuthHeader(ctx);
+    const header = await getAuthHeaderFromGlobalConfig(ctx);
     if (!header) {
       logFailure(
         ctx,
@@ -192,8 +191,13 @@ export async function fetchProdDeploymentCredentials(
     return await ctx.crash(1);
   }
 
-  const data = await bigBrainAPI(ctx, "POST", "deployment/authorize_prod", {
-    deploymentName: configuredDeployment,
+  const data = await bigBrainAPI({
+    ctx,
+    method: "POST",
+    url: "deployment/authorize_prod",
+    data: {
+      deploymentName: configuredDeployment,
+    },
   });
   const prodDeploymentName = data.deploymentName;
   const adminKey = data.adminKey;
@@ -228,10 +232,16 @@ export async function fetchDeploymentCredentialsProvisionProd(
 ): Promise<{
   url: string;
   adminKey: AdminKey;
+  deploymentName?: string;
 }> {
   const deploymentType = options.prod ? "prod" : "dev";
   if (deploymentType === "prod") {
-    return await fetchProdDeploymentCredentials(ctx, options);
+    const result = await fetchProdDeploymentCredentials(ctx, options);
+    return {
+      url: result.url,
+      adminKey: result.adminKey,
+      deploymentName: result.deploymentNames?.prod,
+    };
   }
   const { url, adminKey } = options;
   if (url !== undefined && adminKey !== undefined) {
@@ -243,11 +253,16 @@ export async function fetchDeploymentCredentialsProvisionProd(
   }
 
   const configuredDeployment = await getConfiguredDeploymentOrCrash(ctx);
-  return await fetchExistingDeploymentCredentialsOrCrash(
+  const result = await fetchExistingDeploymentCredentialsOrCrash(
     ctx,
     configuredDeployment,
     deploymentType
   );
+  return {
+    url: result.url,
+    adminKey: result.adminKey,
+    deploymentName: configuredDeployment,
+  };
 }
 
 // Dashboard
@@ -255,11 +270,11 @@ export async function fetchTeamAndProject(
   ctx: Context,
   deploymentName: string
 ): Promise<{ team: string; project: string }> {
-  const data = await bigBrainAPI(
+  const data = await bigBrainAPI({
     ctx,
-    "GET",
-    `deployment/${deploymentName}/team_and_project`
-  );
+    method: "GET",
+    url: `deployment/${deploymentName}/team_and_project`,
+  });
   const { team, project } = data;
   if (team === undefined || project === undefined) {
     const msg =
@@ -280,16 +295,16 @@ export async function fetchDeploymentCredentialsProvisioningDevOrProdMaybeThrows
   url: string;
   adminKey: AdminKey;
 }> {
-  const data = await await bigBrainAPIMaybeThrows(
+  const data = await await bigBrainAPIMaybeThrows({
     ctx,
-    "POST",
-    "deployment/provision_and_authorize",
-    {
+    method: "POST",
+    url: "deployment/provision_and_authorize",
+    data: {
       teamSlug,
       projectSlug,
       deploymentType,
-    }
-  );
+    },
+  });
   const deploymentName = data.deploymentName;
   const adminKey = data.adminKey;
   const url = data.url;
@@ -331,17 +346,24 @@ async function deriveUrlFromAdminKey(
   ctx: Context,
   adminKey: string | undefined
 ) {
-  if (adminKey) {
-    const parts = adminKey.split("|");
-    if (parts.length === 1) {
-      logFailure(
-        ctx,
-        "Please set CONVEX_DEPLOY_KEY to a new key which you can find on your Convex dashboard."
-      );
-      await ctx.crash(1);
-    }
-    const deploymentName = stripDeploymentTypePrefix(parts[0]);
-    return `https://${deploymentName}.convex.cloud`;
+  if (!adminKey) {
+    return undefined;
   }
-  return undefined;
+  const deploymentName = await deploymentNameFromAdminKey(ctx, adminKey);
+  return `https://${deploymentName}.convex.cloud`;
 }
+
+export const deploymentNameFromAdminKey = async (
+  ctx: Context,
+  adminKey: string
+) => {
+  const parts = adminKey.split("|");
+  if (parts.length === 1) {
+    logFailure(
+      ctx,
+      "Please set CONVEX_DEPLOY_KEY to a new key which you can find on your Convex dashboard."
+    );
+    await ctx.crash(1);
+  }
+  return stripDeploymentTypePrefix(parts[0]);
+};

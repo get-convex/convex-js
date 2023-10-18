@@ -118,6 +118,7 @@ export class ConvexHttpClient {
     const name = getFunctionName(query);
     const body = JSON.stringify({
       path: name,
+      format: "convex_encoded_json",
       args: [convexToJson(queryArgs)],
     });
     const headers: Record<string, string> = {
@@ -177,6 +178,7 @@ export class ConvexHttpClient {
     const name = getFunctionName(mutation);
     const body = JSON.stringify({
       path: name,
+      format: "convex_encoded_json",
       args: [convexToJson(mutationArgs)],
     });
     const headers: Record<string, string> = {
@@ -235,6 +237,7 @@ export class ConvexHttpClient {
     const name = getFunctionName(action);
     const body = JSON.stringify({
       path: name,
+      format: "convex_encoded_json",
       args: [convexToJson(actionArgs)],
     });
     const headers: Record<string, string> = {
@@ -300,7 +303,8 @@ export class ConvexHttpClient {
         : getFunctionName(anyFunction);
     const body = JSON.stringify({
       path: name,
-      args: [convexToJson(functionArgs)],
+      format: "convex_encoded_json",
+      args: convexToJson(functionArgs),
     });
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

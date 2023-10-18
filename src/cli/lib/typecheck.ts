@@ -141,7 +141,7 @@ async function runTscInner(
     return handleResult("typecheckFailed", () => {
       logFailure(ctx, `TypeScript typecheck timed out.`);
       if (result.error) {
-        logError(ctx, chalk.red(`${result.error}`));
+        logError(ctx, chalk.red(`${result.error.toString()}`));
       }
     });
   }

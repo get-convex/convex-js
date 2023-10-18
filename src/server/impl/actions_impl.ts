@@ -14,7 +14,7 @@ export function setupActionCalls(requestId: string) {
       const queryArgs = parseArgs(args);
       const syscallArgs = {
         name,
-        args: [convexToJson(queryArgs)],
+        args: convexToJson(queryArgs),
         version,
         requestId,
       };
@@ -32,7 +32,7 @@ export function setupActionCalls(requestId: string) {
       const mutationArgs = parseArgs(args);
       const syscallArgs = {
         name,
-        args: [convexToJson(mutationArgs)],
+        args: convexToJson(mutationArgs),
         version,
         requestId,
       };
@@ -50,7 +50,7 @@ export function setupActionCalls(requestId: string) {
       const actionArgs = parseArgs(args);
       const syscallArgs = {
         name,
-        args: [convexToJson(actionArgs)],
+        args: convexToJson(actionArgs),
         version,
         requestId,
       };

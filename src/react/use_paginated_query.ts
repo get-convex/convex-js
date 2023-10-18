@@ -33,6 +33,92 @@ export type PaginatedQueryReference = FunctionReference<
   PaginationResult<any>
 >;
 
+// Incrementing integer for each page queried in the usePaginatedQuery hook.
+type QueryPageKey = number;
+
+type UsePaginatedQueryState = {
+  query: FunctionReference<"query">;
+  args: Record<string, Value>;
+  id: number;
+  nextPageKey: QueryPageKey;
+  pageKeys: QueryPageKey[];
+  queries: Record<
+    QueryPageKey,
+    {
+      query: FunctionReference<"query">;
+      // Use the validator type as a test that it matches the args
+      // we generate.
+      args: { paginationOpts: Infer<typeof paginationOptsValidator> };
+    }
+  >;
+  ongoingSplits: Record<QueryPageKey, [QueryPageKey, QueryPageKey]>;
+};
+
+const splitQuery =
+  (key: QueryPageKey, splitCursor: string, continueCursor: string) =>
+  (prevState: UsePaginatedQueryState) => {
+    const queries = { ...prevState.queries };
+    const splitKey1 = prevState.nextPageKey;
+    const splitKey2 = prevState.nextPageKey + 1;
+    const nextPageKey = prevState.nextPageKey + 2;
+    queries[splitKey1] = {
+      query: prevState.query,
+      args: {
+        ...prevState.args,
+        paginationOpts: {
+          ...prevState.queries[key].args.paginationOpts,
+          endCursor: splitCursor,
+        },
+      },
+    };
+    queries[splitKey2] = {
+      query: prevState.query,
+      args: {
+        ...prevState.args,
+        paginationOpts: {
+          ...prevState.queries[key].args.paginationOpts,
+          cursor: splitCursor,
+          endCursor: continueCursor,
+        },
+      },
+    };
+    const ongoingSplits = { ...prevState.ongoingSplits };
+    ongoingSplits[key] = [splitKey1, splitKey2];
+    return {
+      ...prevState,
+      nextPageKey,
+      queries,
+      ongoingSplits,
+    };
+  };
+
+const completeSplitQuery =
+  (key: QueryPageKey) => (prevState: UsePaginatedQueryState) => {
+    const completedSplit = prevState.ongoingSplits[key];
+    if (completedSplit === undefined) {
+      return prevState;
+    }
+    const queries = { ...prevState.queries };
+    delete queries[key];
+    const ongoingSplits = { ...prevState.ongoingSplits };
+    delete ongoingSplits[key];
+    let pageKeys = prevState.pageKeys.slice();
+    const pageIndex = prevState.pageKeys.findIndex((v) => v === key);
+    if (pageIndex >= 0) {
+      pageKeys = [
+        ...prevState.pageKeys.slice(0, pageIndex),
+        ...completedSplit,
+        ...prevState.pageKeys.slice(pageIndex + 1),
+      ];
+    }
+    return {
+      ...prevState,
+      queries,
+      pageKeys,
+      ongoingSplits,
+    };
+  };
+
 /**
  * Load data reactively from a paginated query to a create a growing list.
  *
@@ -91,7 +177,8 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
         query,
         args: args as Record<string, Value>,
         id,
-        maxQueryIndex: 0,
+        nextPageKey: 1,
+        pageKeys: [0],
         queries: {
           0: {
             query,
@@ -105,6 +192,7 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
             },
           },
         },
+        ongoingSplits: {},
       };
     };
     // ESLint doesn't like that we're stringifying the args. We do this because
@@ -118,21 +206,8 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
     options.initialNumItems,
   ]);
 
-  const [state, setState] = useState<{
-    query: FunctionReference<"query">;
-    args: Record<string, Value>;
-    id: number;
-    maxQueryIndex: number;
-    queries: Record<
-      number,
-      {
-        query: FunctionReference<"query">;
-        // Use the validator type as a test that it matches the args
-        // we generate.
-        args: { paginationOpts: Infer<typeof paginationOptsValidator> };
-      }
-    >;
-  }>(createInitialState);
+  const [state, setState] =
+    useState<UsePaginatedQueryState>(createInitialState);
 
   // `currState` is the state that we'll render based on.
   let currState = state;
@@ -154,28 +229,18 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
     let currResult = undefined;
 
     const allItems = [];
-    for (let i = 0; i <= currState.maxQueryIndex; i++) {
-      currResult = resultsObject[i];
+    for (const pageKey of currState.pageKeys) {
+      currResult = resultsObject[pageKey];
       if (currResult === undefined) {
         break;
       }
 
       if (currResult instanceof Error) {
-        if (
-          currResult.message.includes("InvalidCursor") ||
-          currResult.message.includes("ArrayTooLong") ||
-          currResult.message.includes("TooManyReads") ||
-          currResult.message.includes("TooManyDocumentsRead") ||
-          currResult.message.includes("ReadsTooLarge")
-        ) {
-          // `usePaginatedQuery` handles a few types of query errors:
-
+        if (currResult.message.includes("InvalidCursor")) {
           // - InvalidCursor: If the cursor is invalid, probably the paginated
           // database query was data-dependent and changed underneath us. The
           // cursor in the params or journal no longer matches the current
           // database query.
-          // - ArrayTooLong, TooManyReads, TooManyDocumentsRead, ReadsTooLarge:
-          // Likely so many elements were added to a single page they hit our limit.
 
           // In all cases, we want to restart pagination to throw away all our
           // existing cursors.
@@ -189,14 +254,39 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
           throw currResult;
         }
       }
+      const ongoingSplit = currState.ongoingSplits[pageKey];
+      if (ongoingSplit !== undefined) {
+        if (
+          resultsObject[ongoingSplit[0]] !== undefined &&
+          resultsObject[ongoingSplit[1]] !== undefined
+        ) {
+          // Both pages of the split have results now. Swap them in.
+          setState(completeSplitQuery(pageKey));
+        }
+      } else if (
+        currResult.page.length > options.initialNumItems * 2 &&
+        currResult.splitCursor
+      ) {
+        // If a single page has more than double the expected number of items,
+        // split it.
+        setState(
+          splitQuery(pageKey, currResult.splitCursor, currResult.continueCursor)
+        );
+      }
       allItems.push(...currResult.page);
     }
     return [allItems, currResult];
-  }, [resultsObject, currState.maxQueryIndex, createInitialState]);
+  }, [
+    resultsObject,
+    currState.pageKeys,
+    currState.ongoingSplits,
+    options.initialNumItems,
+    createInitialState,
+  ]);
 
   const statusObject = useMemo(() => {
     if (maybeLastResult === undefined) {
-      if (currState.maxQueryIndex === 0) {
+      if (currState.nextPageKey === 1) {
         return {
           status: "LoadingFirstPage",
           isLoading: true,
@@ -232,9 +322,9 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
         if (!alreadyLoadingMore) {
           alreadyLoadingMore = true;
           setState((prevState) => {
-            const maxQueryIndex = prevState.maxQueryIndex + 1;
+            const pageKeys = [...prevState.pageKeys, prevState.nextPageKey];
             const queries = { ...prevState.queries };
-            queries[maxQueryIndex] = {
+            queries[prevState.nextPageKey] = {
               query: prevState.query,
               args: {
                 ...prevState.args,
@@ -247,14 +337,15 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
             };
             return {
               ...prevState,
-              maxQueryIndex,
+              nextPageKey: prevState.nextPageKey + 1,
+              pageKeys,
               queries,
             };
           });
         }
       },
     } as const;
-  }, [maybeLastResult, currState.maxQueryIndex]);
+  }, [maybeLastResult, currState.nextPageKey]);
 
   return {
     results,
@@ -290,6 +381,13 @@ let paginationId = 0;
 function nextPaginationId(): number {
   paginationId++;
   return paginationId;
+}
+
+/**
+ * Reset pagination id for tests only, so tests know what it is.
+ */
+export function resetPaginationId() {
+  paginationId = 0;
 }
 
 /**
@@ -418,9 +516,6 @@ export function optimisticallyUpdateValueInPaginatedQuery<
     currentValue: PaginatedQueryItem<Query>
   ) => PaginatedQueryItem<Query>
 ): void {
-  // TODO: This should really be sorted JSON or an `equals` method
-  // so that the order of properties in sets, maps, and objects doesn't break
-  // our comparison.
   const expectedArgs = JSON.stringify(convexToJson(args as Value));
 
   for (const queryResult of localStore.getAllQueries(query)) {

@@ -26,8 +26,5 @@ checkdeps.mjs
 bundle-server.mjs
 build.py
 build.cjs
-tmpPackage
+tmpPackage*
 api-extractor-configs/temp/
-
-# designates development
-scripts/only-exists-in-dev.txt

@@ -55,12 +55,8 @@ export async function runPush(ctx: Context, options: PushOptions) {
   }
 
   const timeBundleStarts = performance.now();
-  const localConfig = await configFromProjectConfig(
-    ctx,
-    projectConfig,
-    configPath,
-    verbose
-  );
+  const { config: localConfig, bundledModuleInfos } =
+    await configFromProjectConfig(ctx, projectConfig, configPath, verbose);
 
   if (options.debugBundlePath) {
     const config = configJSON(localConfig, options.adminKey);
@@ -139,6 +135,7 @@ export async function runPush(ctx: Context, options: PushOptions) {
     options.adminKey,
     options.url,
     timing,
-    schemaId
+    schemaId,
+    bundledModuleInfos
   );
 }

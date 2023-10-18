@@ -195,26 +195,26 @@ function jsonToConvexInternal(
     return value.map((value) => jsonToConvexInternal(value, allowMapsAndSets));
   }
   if (typeof value !== "object") {
-    throw new Error(`Unexpected type of ${value}`);
+    throw new Error(`Unexpected type of ${value as any}`);
   }
   const entries = Object.entries(value);
   if (entries.length === 1) {
     const key = entries[0][0];
     if (key === "$bytes") {
       if (typeof value.$bytes !== "string") {
-        throw new Error(`Malformed $bytes field on ${value}`);
+        throw new Error(`Malformed $bytes field on ${value as any}`);
       }
       return Base64.toByteArray(value.$bytes).buffer;
     }
     if (key === "$integer") {
       if (typeof value.$integer !== "string") {
-        throw new Error(`Malformed $integer field on ${value}`);
+        throw new Error(`Malformed $integer field on ${value as any}`);
       }
       return base64ToBigInt(value.$integer);
     }
     if (key === "$float") {
       if (typeof value.$float !== "string") {
-        throw new Error(`Malformed $float field on ${value}`);
+        throw new Error(`Malformed $float field on ${value as any}`);
       }
       const floatBytes = Base64.toByteArray(value.$float);
       if (floatBytes.byteLength !== 8) {
@@ -231,11 +231,13 @@ function jsonToConvexInternal(
     }
     if (key === "$set") {
       if (!Array.isArray(value.$set)) {
-        throw new Error(`Malformed $set field on ${value}`);
+        throw new Error(`Malformed $set field on ${value as any}`);
       }
       if (!allowMapsAndSets) {
         throw new Error(
-          `Received a Set which is no longer supported as a Convex type, with values: ${value.$set}.`
+          `Received a Set which is no longer supported as a Convex type, with values: ${value.$set.join(
+            ", "
+          )}.`
         );
       }
       return new Set(
@@ -244,17 +246,19 @@ function jsonToConvexInternal(
     }
     if (key === "$map") {
       if (!Array.isArray(value.$map)) {
-        throw new Error(`Malformed $map field on ${value}`);
+        throw new Error(`Malformed $map field on ${value as any}`);
       }
       if (!allowMapsAndSets) {
         throw new Error(
-          `Received a Map which is no longer supported as a Convex type, with entries: ${value.$map}.`
+          `Received a Map which is no longer supported as a Convex type, with entries: ${value.$map.join(
+            ", "
+          )}.`
         );
       }
       const map = new Map();
       for (const pair of value.$map) {
         if (!Array.isArray(pair) || pair.length !== 2) {
-          throw new Error(`Malformed pair in $map ${value}`);
+          throw new Error(`Malformed pair in $map ${value as any}`);
         }
         const k = jsonToConvexInternal(pair[0], allowMapsAndSets);
         const v = jsonToConvexInternal(pair[1], allowMapsAndSets);
@@ -285,9 +289,7 @@ function jsonToConvexInternal(
  */
 export function jsonToConvex(
   value: JSONValue,
-  /**
-   * @internal
-   */
+  /** @internal */
   allowMapsAndSets = false
 ): Value {
   return jsonToConvexInternal(value, allowMapsAndSets);
@@ -433,7 +435,9 @@ function convexToJsonInternal(
   }
 
   const out: { [key: string]: JSONValue } = {};
-  for (const [k, v] of Object.entries(value)) {
+  const entries = Object.entries(value);
+  entries.sort(([k1, _v1], [k2, _v2]) => (k1 === k2 ? 0 : k1 < k2 ? -1 : 1));
+  for (const [k, v] of entries) {
     if (v !== undefined) {
       validateObjectField(k);
       out[k] = convexToJsonInternal(
@@ -510,9 +514,7 @@ function convexOrUndefinedToJsonInternal(
  */
 export function convexToJson(
   value: Value,
-  /**
-   * @internal
-   */
+  /** @internal */
   allowMapsAndSets = false
 ): JSONValue {
   return convexToJsonInternal(value, value, "", false, allowMapsAndSets);

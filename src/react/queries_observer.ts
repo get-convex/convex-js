@@ -44,9 +44,8 @@ export class QueriesObserver {
     // the deduping in the `ConvexReactClient` can help if there are duplicates.
     for (const identifier of Object.keys(newQueries)) {
       const { query, args } = newQueries[identifier];
-      if (!getFunctionName(query)) {
-        throw new Error(`query ${name} is not a FunctionReference`);
-      }
+      // Might throw
+      getFunctionName(query);
 
       if (this.queries[identifier] === undefined) {
         // No existing query => add it.
@@ -89,9 +88,9 @@ export class QueriesObserver {
     const result: Record<Identifier, Value | Error | undefined> = {};
     for (const identifier of Object.keys(queries)) {
       const { query, args } = queries[identifier];
-      if (!getFunctionName(query)) {
-        throw new Error(`query ${name} is not a FunctionReference`);
-      }
+      // Might throw
+      getFunctionName(query);
+
       // Note: We're not gonna watch, we could save some allocations
       // by getting a reference to the client directly instead.
       const watch = this.createWatch(query, args);

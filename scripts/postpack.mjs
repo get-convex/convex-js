@@ -28,7 +28,7 @@ let packageJson = JSON.parse(
 pointToPublic(packageJson.exports);
 pointToPublic(packageJson.typesVersions);
 
-console.log("Removing dev-only ts-node CLI script");
+console.log("removing dev-only ts-node CLI script");
 packageJson.bin["convex"] = packageJson.bin["convex-bundled"];
 delete packageJson.bin["convex-bundled"];
 delete packageJson.bin["//"];
@@ -55,6 +55,10 @@ fs.rmSync(path.join(tmpPackage, "dist", "internal-cjs-types"), {
 fs.rmSync(path.join(tmpPackage, "dist", "internal-esm-types"), {
   recursive: true,
 });
+
+// Remove a few more @internal types
+console.log("modifying types to remove remaining @internal types");
+rewriteDtsToRemoveInternal(tmpPackage);
 
 run("tar", "czvf", tarball, "-C", tmpDir, "package");
 fs.rmSync(tmpDir, { recursive: true });
@@ -103,4 +107,85 @@ function getStubDirectories(dirname) {
 function run(...args) {
   console.log(args.join(" "));
   spawnSync(args[0], args.slice(1), { stdio: "inherit" });
+}
+
+// `tsc --removeInternal` works on methods of classes but not properties of
+// objects or function parameters so until we move back to api-extractor we
+// manually remove a list of @internal properties.
+//
+// To maintain declaration maps it's helpful to avoid changing line numbers.
+function rewriteDtsToRemoveInternal(dirname) {
+  // Properties aren't removed by tsc --removeInternal
+  replaceType(
+    dirname,
+    "values/validator.d.ts",
+    `/** @internal */
+    record<K extends string, ValueValidator extends Validator<any, any, any>>(keys: Validator<K, false, any>, values: ValueValidator): RecordValidator<K, ValueValidator>;`,
+    `/* internal record
+    record<K extends string, ValueValidator extends Validator<any, any, any>>(keys: Validator<K, false, any>, values: ValueValidator): RecordValidator<K, ValueValidator>; */`
+  );
+  // Parameters aren't removed by tsc --removeInternal
+  replaceType(
+    dirname,
+    "values/value.d.ts",
+    `export declare function jsonToConvex(value: JSONValue, 
+/** @internal */
+allowMapsAndSets?: boolean): Value;`,
+    `export declare function jsonToConvex(value: JSONValue, 
+/* internal allowMapsAndSets */
+): Value;`
+  );
+  replaceType(
+    dirname,
+    "values/value.d.ts",
+    `export declare function convexToJson(value: Value, 
+/** @internal */
+allowMapsAndSets?: boolean): JSONValue;`,
+    `export declare function convexToJson(value: Value, 
+/* internal allowMapsAndSets */
+): JSONValue;`
+  );
+  auditForInternal(path.join(dirname, "dist", "cjs-types"));
+  auditForInternal(path.join(dirname, "dist", "esm-types"));
+}
+
+function replaceType(dirname, relPath, needle, replacement) {
+  for (const types of [
+    path.join(dirname, "dist", "cjs-types"),
+    path.join(dirname, "dist", "esm-types"),
+  ]) {
+    const file = path.join(types, relPath);
+    let contents = fs.readFileSync(file, { encoding: "utf-8" });
+    if (!contents.includes(needle)) {
+      throw new Error(`Can't find string ${needle} in ${file}`);
+    }
+    const modified = contents.replace(needle, replacement);
+    fs.writeFileSync(file, modified, { encoding: "utf-8" });
+    console.log("replaced\n", needle, "\nwith\n", replacement);
+  }
+}
+
+// Assert that no `@internal` docstrings exist in types.
+function auditForInternal(dir) {
+  for (const entry of fs.readdirSync(dir)) {
+    const file = path.join(dir, entry);
+    if (fs.statSync(file)?.isDirectory()) {
+      auditForInternal(file);
+    } else if (file.endsWith(".d.ts")) {
+      const contents = fs.readFileSync(file, { encoding: "utf-8" });
+      const pattern =
+        /\/\*\*(?<docstringContents>(\*(?!\/)|[^*])*@internal(\*(?!\/)|[^*])*)\*\/.*\n(?<nextLine>.*)\n/gm;
+      const matches = [...contents.matchAll(pattern)];
+      for (const [match] of matches) {
+        console.log(
+          "found @internal type in",
+          file,
+          `\n\`\`\`\n${match}\`\`\``
+        );
+        throw new Error(
+          "Found @internal type in published types! Until we switch to api-extractor you need to add a pattern for this in scripts/postpack.mjs in rewriteDtsToRemoveInternal()."
+        );
+      }
+    }
+  }
 }

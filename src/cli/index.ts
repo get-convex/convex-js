@@ -6,7 +6,7 @@ import { dashboard } from "./dashboard.js";
 import { deployments } from "./deployments.js";
 import { docs } from "./docs.js";
 import { run } from "./run.js";
-import { version } from "../index.js";
+import { version } from "./version.js";
 import { auth } from "./auth.js";
 import { codegen } from "./codegen.js";
 import { reinit } from "./reinit.js";
@@ -21,6 +21,8 @@ import { productionProvisionHost, provisionHost } from "./lib/config.js";
 import { convexImport } from "./convexImport.js";
 import { dev } from "./dev.js";
 import { deploy } from "./deploy.js";
+import { preview } from "./preview.js";
+import { logs } from "./logs.js";
 
 const MINIMUM_MAJOR_VERSION = 16;
 const MINIMUM_MINOR_VERSION = 15;
@@ -89,6 +91,7 @@ async function main() {
     .addCommand(reinit, { hidden: true })
     .addCommand(dev)
     .addCommand(deploy)
+    .addCommand(preview, { hidden: true })
     .addCommand(deployments, { hidden: true })
     .addCommand(run)
     .addCommand(typecheck, { hidden: true })
@@ -98,6 +101,7 @@ async function main() {
     .addCommand(dashboard)
     .addCommand(docs)
     .addCommand(update)
+    .addCommand(logs)
     .addHelpCommand("help <command>", "Show help for given <command>")
     .version(version)
     // Hide version and help so they don't clutter

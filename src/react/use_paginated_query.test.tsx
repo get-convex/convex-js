@@ -3,10 +3,11 @@
  */
 /* eslint-disable @typescript-eslint/ban-types */
 import { expect, jest, test } from "@jest/globals";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import React from "react";
 
 import {
+  anyApi,
   FunctionReference,
   makeFunctionReference,
   PaginationOptions,
@@ -17,6 +18,7 @@ import { Value } from "../values";
 import { ConvexProvider, ConvexReactClient } from "./client.js";
 import {
   PaginatedQueryArgs,
+  resetPaginationId,
   usePaginatedQuery,
 } from "./use_paginated_query.js";
 import { PaginatedQueryItem } from "./use_paginated_query.js";
@@ -205,6 +207,170 @@ test("Updates to a new query if query name or args change", () => {
   ];
   rerender();
   expect(watchQuerySpy.mock.calls.length).toBe(9);
+});
+
+describe("usePaginatedQuery pages", () => {
+  let client: ConvexReactClient;
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <ConvexProvider client={client}>{children}</ConvexProvider>
+  );
+  const query: FunctionReference<"query"> = makeFunctionReference("myQuery");
+  const mockPage = (
+    opts: PaginationOptions,
+    retval: PaginationResult<unknown>
+  ) => {
+    act(() => {
+      // Set a query result with an optimistic update.
+      // The mutation doesn't go through because the client's websocket isn't
+      // connected, so the optimistic update persists.
+      void client.mutation(
+        anyApi.myMutation.default,
+        {},
+        {
+          optimisticUpdate: (localStore) => {
+            localStore.setQuery(
+              anyApi.myQuery.default,
+              {
+                paginationOpts: { ...opts, id: 1 },
+              },
+              retval
+            );
+          },
+        }
+      );
+    });
+  };
+
+  beforeEach(() => {
+    client = new ConvexReactClient(address);
+    resetPaginationId();
+  });
+
+  test("loadMore", () => {
+    const { result } = renderHook(
+      () => usePaginatedQuery(query, {}, { initialNumItems: 1 }),
+      { wrapper }
+    );
+    mockPage(
+      {
+        numItems: 1,
+        cursor: null,
+      },
+      {
+        page: ["item1"],
+        continueCursor: "abc",
+        isDone: false,
+      }
+    );
+    mockPage(
+      {
+        numItems: 2,
+        cursor: "abc",
+      },
+      {
+        page: ["item2"],
+        continueCursor: "def",
+        isDone: true,
+      }
+    );
+    expect(result.current.status).toStrictEqual("CanLoadMore");
+    expect(result.current.results).toStrictEqual(["item1"]);
+    act(() => {
+      result.current.loadMore(2);
+    });
+    expect(result.current.status).toStrictEqual("Exhausted");
+    expect(result.current.results).toStrictEqual(["item1", "item2"]);
+  });
+
+  test("single page updating", () => {
+    const { result } = renderHook(
+      () => usePaginatedQuery(query, {}, { initialNumItems: 1 }),
+      { wrapper }
+    );
+    mockPage(
+      {
+        numItems: 1,
+        cursor: null,
+      },
+      {
+        page: ["item1"],
+        continueCursor: "abc",
+        isDone: true,
+      }
+    );
+    expect(result.current.status).toStrictEqual("Exhausted");
+    expect(result.current.results).toStrictEqual(["item1"]);
+    mockPage(
+      {
+        numItems: 1,
+        cursor: null,
+      },
+      {
+        page: ["item2", "item3"],
+        continueCursor: "def",
+        isDone: true,
+      }
+    );
+    expect(result.current.status).toStrictEqual("Exhausted");
+    expect(result.current.results).toStrictEqual(["item2", "item3"]);
+  });
+
+  test("page split", () => {
+    const { result } = renderHook(
+      () => usePaginatedQuery(query, {}, { initialNumItems: 1 }),
+      { wrapper }
+    );
+    mockPage(
+      {
+        numItems: 1,
+        cursor: null,
+      },
+      {
+        page: ["item1", "item2", "item3", "item4"],
+        continueCursor: "abc",
+        splitCursor: "mid",
+        isDone: true,
+      }
+    );
+    expect(result.current.status).toStrictEqual("Exhausted");
+    expect(result.current.results).toStrictEqual([
+      "item1",
+      "item2",
+      "item3",
+      "item4",
+    ]);
+    mockPage(
+      {
+        numItems: 1,
+        cursor: null,
+        endCursor: "mid",
+      },
+      {
+        page: ["item1S", "item2S"],
+        continueCursor: "mid",
+        isDone: false,
+      }
+    );
+    mockPage(
+      {
+        numItems: 1,
+        cursor: "mid",
+        endCursor: "abc",
+      },
+      {
+        page: ["item3S", "item4S"],
+        continueCursor: "abc",
+        isDone: true,
+      }
+    );
+    expect(result.current.status).toStrictEqual("Exhausted");
+    expect(result.current.results).toStrictEqual([
+      "item1S",
+      "item2S",
+      "item3S",
+      "item4S",
+    ]);
+  });
 });
 
 describe("PaginatedQueryArgs", () => {

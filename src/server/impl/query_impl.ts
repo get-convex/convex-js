@@ -279,21 +279,22 @@ export class QueryImpl implements Query<GenericTableInfo> {
     const query = this.takeQuery();
     const pageSize = paginationOpts.numItems;
     const cursor = paginationOpts.cursor;
+    const endCursor = paginationOpts?.endCursor ?? null;
     const maximumRowsRead = paginationOpts.maximumRowsRead ?? null;
-    const { page, isDone, continueCursor } = await performAsyncSyscall(
-      "1.0/queryPage",
-      {
+    const { page, isDone, continueCursor, splitCursor } =
+      await performAsyncSyscall("1.0/queryPage", {
         query,
         cursor,
+        endCursor,
         pageSize,
         maximumRowsRead,
         maximumBytesRead: paginationOpts.maximumBytesRead,
-      }
-    );
+      });
     return {
       page: page.map((json: string) => jsonToConvex(json, true)),
       isDone,
       continueCursor,
+      splitCursor,
     };
   }
 

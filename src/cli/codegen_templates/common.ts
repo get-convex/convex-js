@@ -1,4 +1,4 @@
-import { version } from "../../index.js";
+import { version } from "../version.js";
 
 export function header(oneLineDescription: string) {
   return `/* eslint-disable */

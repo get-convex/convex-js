@@ -38,6 +38,13 @@ export interface PaginationResult<T> {
    * A {@link Cursor} to continue loading more results.
    */
   continueCursor: Cursor;
+
+  /**
+   * A {@link Cursor} to split the page into two, so the page from
+   * (cursor, continueCursor] can be replaced by two pages (cursor, splitCursor]
+   * and (splitCursor, continueCursor].
+   */
+  splitCursor?: Cursor | null;
 }
 
 /**
@@ -65,6 +72,14 @@ export interface PaginationOptions {
    * at the beginning of the query results.
    */
   cursor: Cursor | null;
+
+  /**
+   * A {@link Cursor} representing the end of this page or `null | undefined` to
+   * use `numItems` instead.
+   *
+   * @internal
+   */
+  endCursor?: Cursor | null;
 
   /**
    * The maximum number of rows that should be read from the database.
@@ -100,8 +115,7 @@ export interface PaginationOptions {
 /**
  * A {@link values.Validator} for {@link PaginationOptions}.
  *
- * This includes the standard {@link PaginationOptions.numItems} and
- *  {@link PaginationOptions.cursor} properties along with
+ * This includes the standard {@link PaginationOptions} properties along with
  * an optional cache-busting `id` property used by {@link react.usePaginatedQuery}.
  *
  * @public
@@ -109,5 +123,8 @@ export interface PaginationOptions {
 export const paginationOptsValidator = v.object({
   numItems: v.number(),
   cursor: v.union(v.string(), v.null()),
+  endCursor: v.optional(v.union(v.string(), v.null())),
   id: v.optional(v.number()),
+  maximumRowsRead: v.optional(v.number()),
+  maximumBytesRead: v.optional(v.number()),
 });

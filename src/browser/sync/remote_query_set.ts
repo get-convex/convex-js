@@ -26,7 +26,9 @@ export class RemoteQuerySet {
       this.version.ts.notEquals(start.ts) ||
       this.version.identity !== start.identity
     ) {
-      throw new Error(`Invalid start version: ${start.ts}:${start.querySet}`);
+      throw new Error(
+        `Invalid start version: ${start.ts.toString()}:${start.querySet}`
+      );
     }
     for (const modification of transition.modifications) {
       switch (modification.type) {
@@ -69,7 +71,7 @@ export class RemoteQuerySet {
         default: {
           // Enforce that the switch-case is exhaustive.
           const _: never = modification;
-          throw new Error(`Invalid modification ${modification}`);
+          throw new Error(`Invalid modification ${(modification as any).type}`);
         }
       }
     }

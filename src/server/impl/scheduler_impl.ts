@@ -78,7 +78,7 @@ function runAfterSyscallArgs(
   return {
     name,
     ts,
-    args: [convexToJson(functionArgs)],
+    args: convexToJson(functionArgs),
     version,
   };
 }
@@ -103,7 +103,7 @@ function runAtSyscallArgs(
   return {
     name,
     ts,
-    args: [convexToJson(functionArgs)],
+    args: convexToJson(functionArgs),
     version,
   };
 }
