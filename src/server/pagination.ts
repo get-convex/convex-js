@@ -45,6 +45,14 @@ export interface PaginationResult<T> {
    * and (splitCursor, continueCursor].
    */
   splitCursor?: Cursor | null;
+
+  /**
+   * When a query reads too much data, it may return 'SplitRecommended' to
+   * indicate that the page should be split into two with `splitCursor`.
+   * When a query reads so much data that `page` might be incomplete, its status
+   * becomes 'SplitRequired'.
+   */
+  pageStatus?: "SplitRecommended" | "SplitRequired" | null;
 }
 
 /**

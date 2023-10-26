@@ -21,7 +21,6 @@ import { productionProvisionHost, provisionHost } from "./lib/config.js";
 import { convexImport } from "./convexImport.js";
 import { dev } from "./dev.js";
 import { deploy } from "./deploy.js";
-import { preview } from "./preview.js";
 import { logs } from "./logs.js";
 
 const MINIMUM_MAJOR_VERSION = 16;
@@ -91,7 +90,6 @@ async function main() {
     .addCommand(reinit, { hidden: true })
     .addCommand(dev)
     .addCommand(deploy)
-    .addCommand(preview, { hidden: true })
     .addCommand(deployments, { hidden: true })
     .addCommand(run)
     .addCommand(typecheck, { hidden: true })

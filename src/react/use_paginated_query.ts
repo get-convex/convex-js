@@ -264,14 +264,22 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
           setState(completeSplitQuery(pageKey));
         }
       } else if (
-        currResult.page.length > options.initialNumItems * 2 &&
-        currResult.splitCursor
+        currResult.splitCursor &&
+        (currResult.pageStatus === "SplitRecommended" ||
+          currResult.pageStatus === "SplitRequired" ||
+          currResult.page.length > options.initialNumItems * 2)
       ) {
         // If a single page has more than double the expected number of items,
-        // split it.
+        // or if the server requests a split, split the page into two.
         setState(
           splitQuery(pageKey, currResult.splitCursor, currResult.continueCursor)
         );
+      }
+      if (currResult.pageStatus === "SplitRequired") {
+        // If pageStatus is 'SplitRequired', it means the server was not able to
+        // fetch the full page. So we stop results before the incomplete
+        // page and return 'LoadingMore' while the page is splitting.
+        return [allItems, undefined];
       }
       allItems.push(...currResult.page);
     }

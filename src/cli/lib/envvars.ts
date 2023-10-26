@@ -196,3 +196,36 @@ export function buildEnvironment(): string | boolean {
     ? "Netlify"
     : false;
 }
+
+export function gitBranchFromEnvironment(): string | null {
+  if (process.env.VERCEL) {
+    // https://vercel.com/docs/projects/environment-variables/system-environment-variables
+    return process.env.VERCEL_GIT_COMMIT_REF ?? null;
+  }
+  if (process.env.NETLIFY) {
+    // https://docs.netlify.com/configure-builds/environment-variables/
+    return process.env.HEAD ?? null;
+  }
+
+  if (process.env.CI) {
+    // https://docs.github.com/en/actions/learn-github-actions/variables
+    // https://docs.gitlab.com/ee/ci/variables/predefined_variables.html
+    return (
+      process.env.GITHUB_HEAD_REF ?? process.env.CI_COMMIT_REF_NAME ?? null
+    );
+  }
+
+  return null;
+}
+
+export function isNonProdBuildEnvironment(): boolean {
+  if (process.env.VERCEL) {
+    // https://vercel.com/docs/projects/environment-variables/system-environment-variables
+    return process.env.VERCEL_ENV !== "production";
+  }
+  if (process.env.NETLIFY) {
+    // https://docs.netlify.com/configure-builds/environment-variables/
+    return process.env.CONTEXT !== "production";
+  }
+  return false;
+}

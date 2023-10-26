@@ -281,7 +281,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
     const cursor = paginationOpts.cursor;
     const endCursor = paginationOpts?.endCursor ?? null;
     const maximumRowsRead = paginationOpts.maximumRowsRead ?? null;
-    const { page, isDone, continueCursor, splitCursor } =
+    const { page, isDone, continueCursor, splitCursor, pageStatus } =
       await performAsyncSyscall("1.0/queryPage", {
         query,
         cursor,
@@ -295,6 +295,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
       isDone,
       continueCursor,
       splitCursor,
+      pageStatus,
     };
   }
 

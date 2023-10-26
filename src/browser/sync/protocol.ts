@@ -217,7 +217,7 @@ type EncodedTS = EncodedU64;
 type LogLines = string[];
 
 export type StateVersion = {
-  querySet: QueryId;
+  querySet: QuerySetVersion;
   ts: TS;
   identity: IdentityVersion;
 };

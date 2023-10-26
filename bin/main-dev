@@ -1,2 +1,3 @@
-#!/bin/sh
-"exec" "`dirname $0`/../node_modules/.bin/ts-node-esm" "--swc" "`dirname $0`/../src/cli/index.ts" "$@"
+#!/bin/bash
+SCRIPTDIR="$(echo "$0" | python3 -c 'import os; print(os.path.dirname(os.path.realpath(input())))')"
+"exec" "$SCRIPTDIR/../node_modules/.bin/ts-node-esm" "--swc" "$SCRIPTDIR/../src/cli/index.ts" "$@"

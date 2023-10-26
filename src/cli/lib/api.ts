@@ -24,6 +24,8 @@ export type Project = {
   isDemo: boolean;
 };
 
+export const CONVEX_DEPLOY_KEY_ENV_VAR_NAME = "CONVEX_DEPLOY_KEY";
+
 type AdminKey = string;
 
 // Init
@@ -137,6 +139,12 @@ export async function fetchDeploymentCredentialsForName(
   return { deploymentName, adminKey, url };
 }
 
+export function readConfiguredAdminKey(
+  adminKey: string | undefined
+): string | undefined {
+  return adminKey ?? process.env[CONVEX_DEPLOY_KEY_ENV_VAR_NAME] ?? undefined;
+}
+
 // Deploy
 export async function fetchProdDeploymentCredentials(
   ctx: Context,
@@ -152,8 +160,7 @@ export async function fetchProdDeploymentCredentials(
     prod: string;
   };
 }> {
-  const configuredAdminKey =
-    options.adminKey ?? process.env.CONVEX_DEPLOY_KEY ?? undefined;
+  const configuredAdminKey = readConfiguredAdminKey(options.adminKey);
   const configuredUrl =
     options.url ?? (await deriveUrlFromAdminKey(ctx, configuredAdminKey));
 
@@ -165,7 +172,7 @@ export async function fetchProdDeploymentCredentials(
     if (buildEnvironmentExpectsConvexDeployKey) {
       logFailure(
         ctx,
-        `${buildEnvironmentExpectsConvexDeployKey} build environment detected but CONVEX_DEPLOY_KEY is not set. Set this environment variable to deploy from this environment.`
+        `${buildEnvironmentExpectsConvexDeployKey} build environment detected but ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} is not set. Set this environment variable to deploy from this environment.`
       );
       await ctx.crash(1);
     }
@@ -173,7 +180,7 @@ export async function fetchProdDeploymentCredentials(
     if (!header) {
       logFailure(
         ctx,
-        "Error: You are not logged in. Log in with `npx convex dev` or set the CONVEX_DEPLOY_KEY environment variable."
+        `Error: You are not logged in. Log in with \`npx convex dev\` or set the ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} environment variable.`
       );
       await ctx.crash(1);
     }
@@ -361,7 +368,7 @@ export const deploymentNameFromAdminKey = async (
   if (parts.length === 1) {
     logFailure(
       ctx,
-      "Please set CONVEX_DEPLOY_KEY to a new key which you can find on your Convex dashboard."
+      `Please set ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} to a new key which you can find on your Convex dashboard.`
     );
     await ctx.crash(1);
   }
