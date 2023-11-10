@@ -1,6 +1,5 @@
 import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
-import React from "react";
-import { ReactNode, useCallback, useMemo } from "react";
+import React, { ReactNode, useCallback, useMemo } from "react";
 import { AuthTokenFetcher } from "../browser/sync/client.js";
 import { ConvexProviderWithAuth } from "../react/ConvexAuthState.js";
 
@@ -18,6 +17,35 @@ type IConvexReactClient = {
  * It must be wrapped by a configured `KindeProvider` from `@kinde-oss/kinde-auth-react`.
  *
  * @public
+ * @example
+ * ```tsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { KindeProvider } from "@kinde-oss/kinde-auth-react";
+import { ConvexReactClient } from "convex/react";
+import { ConvexProviderWithKinde } from "convex/react-kinde";
+import App from "./App.jsx";
+import "./index.css";
+
+const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL);
+console.log(import.meta.env.VITE_KINDE_LOGOUT_URI);
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <KindeProvider
+      clientId={import.meta.env.VITE_KINDE_CLIENT_ID}
+      domain={import.meta.env.VITE_KINDE_DOMAIN}
+      logoutUri={import.meta.env.VITE_KINDE_LOGOUT_URI}
+      redirectUri={import.meta.env.VITE_KINDE_REDIRECT_URI}
+      audience={import.meta.env.VITE_KINDE_AUDIENCE}
+      isDangerouslyUseLocalStorage={true}
+    >
+      <ConvexProviderWithKinde client={convex}>
+        <App />
+      </ConvexProviderWithKinde>
+    </KindeProvider>
+  </React.StrictMode>
+);
+```
  */
 export function ConvexProviderWithKinde({
   children,
@@ -59,6 +87,16 @@ export function ConvexProviderWithKinde({
 // }
 
 // Better Version
+/**
+ * This code fetches the user's token from Kinde. It uses the Kinde SDK
+ * to get the token, and then uses that token to make a call to the
+ * Kinde API to get the user's token. The token is stored in the
+ * fetchAccessToken variable. The fetchAccessToken variable is then
+ * used to make a call to the Kinde API to get the user's token.
+ *
+ * @public
+ * @returns {String} - The user's token
+ */
 function useAuthFromKinde() {
   const { isLoading, isAuthenticated, getToken } = useKindeAuth();
   const fetchAccessToken = useCallback(
