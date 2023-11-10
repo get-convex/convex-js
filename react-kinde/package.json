@@ -1,0 +1,5 @@
+{
+  "main": "../dist/cjs/react-kinde/index.js",
+  "module": "../dist/esm/react-kinde/index.js",
+  "types": "../dist/internal-cjs-types/react-kinde/index.d.ts"
+}
