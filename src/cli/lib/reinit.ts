@@ -6,8 +6,6 @@ import {
 import { doCodegen } from "./codegen.js";
 import {
   configName,
-  mergeWithLocalConfig,
-  pullConfig,
   readProjectConfig,
   upgradeOldAuthInfoToAuthConfig,
   writeProjectConfig,
@@ -38,7 +36,8 @@ export async function reinit(
     "Project:"
   );
   if (!projectSlug) {
-    logFailure(ctx, "Aborted");
+    logFailure(ctx, "Run the command again to create a new project instead.");
+    await ctx.crash(1);
     return;
   }
 
@@ -50,18 +49,11 @@ export async function reinit(
       { teamSlug, projectSlug },
       deploymentType
     );
-  const { projectConfig: projectConfigFromBackend } = await pullConfig(
-    ctx,
-    projectSlug,
-    teamSlug,
-    url,
-    adminKey
-  );
-  // Merge remote config with local config
-  const mergedProjectConfig = await mergeWithLocalConfig(
-    ctx,
-    projectConfigFromBackend
-  );
+
+  const { configPath, projectConfig: existingProjectConfig } =
+    await readProjectConfig(ctx);
+
+  const functionsPath = functionsDir(configName(), existingProjectConfig);
 
   const { wroteToGitIgnore } = await writeDeploymentEnvVar(
     ctx,
@@ -73,17 +65,15 @@ export async function reinit(
     }
   );
 
-  const functionsPath = functionsDir(configName(), projectConfigFromBackend);
-  const projectConfigWithoutAuthInfo = await upgradeOldAuthInfoToAuthConfig(
+  const projectConfig = await upgradeOldAuthInfoToAuthConfig(
     ctx,
-    mergedProjectConfig,
+    existingProjectConfig,
     functionsPath
   );
-  await writeProjectConfig(ctx, projectConfigWithoutAuthInfo, {
+  await writeProjectConfig(ctx, projectConfig, {
     deleteIfAllDefault: true,
   });
 
-  const { projectConfig, configPath } = await readProjectConfig(ctx);
   await doCodegen({
     ctx,
     functionsDirectoryPath: functionsDir(configPath, projectConfig),

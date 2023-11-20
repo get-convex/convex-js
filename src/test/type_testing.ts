@@ -14,3 +14,9 @@ export function assert<T extends true>() {
   // no need to do anything! we're just asserting at compile time that the type
   // parameter is true.
 }
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function assertFalse<T extends false>() {
+  // no need to do anything! we're just asserting at compile time that the type
+  // parameter is false.
+}

@@ -13,6 +13,7 @@ import { reinit } from "./reinit.js";
 import { update } from "./update.js";
 import { typecheck } from "./typecheck.js";
 import { login } from "./login.js";
+import { logout } from "./logout.js";
 import chalk from "chalk";
 import * as Sentry from "@sentry/node";
 import "@sentry/tracing";
@@ -100,6 +101,7 @@ async function main() {
     .addCommand(docs)
     .addCommand(update)
     .addCommand(logs)
+    .addCommand(logout)
     .addHelpCommand("help <command>", "Show help for given <command>")
     .version(version)
     // Hide version and help so they don't clutter

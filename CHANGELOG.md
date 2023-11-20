@@ -2,7 +2,20 @@
 
 ## Upcoming
 
+## 1.5.0
+
+- Preview deployments
+
+## 1.4.0
+
+- External packages in Node.js
+- `npx convex run` now does not push code, `npx convex run --push` instead
+
+## 1.3.0
+
 - `ConvexClient` callback-based WebSocket client
+- `ConvexError`
+- `npx convex dev --tail-logs`
 
 ## 1.2.0
 

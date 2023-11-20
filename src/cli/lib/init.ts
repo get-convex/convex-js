@@ -15,7 +15,7 @@ import { doCodegen, doInitCodegen } from "./codegen.js";
 import {
   configFilepath,
   getFunctionsDirectoryPath,
-  pullConfig,
+  readProjectConfig,
   upgradeOldAuthInfoToAuthConfig,
   writeProjectConfig,
 } from "./config.js";
@@ -23,7 +23,6 @@ import { writeDeploymentEnvVar } from "./deployment.js";
 import { writeConvexUrlToEnvFile } from "./envvars.js";
 import {
   functionsDir,
-  loadPackageJson,
   logAndHandleAxiosError,
   validateOrSelectTeam,
 } from "./utils.js";
@@ -59,14 +58,7 @@ export async function init(
 
   showSpinner(ctx, "Creating new Convex project...");
 
-  let projectSlug,
-    teamSlug,
-    deploymentName,
-    url,
-    adminKey,
-    projectsRemaining,
-    projectConfig,
-    modules;
+  let projectSlug, teamSlug, deploymentName, url, adminKey, projectsRemaining;
   try {
     ({
       projectSlug,
@@ -79,14 +71,6 @@ export async function init(
       ctx,
       { teamSlug: selectedTeam, projectName },
       deploymentType
-    ));
-
-    ({ projectConfig, modules } = await pullConfig(
-      ctx,
-      projectSlug,
-      teamSlug,
-      url,
-      adminKey
     ));
   } catch (err) {
     logFailure(ctx, "Unable to create project.");
@@ -116,19 +100,9 @@ export async function init(
     );
   }
 
-  if (modules.length > 0) {
-    logFailure(ctx, chalk.red("Error: Unexpected modules in new project"));
-    return await ctx.crash(1, undefined);
-  }
+  const { projectConfig: existingProjectConfig } = await readProjectConfig(ctx);
 
-  // create-react-app bans imports from outside of src, so we can just
-  // put the functions directory inside of src/ to work around this issue.
-  const packages = await loadPackageJson(ctx);
-  const isCreateReactApp = "react-scripts" in packages;
-  if (isCreateReactApp) {
-    projectConfig.functions = `src/${projectConfig.functions}`;
-  }
-  const functionsPath = functionsDir(configPath, projectConfig);
+  const functionsPath = functionsDir(configPath, existingProjectConfig);
 
   const { wroteToGitIgnore } = await writeDeploymentEnvVar(
     ctx,
@@ -140,12 +114,12 @@ export async function init(
     }
   );
 
-  const projectConfigWithoutAuthInfo = await upgradeOldAuthInfoToAuthConfig(
+  const projectConfig = await upgradeOldAuthInfoToAuthConfig(
     ctx,
-    projectConfig,
+    existingProjectConfig,
     functionsPath
   );
-  await writeProjectConfig(ctx, projectConfigWithoutAuthInfo);
+  await writeProjectConfig(ctx, projectConfig);
 
   await doInitCodegen({
     ctx,

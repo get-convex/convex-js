@@ -1,7 +1,7 @@
 import {
   FileMetadata,
   StorageActionWriter,
-  StorageId,
+  FileStorageId,
   StorageReader,
   StorageWriter,
 } from "../storage.js";
@@ -11,7 +11,7 @@ import { validateArg } from "./validate.js";
 
 export function setupStorageReader(requestId: string): StorageReader {
   return {
-    getUrl: async (storageId: StorageId) => {
+    getUrl: async (storageId: FileStorageId) => {
       validateArg(storageId, 1, "getUrl", "storageId");
       return await performAsyncSyscall("1.0/storageGetUrl", {
         requestId,
@@ -19,7 +19,7 @@ export function setupStorageReader(requestId: string): StorageReader {
         storageId,
       });
     },
-    getMetadata: async (storageId: StorageId): Promise<FileMetadata> => {
+    getMetadata: async (storageId: FileStorageId): Promise<FileMetadata> => {
       return await performAsyncSyscall("1.0/storageGetMetadata", {
         requestId,
         version,
@@ -38,7 +38,7 @@ export function setupStorageWriter(requestId: string): StorageWriter {
         version,
       });
     },
-    delete: async (storageId: StorageId) => {
+    delete: async (storageId: FileStorageId) => {
       await performAsyncSyscall("1.0/storageDelete", {
         requestId,
         version,
@@ -64,7 +64,7 @@ export function setupStorageActionWriter(
         options,
       });
     },
-    get: async (storageId: StorageId) => {
+    get: async (storageId: FileStorageId) => {
       return await performJsSyscall("storage/getBlob", {
         requestId,
         version,

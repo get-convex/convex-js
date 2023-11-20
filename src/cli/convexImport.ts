@@ -118,6 +118,7 @@ async function determineFormat(
       csv: ".csv",
       jsonLines: ".jsonl",
       jsonArray: ".json",
+      zip: ".zip",
     };
     const extensionToFormat = Object.fromEntries(
       Object.entries(formatToExtension).map((a) => a.reverse())
@@ -130,7 +131,7 @@ async function determineFormat(
         )
       );
     }
-    format ??= extensionToFormat[fileExtension];
+    format ??= extensionToFormat[fileExtension] ?? null;
   }
   if (format === null) {
     logFailure(

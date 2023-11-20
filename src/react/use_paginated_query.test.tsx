@@ -95,6 +95,29 @@ test.each([
   expect(lastError!.toString()).toEqual(expectedError);
 });
 
+test("Returns nothing when args are 'skip'", () => {
+  const convexClient = new ConvexReactClient(address);
+  const watchQuerySpy = jest.spyOn(convexClient, "watchQuery");
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <ConvexProvider client={convexClient}>{children}</ConvexProvider>
+  );
+
+  const { result } = renderHook(
+    () =>
+      usePaginatedQuery(makeFunctionReference<"query">("myQuery"), "skip", {
+        initialNumItems: 10,
+      }),
+    { wrapper }
+  );
+
+  expect(watchQuerySpy.mock.calls).toEqual([]);
+  expect(result.current).toMatchObject({
+    isLoading: true,
+    results: [],
+    status: "LoadingFirstPage",
+  });
+});
+
 test("Initially returns LoadingFirstPage", () => {
   const convexClient = new ConvexReactClient(address);
   const watchQuerySpy = jest.spyOn(convexClient, "watchQuery");

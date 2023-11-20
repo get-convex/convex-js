@@ -6,6 +6,7 @@ import {
   TableNamesInDataModel,
 } from "./data_model.js";
 import { QueryInitializer } from "./query.js";
+import { SystemDataModel } from "./schema.js";
 import {
   WithOptionalSystemFields,
   WithoutSystemFields,
@@ -19,7 +20,12 @@ import {
  *
  * @public
  */
-export interface DatabaseReader<DataModel extends GenericDataModel> {
+export interface DatabaseReader<DataModel extends GenericDataModel>
+  extends BaseDatabaseReader<DataModel> {
+  system: BaseDatabaseReader<SystemDataModel>;
+}
+
+interface BaseDatabaseReader<DataModel extends GenericDataModel> {
   /**
    * Fetch a single document from the database by its {@link values.GenericId}.
    *

@@ -121,7 +121,10 @@ export * from "./storage.js";
 export type { Scheduler, SchedulableFunctionReference } from "./scheduler.js";
 export { cronJobs } from "./cron.js";
 export type { CronJob, Crons } from "./cron.js";
-export type { WithoutSystemFields } from "./system_fields.js";
+export type {
+  WithoutSystemFields,
+  WithOptionalSystemFields,
+} from "./system_fields.js";
 export { httpRouter, HttpRouter, ROUTABLE_HTTP_METHODS } from "./router.js";
 export type { RoutableMethod } from "./router.js";
 export {
@@ -155,6 +158,8 @@ export type {
   DefineSchemaOptions,
   GenericSchema,
   DataModelFromSchemaDefinition,
+  SystemDataModel,
+  SystemTableNames,
 } from "./schema.js";
 export { defineTable, defineSchema } from "./schema.js";
 

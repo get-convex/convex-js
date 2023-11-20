@@ -1,7 +1,7 @@
 {
   "name": "convex",
   "description": "Client for the Convex Cloud",
-  "version": "1.5.1",
+  "version": "1.6.2",
   "author": "Convex, Inc. <team@convex.dev>",
   "homepage": "https://convex.dev",
   "main": "./dist/cjs/index.js",
@@ -135,7 +135,6 @@
     "format": "prettier -w . && eslint --fix .",
     "format-check": "prettier -c . && eslint . --ext .js,.jsx,.ts,.tsx",
     "prepare": "npm run build",
-    "prepublishOnly": "echo \"publish command should not be used directly, instead pack first then publish the .tgz file.\"; false",
     "prepack": "node scripts/prepack.mjs",
     "postpack": "node scripts/postpack.mjs",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",

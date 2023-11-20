@@ -4,6 +4,8 @@ import { performAsyncSyscall } from "./syscall.js";
 import { parseArgs } from "../../common/index.js";
 import { SchedulableFunctionReference, Scheduler } from "../scheduler.js";
 import { getFunctionName } from "../../server/api.js";
+import { Id } from "../../values/value.js";
+import { validateArg } from "./validate.js";
 
 export function setupMutationScheduler(): Scheduler {
   return {
@@ -26,6 +28,11 @@ export function setupMutationScheduler(): Scheduler {
         args
       );
       return await performAsyncSyscall("1.0/schedule", syscallArgs);
+    },
+    cancel: async (id: Id<"_scheduled_functions">) => {
+      validateArg(id, 1, "cancel", "id");
+      const args = { id: convexToJson(id) };
+      await performAsyncSyscall("1.0/cancel_job", args);
     },
   };
 }
@@ -53,6 +60,11 @@ export function setupActionScheduler(requestId: string): Scheduler {
         ...runAtSyscallArgs(ms_since_epoch_or_date, functionReference, args),
       };
       return await performAsyncSyscall("1.0/actions/schedule", syscallArgs);
+    },
+    cancel: async (id: Id<"_scheduled_functions">) => {
+      validateArg(id, 1, "cancel", "id");
+      const syscallArgs = { id: convexToJson(id) };
+      return await performAsyncSyscall("1.0/actions/cancel_job", syscallArgs);
     },
   };
 }

@@ -109,17 +109,13 @@ async function checkErrorForDeprecation(
       case undefined:
         break;
       case "Deprecated":
-      case "UpgradeCritical":
         // This version is deprecated. Print a warning and crash.
 
-        // Gotchas:
-        // 1. We consider `UpgradeCritical` to be a fatal error in the CLI.
-        // This enables us to deprecate the CLI before the web client.
-        // 2. Don't use `logDeprecationWarning` because we should always print
+        // Gotcha:
+        // 1. Don't use `logDeprecationWarning` because we should always print
         // why this we crashed (even if we printed a warning earlier).
         logError(ctx, chalk.red(deprecationMessage));
         return await ctx.crash(1, "fatal");
-      case "Upgradable":
       default:
         // The error included a deprecation warning. Print, but handle the
         // error normally (it was for another reason).
@@ -143,13 +139,11 @@ export function deprecationCheckWarning(
       case undefined:
         break;
       case "Deprecated":
-      case "UpgradeCritical":
         // This should never happen because such states are errors, not warnings.
         // eslint-disable-next-line no-restricted-syntax
         throw new Error(
           "Called deprecationCheckWarning on a fatal error. This is a bug."
         );
-      case "Upgradable":
       default:
         logDeprecationWarning(ctx, deprecationMessage);
         break;
