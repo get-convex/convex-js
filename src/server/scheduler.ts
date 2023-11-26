@@ -1,4 +1,5 @@
 import { FunctionReference, OptionalRestArgs } from "../server/api.js";
+import { Id } from "../values/value.js";
 
 /**
  * A {@link FunctionReference} that can be scheduled to run in the future.
@@ -41,7 +42,7 @@ export interface Scheduler {
     delayMs: number,
     functionReference: FuncRef,
     ...args: OptionalRestArgs<FuncRef>
-  ): Promise<void>;
+  ): Promise<Id<"_scheduled_functions">>;
 
   /**
    * Schedule a function to execute at a given timestamp.
@@ -58,5 +59,14 @@ export interface Scheduler {
     timestamp: number | Date,
     functionReference: FuncRef,
     ...args: OptionalRestArgs<FuncRef>
-  ): Promise<void>;
+  ): Promise<Id<"_scheduled_functions">>;
+
+  /**
+   * Cancels a previously scheduled function if it has not started yet. If the
+   * scheduled function is already in progress, it will continue running but
+   * any new functions that it tries to schedule will be canceled.
+   *
+   * @param id
+   */
+  cancel(id: Id<"_scheduled_functions">): Promise<void>;
 }

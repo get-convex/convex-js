@@ -34,6 +34,7 @@ import {
   GenericTableIndexes,
   GenericTableSearchIndexes,
   GenericTableVectorIndexes,
+  TableNamesInDataModel,
 } from "../server/data_model.js";
 import {
   IdField,
@@ -557,3 +558,29 @@ type MaybeMakeLooseDataModel<
 > = StrictTableNameTypes extends true
   ? DataModel
   : Expand<DataModel & AnyDataModel>;
+
+const systemSchema = defineSchema({
+  _scheduled_functions: defineTable({
+    name: v.string(),
+    args: v.array(v.any()),
+    scheduledTime: v.float64(),
+    completedTime: v.optional(v.float64()),
+    state: v.union(
+      v.object({ kind: v.literal("pending") }),
+      v.object({ kind: v.literal("inProgress") }),
+      v.object({ kind: v.literal("success") }),
+      v.object({ kind: v.literal("failed"), error: v.string() }),
+      v.object({ kind: v.literal("canceled") })
+    ),
+  }),
+  _storage: defineTable({
+    sha256: v.string(),
+    size: v.float64(),
+    contentType: v.optional(v.string()),
+  }),
+});
+
+export type SystemDataModel = DataModelFromSchemaDefinition<
+  typeof systemSchema
+>;
+export type SystemTableNames = TableNamesInDataModel<SystemDataModel>;

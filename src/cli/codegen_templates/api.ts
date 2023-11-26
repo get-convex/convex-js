@@ -29,7 +29,7 @@ export function apiCodegen(modulePaths: string[]): GeneratedJsWithTypes {
       (modulePath) =>
         `import type * as ${moduleIdentifier(modulePath)} from "../${importPath(
           modulePath
-        )}";`
+        )}.js";`
     )
     .join("\n")}
 

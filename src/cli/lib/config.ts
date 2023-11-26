@@ -28,6 +28,7 @@ import {
   logAndHandleAxiosError,
   ErrorData,
   deploymentClient,
+  loadPackageJson,
 } from "./utils.js";
 export { productionProvisionHost, provisionHost } from "./utils.js";
 
@@ -142,10 +143,6 @@ export async function parseProjectConfig(
     }
   }
 
-  // Important! We return the object itself (not a new object) because
-  // we want to ensure that fields we're unaware of are "passed through".
-  // It's possible that this is an old client and the server knows about new
-  // fields that we don't.
   return obj;
 }
 
@@ -221,36 +218,21 @@ export async function getFunctionsDirectoryPath(ctx: Context): Promise<string> {
   return functionsDir(configPath, projectConfig);
 }
 
-/** Merge configurations between a ProjectConfig and the local `convex.json` file.
- *  If local config contains a more privileged project configuration value that
- *  is not populated by /api/get_config, this method will select the more
- *  privileged value.
- * */
-export async function mergeWithLocalConfig(
-  ctx: Context,
-  remoteConfig: ProjectConfig
-): Promise<ProjectConfig> {
-  const newConfig = { ...remoteConfig };
-  const { projectConfig: localConfig } = await readProjectConfig(ctx);
-
-  if (newConfig.generateCommonJSApi === false) {
-    newConfig.generateCommonJSApi = localConfig.generateCommonJSApi;
-  }
-  if (newConfig.node.externalPackages.length === 0) {
-    newConfig.node.externalPackages = localConfig.node.externalPackages;
-  }
-  return newConfig;
-}
-
 /** Read configuration from a local `convex.json` file. */
 export async function readProjectConfig(ctx: Context): Promise<{
   projectConfig: ProjectConfig;
   configPath: string;
 }> {
   if (!ctx.fs.exists("convex.json")) {
+    // create-react-app bans imports from outside of src, so we can just
+    // put the functions directory inside of src/ to work around this issue.
+    const packages = await loadPackageJson(ctx);
+    const isCreateReactApp = "react-scripts" in packages;
     return {
       projectConfig: {
-        functions: DEFAULT_FUNCTIONS_PATH,
+        functions: isCreateReactApp
+          ? `src/${DEFAULT_FUNCTIONS_PATH}`
+          : DEFAULT_FUNCTIONS_PATH,
         node: {
           externalPackages: [],
         },

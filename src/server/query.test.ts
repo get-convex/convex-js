@@ -2,6 +2,9 @@ import { GenericId } from "../values/index.js";
 import { test } from "@jest/globals";
 import { assert, Equals } from "../test/type_testing.js";
 import { DatabaseReader } from "./database.js";
+import { SystemDataModel, SystemTableNames } from "./schema.js";
+import { Id } from "../values/value.js";
+import { TableNamesInDataModel } from "./data_model.js";
 
 type Message = {
   body: string;
@@ -20,7 +23,6 @@ type DataModel = {
   };
 };
 type DB = DatabaseReader<DataModel>;
-
 test("collect returns the correct types", () => {
   function collect(db: DB) {
     return db.query("messages").collect();
@@ -76,4 +78,38 @@ test("order and filter don't change the return type", () => {
   type Result = ReturnType<typeof orderAndFilter>;
   type Expected = Promise<Message[]>;
   assert<Equals<Result, Expected>>();
+});
+
+test("can query() from system tables", () => {
+  function collect(db: DB, tableName: SystemTableNames) {
+    return db.system.query(tableName).collect();
+  }
+  type Result = ReturnType<typeof collect>;
+  type Expected = Promise<SystemDataModel[SystemTableNames]["document"][]>;
+  assert<Equals<Result, Expected>>();
+});
+
+test("can get() from system tables", () => {
+  function get(db: DB, tableId: Id<SystemTableNames>) {
+    return db.system.get(tableId);
+  }
+  type Result = ReturnType<typeof get>;
+  type Expected = Promise<SystemDataModel[SystemTableNames]["document"] | null>;
+  assert<Equals<Result, Expected>>();
+});
+
+test("system-level database reader can only get() from system tables", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function get(db: DB, tableId: Id<TableNamesInDataModel<DataModel>>) {
+    // @ts-expect-error We cannot query user tables from system DatabaseReader
+    return db.system.get(tableId);
+  }
+});
+
+test("system-level database reader can only query() from system tables", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function collect(db: DB, tableName: TableNamesInDataModel<DataModel>) {
+    // @ts-expect-error We cannot query user tables from system DatabaseReader
+    return db.system.query(tableName).collect();
+  }
 });

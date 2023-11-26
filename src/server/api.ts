@@ -135,9 +135,9 @@ function createApi(pathParts: string[] = []): AnyApi {
         return createApi(newParts);
       } else if (prop === functionName) {
         if (pathParts.length < 2) {
+          const found = ["api", ...pathParts].join(".");
           throw new Error(
-            "API path must include at least 2 parts (module name and function name). Found: " +
-              pathParts
+            `API path is expected to be of the form \`api.moduleName.functionName\`. Found: \`${found}\``
           );
         }
         const path = pathParts.slice(0, -1).join("/");

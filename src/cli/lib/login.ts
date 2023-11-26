@@ -28,6 +28,10 @@ import { execSync } from "child_process";
 import os from "os";
 
 const SCOPE = "openid email profile";
+/// This value was created long ago, and cannot be changed easily.
+/// It's just a fixed string used for identifying the Auth0 token, so it's fine
+/// and not user-facing.
+const AUDIENCE = "https://console.convex.dev/api/";
 
 // Per https://github.com/panva/node-openid-client/tree/main/docs#customizing
 custom.setHttpOptionsDefaults({
@@ -137,7 +141,7 @@ async function performDeviceAuthorization(
   try {
     handle = await auth0Client.deviceAuthorization({
       scope: SCOPE,
-      audience: "https://console.convex.dev/api/",
+      audience: AUDIENCE,
     });
   } catch (error) {
     // We couldn't get verification URL from Auth0, proceed with manual auth
@@ -250,7 +254,7 @@ async function performPasswordAuthentication(
       password: password,
       scope: SCOPE,
       client_id: clientId,
-      audience: "https://console.convex.dev/api/",
+      audience: AUDIENCE,
       // Note that there is no client secret provided, as Auth0 refuses to require it for untrusted apps.
     }),
   };

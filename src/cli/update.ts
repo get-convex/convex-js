@@ -18,7 +18,7 @@ export const update = new Command("update")
 
     console.log(
       chalk.green(
-        `To view the Convex changelog, go to https://blog.convex.dev/tag/releases/\nWhen you are ready to upgrade, run the following commands:\n${updateInstructions}`
+        `To view the Convex changelog, go to https://news.convex.dev/tag/releases/\nWhen you are ready to upgrade, run the following commands:\n${updateInstructions}`
       )
     );
   });

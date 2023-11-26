@@ -17,6 +17,7 @@ import {
   SerializedSearchFilter,
 } from "./search_filter_builder_impl.js";
 import { validateArg } from "./validate.js";
+import { version } from "../../index.js";
 
 type QueryOperator = { filter: JSONValue } | { limit: number };
 type Source =
@@ -187,7 +188,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
       throwClosedError(this.state.type);
     }
     const query = this.state.query;
-    const { queryId } = performSyscall("1.0/queryStream", { query });
+    const { queryId } = performSyscall("1.0/queryStream", { query, version });
     this.state = { type: "executing", queryId };
     return queryId;
   }
@@ -289,6 +290,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
         pageSize,
         maximumRowsRead,
         maximumBytesRead: paginationOpts.maximumBytesRead,
+        version,
       });
     return {
       page: page.map((json: string) => jsonToConvex(json, true)),

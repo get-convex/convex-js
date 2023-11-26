@@ -2,12 +2,9 @@ import { GeneratedJsWithTypes, header } from "./common.js";
 
 const dataModelDTS = `
   ${header("Generated data model types.")}
-  import type {
-     DataModelFromSchemaDefinition,
-  } from "convex/server";
-  import type { DocumentByName, TableNamesInDataModel } from "convex/server";
+  import type { DataModelFromSchemaDefinition, DocumentByName, TableNamesInDataModel, SystemTableNames } from "convex/server";
   import type { GenericId } from "convex/values";
-  import schema from "../schema";
+  import schema from "../schema.js";
   
   /**
    * The names of all of your Convex tables.
@@ -34,7 +31,7 @@ const dataModelDTS = `
    * 
    * @typeParam TableName - A string literal type of the table name (like "users").
    */
-  export type Id<TableName extends TableNames> = GenericId<TableName>;
+  export type Id<TableName extends TableNames | SystemTableNames> = GenericId<TableName>;
 
   /**
    * A type describing your Convex data model.

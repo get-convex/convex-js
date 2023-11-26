@@ -9,38 +9,74 @@ import { DatabaseReader, DatabaseWriter } from "../database.js";
 import { QueryInitializerImpl } from "./query_impl.js";
 import { GenericDataModel, GenericDocument } from "../data_model.js";
 import { validateArg } from "./validate.js";
+import { version } from "../../index.js";
 import { patchValueToJson } from "../../values/value.js";
 
 export function setupReader(): DatabaseReader<GenericDataModel> {
-  return {
-    get: async (id: GenericId<string>) => {
-      validateArg(id, 1, "get", "id");
-      if (typeof id !== "string") {
-        throw new Error(
-          `Invalid argument \`id\` for \`db.get\`, expected string but got '${typeof id}': ${
-            id as any
-          }`
-        );
-      }
-      const args = { id: convexToJson(id) };
-      const syscallJSON = await performAsyncSyscall("1.0/get", args);
-      return jsonToConvex(syscallJSON, true) as GenericDocument;
-    },
-    query: (tableName: string) => new QueryInitializerImpl(tableName),
-    normalizeId: <TableName extends string>(
-      tableName: TableName,
-      id: string
-    ): GenericId<TableName> | null => {
-      validateArg(tableName, 1, "normalizeId", "tableName");
-      validateArg(id, 2, "normalizeId", "id");
-      const syscallJSON = performSyscall("1.0/db/normalizeId", {
-        table: tableName,
-        idString: id,
-      });
-      const syscallResult = jsonToConvex(syscallJSON, false) as any;
-      return syscallResult.id;
-    },
+  const reader = (isSystem = false): DatabaseReader<GenericDataModel> => {
+    return {
+      get: async (id: GenericId<string>) => {
+        validateArg(id, 1, "get", "id");
+        if (typeof id !== "string") {
+          throw new Error(
+            `Invalid argument \`id\` for \`db.get\`, expected string but got '${typeof id}': ${
+              id as any
+            }`
+          );
+        }
+        const args = {
+          id: convexToJson(id),
+          isSystem,
+          version,
+        };
+        const syscallJSON = await performAsyncSyscall("1.0/get", args);
+
+        return jsonToConvex(syscallJSON, true) as GenericDocument;
+      },
+      query: (tableName: string) => {
+        const accessingSystemTable = tableName.startsWith("_");
+        if (accessingSystemTable !== isSystem) {
+          throw new Error(
+            `${
+              accessingSystemTable ? "System" : "User"
+            } tables can only be accessed from db.${
+              isSystem ? "" : "system."
+            }query().`
+          );
+        }
+        return new QueryInitializerImpl(tableName);
+      },
+      normalizeId: <TableName extends string>(
+        tableName: TableName,
+        id: string
+      ): GenericId<TableName> | null => {
+        validateArg(tableName, 1, "normalizeId", "tableName");
+        validateArg(id, 2, "normalizeId", "id");
+        const accessingSystemTable = tableName.startsWith("_");
+        if (accessingSystemTable !== isSystem) {
+          throw new Error(
+            `${
+              accessingSystemTable ? "System" : "User"
+            } tables can only be accessed from db.${
+              isSystem ? "" : "system."
+            }normalizeId().`
+          );
+        }
+        const syscallJSON = performSyscall("1.0/db/normalizeId", {
+          table: tableName,
+          idString: id,
+        });
+        const syscallResult = jsonToConvex(syscallJSON, false) as any;
+        return syscallResult.id;
+      },
+      // We set the system reader on the next line
+      system: null as any,
+    };
   };
+  const { system: _, ...rest } = reader(true);
+  const r = reader();
+  r.system = rest;
+  return r;
 }
 
 export function setupWriter(): DatabaseWriter<GenericDataModel> {
@@ -49,8 +85,11 @@ export function setupWriter(): DatabaseWriter<GenericDataModel> {
     get: reader.get,
     query: reader.query,
     normalizeId: reader.normalizeId,
-
+    system: reader.system,
     insert: async (table, value) => {
+      if (table.startsWith("_")) {
+        throw new Error("System tables (prefixed with `_`) are read-only.");
+      }
       validateArg(table, 1, "insert", "table");
       validateArg(value, 2, "insert", "value");
       const syscallJSON = await performAsyncSyscall("1.0/insert", {

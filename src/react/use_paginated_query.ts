@@ -52,6 +52,7 @@ type UsePaginatedQueryState = {
     }
   >;
   ongoingSplits: Record<QueryPageKey, [QueryPageKey, QueryPageKey]>;
+  skip: boolean;
 };
 
 const splitQuery =
@@ -158,7 +159,7 @@ const completeSplitQuery =
  */
 export function usePaginatedQuery<Query extends PaginatedQueryReference>(
   query: Query,
-  args: PaginatedQueryArgs<Query>,
+  args: PaginatedQueryArgs<Query> | "skip",
   options: { initialNumItems: number }
 ): UsePaginatedQueryReturnType<Query> {
   if (
@@ -169,30 +170,35 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
       `\`options.initialNumItems\` must be a positive number. Received \`${options?.initialNumItems}\`.`
     );
   }
+  const skip = args === "skip";
+  const argsObject = skip ? {} : args;
   const queryName = getFunctionName(query);
   const createInitialState = useMemo(() => {
     return () => {
       const id = nextPaginationId();
       return {
         query,
-        args: args as Record<string, Value>,
+        args: argsObject as Record<string, Value>,
         id,
         nextPageKey: 1,
-        pageKeys: [0],
-        queries: {
-          0: {
-            query,
-            args: {
-              ...args,
-              paginationOpts: {
-                numItems: options.initialNumItems,
-                cursor: null,
-                id,
+        pageKeys: skip ? [] : [0],
+        queries: skip
+          ? ({} as UsePaginatedQueryState["queries"])
+          : {
+              0: {
+                query,
+                args: {
+                  ...argsObject,
+                  paginationOpts: {
+                    numItems: options.initialNumItems,
+                    cursor: null,
+                    id,
+                  },
+                },
               },
             },
-          },
-        },
         ongoingSplits: {},
+        skip,
       };
     };
     // ESLint doesn't like that we're stringifying the args. We do this because
@@ -201,9 +207,10 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    JSON.stringify(convexToJson(args as Value)),
+    JSON.stringify(convexToJson(argsObject as Value)),
     queryName,
     options.initialNumItems,
+    skip,
   ]);
 
   const [state, setState] =
@@ -213,8 +220,9 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
   let currState = state;
   if (
     getFunctionName(query) !== getFunctionName(state.query) ||
-    JSON.stringify(convexToJson(args as Value)) !==
-      JSON.stringify(convexToJson(state.args))
+    JSON.stringify(convexToJson(argsObject as Value)) !==
+      JSON.stringify(convexToJson(state.args)) ||
+    skip !== state.skip
   ) {
     currState = createInitialState();
     setState(currState);

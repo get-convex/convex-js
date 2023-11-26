@@ -1,7 +1,8 @@
 import { GenericId } from "../values/index.js";
 import { test } from "@jest/globals";
-import { assert, Equals } from "../test/type_testing.js";
-import { DatabaseWriter } from "./database.js";
+import { assert, assertFalse, Equals } from "../test/type_testing.js";
+import { GenericDatabaseWriter } from "./database.js";
+import { SystemTableNames } from "./schema.js";
 
 type CreateDataModel<Document> = {
   tableName: {
@@ -22,7 +23,7 @@ test("DatabaseWriter has the right types for a simple data model", () => {
     _id: GenericId<"tableName">;
     _creationTime: number;
   };
-  type DB = DatabaseWriter<CreateDataModel<Document>>;
+  type DB = GenericDatabaseWriter<CreateDataModel<Document>>;
 
   type InsertType = Parameters<DB["insert"]>;
   type ExpectedInsertType = [table: "tableName", value: { body: string }];
@@ -67,7 +68,7 @@ test("DatabaseWriter has the right types for a union", () => {
         _creationTime: number;
       };
 
-  type DB = DatabaseWriter<CreateDataModel<Document>>;
+  type DB = GenericDatabaseWriter<CreateDataModel<Document>>;
 
   type InsertType = Parameters<DB["insert"]>;
   type Expected = [
@@ -114,7 +115,7 @@ test("DatabaseWriter has the right types with loose data model", () => {
     [propertyName: string]: any;
   };
 
-  type DB = DatabaseWriter<CreateDataModel<Document>>;
+  type DB = GenericDatabaseWriter<CreateDataModel<Document>>;
 
   type InsertType = Parameters<DB["insert"]>;
   type ExpectedInsertType = [
@@ -146,4 +147,37 @@ test("DatabaseWriter has the right types with loose data model", () => {
     }
   ];
   assert<Equals<ReplaceType, ExpectedReplaceType>>();
+});
+
+test("DatabaseWriter can only access system tables through system", () => {
+  // Even with this system Document is in the data model, it is inaccessible from SystemDB
+
+  type Document = {
+    body: string;
+    _id: GenericId<"tableName">;
+    _creationTime: number;
+  };
+  type DB = GenericDatabaseWriter<CreateDataModel<Document>>;
+  type SystemDB = DB["system"];
+  type QueryType = Parameters<SystemDB["query"]>;
+  type ExpectedQueryType = [table: SystemTableNames];
+  // check that we can only pass in SystemTableNames
+  assert<Equals<QueryType, ExpectedQueryType>>();
+});
+
+test("System Tables are readonly", () => {
+  type Document = {
+    body: string;
+    _id: GenericId<"tableName">;
+    _creationTime: number;
+  };
+  type DB = GenericDatabaseWriter<CreateDataModel<Document>>;
+  type SystemDB = DB["system"];
+  type PropertyExists<T, K> = K extends keyof T ? true : false;
+  assert<PropertyExists<SystemDB, "get">>;
+  assert<PropertyExists<SystemDB, "query">>;
+  assertFalse<PropertyExists<SystemDB, "insert">>;
+  assertFalse<PropertyExists<SystemDB, "patch">>;
+  assertFalse<PropertyExists<SystemDB, "replace">>;
+  assertFalse<PropertyExists<SystemDB, "delete">>;
 });

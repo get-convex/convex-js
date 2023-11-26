@@ -235,6 +235,14 @@ export async function bundleSchema(ctx: Context, dir: string) {
 
 export async function bundleAuthConfig(ctx: Context, dir: string) {
   const authConfigPath = path.resolve(dir, "auth.config.js");
+  const authConfigTsPath = path.resolve(dir, "auth.config.ts");
+  if (!ctx.fs.exists(authConfigPath) && ctx.fs.exists(authConfigTsPath)) {
+    logFailure(
+      ctx,
+      `Auth config file ${authConfigTsPath} found with .ts extension, but auth.config.js must be a JavaScript file.`
+    );
+    return await ctx.crash(1, "invalid filesystem data");
+  }
   if (!ctx.fs.exists(authConfigPath)) {
     return [];
   }
