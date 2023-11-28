@@ -3,4 +3,4 @@
  *
  * @module
  */
-export { ConvexProviderWithKinde } from "./ConvexProviderWithKinde.js";
+export { ConvexProviderWithKinde } from "./ConvexProviderWithKinde";
