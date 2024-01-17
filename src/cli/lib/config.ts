@@ -666,22 +666,27 @@ export async function pushConfig(
       (error as AxiosError<ErrorData>).response?.data?.code ===
       "AuthConfigMissingEnvironmentVariable"
     ) {
+      const errorMessage = (error as any).response.data.message;
       (error as any).wasExpected = true;
       // If `npx convex dev` is running using --url there might not be a configured deployment
       const configuredDeployment = await getConfiguredDeployment(ctx);
       if (configuredDeployment !== null) {
+        const [, variableName] =
+          errorMessage.match(/Environment variable (\S+)/i) ?? [];
         const dashboardUrl = await dashboardUrlForConfiguredDeployment(
           ctx,
           configuredDeployment
         );
+        const variableQuery =
+          variableName !== undefined ? `?var=${variableName}` : "";
         logFailure(
           ctx,
-          `Go to ${dashboardUrl}/settings to setup your environment variable.`
+          `Go to ${dashboardUrl}/settings/environment-variables${variableQuery} to setup your environment variable.`
         );
       } else {
         logFailure(ctx, `Fix your auth.config.js.`);
       }
-      logError(ctx, chalk.red((error as any).response.data.message));
+      logError(ctx, chalk.red(errorMessage));
       await ctx.crash(1, "invalid filesystem or env vars", error);
     }
 

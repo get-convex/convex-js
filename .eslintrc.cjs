@@ -69,5 +69,5 @@ module.exports = {
     "jest/expect-expect": "off",
     "jest/no-conditional-expect": "off",
   },
-  ignorePatterns: ["node_modules", "dist", "*.js"],
+  ignorePatterns: ["node_modules", "dist", "*.js", "tmpDist*"],
 };

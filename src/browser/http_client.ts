@@ -22,9 +22,9 @@ export const STATUS_CODE_BAD_REQUEST = 400;
 export const STATUS_CODE_UDF_FAILED = 560;
 
 // Allow fetch to be shimmed in for Node.js < 18
-let localFetch = globalThis.fetch;
+let specifiedFetch: typeof globalThis.fetch | undefined = undefined;
 export function setFetch(f: typeof globalThis.fetch) {
-  localFetch = f;
+  specifiedFetch = f;
 }
 
 /**
@@ -43,6 +43,7 @@ export class ConvexHttpClient {
   private auth?: string;
   private adminAuth?: string;
   private debug: boolean;
+  private fetchOptions?: FetchOptions;
 
   /**
    * Create a new {@link ConvexHttpClient}.
@@ -103,6 +104,15 @@ export class ConvexHttpClient {
   }
 
   /**
+   * Used to customize the fetch behavior in some runtimes.
+   *
+   * @internal
+   */
+  setFetchOptions(fetchOptions: FetchOptions) {
+    this.fetchOptions = fetchOptions;
+  }
+
+  /**
    * Execute a Convex query function.
    *
    * @param name - The name of the query.
@@ -130,7 +140,9 @@ export class ConvexHttpClient {
     } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
+    const localFetch = specifiedFetch || fetch;
     const response = await localFetch(`${this.address}/query`, {
+      ...this.fetchOptions,
       body,
       method: "POST",
       headers: headers,
@@ -190,7 +202,9 @@ export class ConvexHttpClient {
     } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
+    const localFetch = specifiedFetch || fetch;
     const response = await localFetch(`${this.address}/mutation`, {
+      ...this.fetchOptions,
       body,
       method: "POST",
       headers: headers,
@@ -249,7 +263,9 @@ export class ConvexHttpClient {
     } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
+    const localFetch = specifiedFetch || fetch;
     const response = await localFetch(`${this.address}/action`, {
+      ...this.fetchOptions,
       body,
       method: "POST",
       headers: headers,
@@ -315,7 +331,9 @@ export class ConvexHttpClient {
     } else if (this.auth) {
       headers["Authorization"] = `Bearer ${this.auth}`;
     }
+    const localFetch = specifiedFetch || fetch;
     const response = await localFetch(`${this.address}/function`, {
+      ...this.fetchOptions,
       body,
       method: "POST",
       headers: headers,
@@ -351,3 +369,8 @@ function forwardErrorData(errorData: JSONValue, error: ConvexError<string>) {
   (error as ConvexError<any>).data = jsonToConvex(errorData);
   return error;
 }
+
+/**
+ * @internal
+ */
+type FetchOptions = { cache: "force-cache" | "no-store" };

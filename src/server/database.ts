@@ -21,9 +21,7 @@ import {
  * @public
  */
 export interface DatabaseReader<DataModel extends GenericDataModel>
-  extends BaseDatabaseReader<DataModel> {
-  system: BaseDatabaseReader<SystemDataModel>;
-}
+  extends BaseDatabaseReader<DataModel> {}
 
 interface BaseDatabaseReader<DataModel extends GenericDataModel> {
   /**
@@ -70,9 +68,10 @@ interface BaseDatabaseReader<DataModel extends GenericDataModel> {
 /**
  * An interface to read from the database within Convex query functions.
  *
- * The two entry points are {@link DatabaseReader.get}, which fetches a single
- * document by its {@link values.GenericId}, or {@link DatabaseReader.query}, which starts
- * building a query.
+ * The two entry points are:
+ *   - {@link GenericDatabaseReader.get}, which fetches a single document
+ *     by its {@link values.GenericId}.
+ *   - {@link GenericDatabaseReader.query}, which starts building a query.
  *
  * If you're using code generation, use the `DatabaseReader` type in
  * `convex/_generated/server.d.ts` which is typed for your data model.
@@ -80,7 +79,19 @@ interface BaseDatabaseReader<DataModel extends GenericDataModel> {
  * @public
  */
 export interface GenericDatabaseReader<DataModel extends GenericDataModel>
-  extends DatabaseReader<DataModel> {}
+  extends DatabaseReader<DataModel> {
+  /**
+   * An interface to read from the system tables within Convex query functions
+   *
+   * The two entry points are:
+   *   - {@link GenericDatabaseReader.get}, which fetches a single document
+   *     by its {@link values.GenericId}.
+   *   - {@link GenericDatabaseReader.query}, which starts building a query.
+   *
+   * @public
+   */
+  system: BaseDatabaseReader<SystemDataModel>;
+}
 
 /**
  * @deprecated If you're using code generation, use the `DatabaseWriter` type in

@@ -5,15 +5,17 @@ import {
   Value,
 } from "../../values/index.js";
 import { performAsyncSyscall, performSyscall } from "./syscall.js";
-import { DatabaseReader, DatabaseWriter } from "../database.js";
+import { GenericDatabaseReader, GenericDatabaseWriter } from "../database.js";
 import { QueryInitializerImpl } from "./query_impl.js";
 import { GenericDataModel, GenericDocument } from "../data_model.js";
 import { validateArg } from "./validate.js";
 import { version } from "../../index.js";
 import { patchValueToJson } from "../../values/value.js";
 
-export function setupReader(): DatabaseReader<GenericDataModel> {
-  const reader = (isSystem = false): DatabaseReader<GenericDataModel> => {
+export function setupReader(): GenericDatabaseReader<GenericDataModel> {
+  const reader = (
+    isSystem = false
+  ): GenericDatabaseReader<GenericDataModel> => {
     return {
       get: async (id: GenericId<string>) => {
         validateArg(id, 1, "get", "id");
@@ -79,7 +81,7 @@ export function setupReader(): DatabaseReader<GenericDataModel> {
   return r;
 }
 
-export function setupWriter(): DatabaseWriter<GenericDataModel> {
+export function setupWriter(): GenericDatabaseWriter<GenericDataModel> {
   const reader = setupReader();
   return {
     get: reader.get,

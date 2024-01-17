@@ -1,7 +1,7 @@
 import { GenericId } from "../values/index.js";
 import { test } from "@jest/globals";
 import { assert, Equals } from "../test/type_testing.js";
-import { DatabaseReader } from "./database.js";
+import { GenericDatabaseReader } from "./database.js";
 import { SystemDataModel, SystemTableNames } from "./schema.js";
 import { Id } from "../values/value.js";
 import { TableNamesInDataModel } from "./data_model.js";
@@ -22,7 +22,7 @@ type DataModel = {
     vectorIndexes: {};
   };
 };
-type DB = DatabaseReader<DataModel>;
+type DB = GenericDatabaseReader<DataModel>;
 test("collect returns the correct types", () => {
   function collect(db: DB) {
     return db.query("messages").collect();
@@ -101,7 +101,7 @@ test("can get() from system tables", () => {
 test("system-level database reader can only get() from system tables", () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function get(db: DB, tableId: Id<TableNamesInDataModel<DataModel>>) {
-    // @ts-expect-error We cannot query user tables from system DatabaseReader
+    // @ts-expect-error We cannot query user tables from system GenericDatabaseReader
     return db.system.get(tableId);
   }
 });
@@ -109,7 +109,7 @@ test("system-level database reader can only get() from system tables", () => {
 test("system-level database reader can only query() from system tables", () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function collect(db: DB, tableName: TableNamesInDataModel<DataModel>) {
-    // @ts-expect-error We cannot query user tables from system DatabaseReader
+    // @ts-expect-error We cannot query user tables from system GenericDatabaseReader
     return db.system.query(tableName).collect();
   }
 });

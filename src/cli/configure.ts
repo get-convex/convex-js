@@ -19,7 +19,10 @@ import {
   upgradeOldAuthInfoToAuthConfig,
   writeProjectConfig,
 } from "./lib/config.js";
-import { writeDeploymentEnvVar } from "./lib/deployment.js";
+import {
+  eraseDeploymentEnvVar,
+  writeDeploymentEnvVar,
+} from "./lib/deployment.js";
 import { init } from "./lib/init.js";
 import { reinit } from "./lib/reinit.js";
 import {
@@ -80,6 +83,24 @@ export async function deploymentCredentialsOrConfigure(
 ): Promise<DeploymentCredentials & { deploymentName?: DeploymentName }> {
   const { url, adminKey } = cmdOptions;
   if (url !== undefined && adminKey !== undefined) {
+    const didErase = await eraseDeploymentEnvVar(ctx);
+    if (didErase) {
+      logMessage(
+        ctx,
+        chalk.yellowBright(
+          `Removed the CONVEX_DEPLOYMENT environment variable from .env.local`
+        )
+      );
+    }
+    const envVarWrite = await writeConvexUrlToEnvFile(ctx, url);
+    if (envVarWrite !== null) {
+      logMessage(
+        ctx,
+        chalk.green(
+          `Saved the given --url as ${envVarWrite.envVar} to ${envVarWrite.envFile}`
+        )
+      );
+    }
     return { url, adminKey };
   }
   const deploymentType = cmdOptions.prod ? "prod" : "dev";

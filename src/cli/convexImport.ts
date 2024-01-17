@@ -20,37 +20,58 @@ import { fetchDeploymentCredentialsProvisionProd } from "./lib/api.js";
 import path from "path";
 
 export const convexImport = new Command("import")
-  .description("Import data from a file into a table")
+  .description(
+    "Import data from a file\n\n" +
+      "  From a snapshot: `npx convex import snapshot.zip`\n" +
+      "  For a single table: `npx convex --table tableName file.json`\n"
+  )
+  .addOption(
+    new Option(
+      "--table <table>",
+      "Destination table name. Required if format is csv, jsonLines, or jsonArray. Not supported if format is zip."
+    )
+  )
   .addOption(
     new Option(
       "--format <format>",
-      "Input file format. This flag is only required if the filename is missing an extension.\
-      CSV files must have a header, and each rows' entries are interpreted either as a (floating point) number or a string.\
-      JSONLines files must have a JSON object per line. JSON files must be an array of JSON objects."
-    ).choices(["csv", "jsonLines", "jsonArray"])
+      "Input file format. This flag is only required if the filename is missing an extension.\n" +
+        "CSV files must have a header, and each row's entries are interpreted either as a (floating point) number or a string.\n" +
+        "JSON files must be an array of JSON objects.\n" +
+        "JSONLines files must have a JSON object per line.\n" +
+        "ZIP files must have one directory per table, containing <table>/documents.jsonl. Snapshot exports from the Convex dashboard have this format."
+    ).choices(["csv", "jsonLines", "jsonArray", "zip"])
   )
   .option(
     "--prod",
     "Import data into this project's production deployment. Defaults to your dev deployment without this flag."
   )
   .addOption(
-    new Option("--replace", "Replace any existing data in the table").conflicts(
-      "--append"
-    )
+    new Option(
+      "--replace",
+      "Replace all existing data in any of the imported tables"
+    ).conflicts("--append")
   )
   .addOption(
     new Option(
       "--append",
-      "Append to any existing data in the table"
+      "Append imported data to any existing tables"
     ).conflicts("--replace")
   )
   .addOption(new Option("--url <url>").hideHelp())
   .addOption(new Option("--admin-key <adminKey>").hideHelp())
-  .argument("<tableName>", "Destination table name")
   .argument("<path>", "Path to the input file")
   .showHelpAfterError()
-  .action(async (tableName: string, filePath: string, options: any) => {
+  .action(async (filePath: string, options: any, command: any) => {
     const ctx = oneoffContext;
+
+    if (command.args.length > 1) {
+      logFailure(
+        ctx,
+        `Error: Too many positional arguments. If you're specifying a table name, use the \`--table\` option.`
+      );
+      return await ctx.crash(1, "fatal");
+    }
+
     const { adminKey, url: deploymentUrl } =
       await fetchDeploymentCredentialsProvisionProd(ctx, options);
 
@@ -60,6 +81,24 @@ export const convexImport = new Command("import")
     }
 
     const format = await determineFormat(ctx, filePath, options.format ?? null);
+    const tableName = options.table ?? null;
+    if (tableName === null) {
+      if (format !== "zip") {
+        logFailure(
+          ctx,
+          `Error: The \`--table\` option is required for format ${format}`
+        );
+        return await ctx.crash(1, "fatal");
+      }
+    } else {
+      if (format === "zip") {
+        logFailure(
+          ctx,
+          `Error: The \`--table\` option is not allowed for format ${format}`
+        );
+        return await ctx.crash(1, "fatal");
+      }
+    }
 
     await ensureHasConvexDependency(ctx, "import");
 
@@ -68,7 +107,8 @@ export const convexImport = new Command("import")
 
     showSpinner(ctx, `Importing ${filePath} (${formatSize(fileStats.size)})`);
 
-    const urlName = encodeURIComponent(tableName);
+    const urlName =
+      tableName === null ? "" : `&tableName=${encodeURIComponent(tableName)}`;
     const urlFormat = encodeURIComponent(format);
     const client = deploymentClient(deploymentUrl);
     let resp: AxiosResponse;
@@ -81,8 +121,9 @@ export const convexImport = new Command("import")
     const deploymentNotice = options.prod
       ? ` in your ${chalk.bold("prod")} deployment`
       : "";
+    const tableNotice = tableName ? ` to table "${chalk.bold(tableName)}"` : "";
     try {
-      const url = `/api/import?tableName=${urlName}&format=${urlFormat}&mode=${mode}`;
+      const url = `/api/import?format=${urlFormat}&mode=${mode}${urlName}`;
       resp = await client.post(url, data, {
         headers: {
           Authorization: `Convex ${adminKey}`,
@@ -93,17 +134,15 @@ export const convexImport = new Command("import")
     } catch (e) {
       logFailure(
         ctx,
-        `Importing data from ${chalk.bold(filePath)} to table ${chalk.bold(
-          tableName
-        )}${deploymentNotice} failed`
+        `Importing data from "${chalk.bold(
+          filePath
+        )}"${tableNotice}${deploymentNotice} failed`
       );
       return await logAndHandleAxiosError(ctx, e);
     }
     logFinishedStep(
       ctx,
-      `Added ${resp.data.numWritten} documents to table ${chalk.bold(
-        tableName
-      )}${deploymentNotice}.`
+      `Added ${resp.data.numWritten} documents${tableNotice}${deploymentNotice}.`
     );
   });
 

@@ -153,6 +153,7 @@ export type { Index, SearchIndex, VectorIndex } from "./schema.js";
 
 export type {
   SearchIndexConfig,
+  VectorIndexConfig,
   TableDefinition,
   SchemaDefinition,
   DefineSchemaOptions,

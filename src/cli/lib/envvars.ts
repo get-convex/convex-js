@@ -19,7 +19,7 @@ type Framework = (typeof FRAMEWORKS)[number];
 type ConvexUrlWriteConfig = {
   envFile: string;
   envVar: string;
-  oldValue?: string;
+  existingFileContent: string | null;
 } | null;
 
 export async function writeConvexUrlToEnvFile(
@@ -32,23 +32,51 @@ export async function writeConvexUrlToEnvFile(
     return null;
   }
 
-  const { envFile, envVar, oldValue } = writeConfig;
-
-  if (oldValue !== undefined) {
-    const modified = ctx.fs.readUtf8File(envFile).replace(oldValue, value);
-    ctx.fs.writeUtf8File(envFile, modified);
-  } else {
-    const doesFileExist = ctx.fs.exists(envFile);
-    if (doesFileExist) {
-      const orig = ctx.fs.readUtf8File(envFile);
-      const modified = `${orig}\n${envVar}="${value}"\n`;
-      ctx.fs.writeUtf8File(envFile, modified);
-    } else {
-      const contents = `${envVar}="${value}"\n`;
-      ctx.fs.writeUtf8File(envFile, contents);
-    }
-  }
+  const { envFile, envVar, existingFileContent } = writeConfig;
+  const modified = changedEnvVarFile(existingFileContent, envVar, value)!;
+  ctx.fs.writeUtf8File(envFile, modified);
   return writeConfig;
+}
+
+export function changedEnvVarFile(
+  existingFileContent: string | null,
+  envVarName: string,
+  envVarValue: string,
+  commentAfterValue?: string,
+  commentOnPreviousLine?: string
+): string | null {
+  const varAssignment = `${envVarName}=${envVarValue}${
+    commentAfterValue === undefined ? "" : ` # ${commentAfterValue}`
+  }`;
+  const commentOnPreviousLineWithLineBreak =
+    commentOnPreviousLine === undefined ? "" : `${commentOnPreviousLine}\n`;
+  if (existingFileContent === null) {
+    return `${commentOnPreviousLineWithLineBreak}${varAssignment}\n`;
+  }
+  const config = dotenv.parse(existingFileContent);
+  const existing = config[envVarName];
+  if (existing === envVarValue) {
+    return null;
+  }
+  if (existing !== undefined) {
+    return existingFileContent.replace(
+      getEnvVarRegex(envVarName),
+      `${varAssignment}`
+    );
+  } else {
+    const doubleLineBreak = existingFileContent.endsWith("\n") ? "\n" : "\n\n";
+    return (
+      existingFileContent +
+      doubleLineBreak +
+      commentOnPreviousLineWithLineBreak +
+      varAssignment +
+      "\n"
+    );
+  }
+}
+
+export function getEnvVarRegex(envVarName: string) {
+  return new RegExp(`^${envVarName}.*$`, "m");
 }
 
 export async function suggestedEnvVarName(ctx: Context): Promise<{
@@ -120,35 +148,35 @@ async function envVarWriteConfig(
 
   const { envFile, existing } = suggestedDevEnvFile(ctx, detectedFramework);
 
-  if (existing) {
-    const config = dotenv.parse(ctx.fs.readUtf8File(envFile));
-
-    const matching = Object.keys(config).filter((key) =>
-      EXPECTED_NAMES.has(key)
-    );
-    if (matching.length > 1) {
-      logWarning(
-        ctx,
-        chalk.yellow(
-          `Found multiple CONVEX_URL environment variables in ${envFile} so cannot update automatically.`
-        )
-      );
-      return null;
-    }
-    if (matching.length === 1) {
-      const [envVar, oldValue] = [matching[0], config[matching[0]]];
-      if (oldValue === value) {
-        return null;
-      }
-      if (Object.values(config).filter((v) => v === oldValue).length !== 1) {
-        chalk.yellow(`Can't safely modify ${envFile}, please edit manually.`);
-        return null;
-      }
-      return { envFile, envVar, oldValue };
-    }
+  if (!existing) {
+    return { envFile, envVar, existingFileContent: null };
   }
 
-  return { envFile, envVar };
+  const existingFileContent = ctx.fs.readUtf8File(envFile);
+  const config = dotenv.parse(existingFileContent);
+
+  const matching = Object.keys(config).filter((key) => EXPECTED_NAMES.has(key));
+  if (matching.length > 1) {
+    logWarning(
+      ctx,
+      chalk.yellow(
+        `Found multiple CONVEX_URL environment variables in ${envFile} so cannot update automatically.`
+      )
+    );
+    return null;
+  }
+  if (matching.length === 1) {
+    const [existingEnvVar, oldValue] = [matching[0], config[matching[0]]];
+    if (oldValue === value) {
+      return null;
+    }
+    if (Object.values(config).filter((v) => v === oldValue).length !== 1) {
+      chalk.yellow(`Can't safely modify ${envFile}, please edit manually.`);
+      return null;
+    }
+    return { envFile, envVar: existingEnvVar, existingFileContent };
+  }
+  return { envFile, envVar, existingFileContent };
 }
 
 function suggestedDevEnvFile(

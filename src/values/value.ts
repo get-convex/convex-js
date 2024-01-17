@@ -278,7 +278,7 @@ function jsonToConvexInternal(
 /**
  * Parse a Convex value from its JSON representation.
  *
- * This function will revive classes like {@link GenericId} that have been serialized to JSON, parse out `BigInt`s, and so on.
+ * This function will deserialize serialized Int64s to `BigInt`s, Bytes to `ArrayBuffer`s etc.
  *
  * To learn more about Convex values, see [Types](https://docs.convex.dev/using/types).
  *

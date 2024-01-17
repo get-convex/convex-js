@@ -172,7 +172,8 @@ export async function fetchProdDeploymentCredentials(
     if (buildEnvironmentExpectsConvexDeployKey) {
       logFailure(
         ctx,
-        `${buildEnvironmentExpectsConvexDeployKey} build environment detected but ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} is not set. Set this environment variable to deploy from this environment.`
+        `${buildEnvironmentExpectsConvexDeployKey} build environment detected but ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} is not set. ` +
+          `Set this environment variable to deploy from this environment. See https://docs.convex.dev/production/hosting`
       );
       await ctx.crash(1);
     }
@@ -180,7 +181,8 @@ export async function fetchProdDeploymentCredentials(
     if (!header) {
       logFailure(
         ctx,
-        `Error: You are not logged in. Log in with \`npx convex dev\` or set the ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} environment variable.`
+        `Error: You are not logged in. Log in with \`npx convex dev\` or set the ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} environment variable. ` +
+          `See https://docs.convex.dev/production/hosting`
       );
       await ctx.crash(1);
     }
@@ -276,12 +278,18 @@ export async function fetchDeploymentCredentialsProvisionProd(
 export async function fetchTeamAndProject(
   ctx: Context,
   deploymentName: string
-): Promise<{ team: string; project: string }> {
-  const data = await bigBrainAPI({
+) {
+  const data = (await bigBrainAPI({
     ctx,
     method: "GET",
     url: `deployment/${deploymentName}/team_and_project`,
-  });
+  })) as {
+    team: string; // slug
+    project: string; // slug
+    teamId: number;
+    projectId: number;
+  };
+
   const { team, project } = data;
   if (team === undefined || project === undefined) {
     const msg =
@@ -289,7 +297,8 @@ export async function fetchTeamAndProject(
     logFailure(ctx, msg);
     return await ctx.crash(1, "transient", new Error(msg));
   }
-  return { team, project };
+
+  return data;
 }
 
 // Used by dev for upgrade from team and project in convex.json to CONVEX_DEPLOYMENT

@@ -1,7 +1,7 @@
 {
   "name": "convex",
   "description": "Client for the Convex Cloud",
-  "version": "1.6.2",
+  "version": "1.8.0",
   "author": "Convex, Inc. <team@convex.dev>",
   "homepage": "https://convex.dev",
   "main": "./dist/cjs/index.js",
@@ -60,6 +60,16 @@
         "import": "./dist/esm/react-clerk/index.js"
       }
     },
+    "./nextjs": {
+      "require": {
+        "types": "./dist/internal-cjs-types/nextjs/index.d.ts",
+        "require": "./dist/cjs/nextjs/index.js"
+      },
+      "import": {
+        "types": "./dist/internal-esm-types/nextjs/index.d.ts",
+        "import": "./dist/esm/nextjs/index.js"
+      }
+    },
     "./browser": {
       "require": {
         "types": "./dist/internal-cjs-types/browser/index.d.ts",
@@ -105,6 +115,9 @@
       "react-clerk": [
         "./dist/internal-cjs-types/react-clerk/index.d.ts"
       ],
+      "nextjs": [
+        "./dist/internal-cjs-types/nextjs/index.d.ts"
+      ],
       "browser": [
         "./dist/internal-cjs-types/browser/index.d.ts"
       ],
@@ -118,19 +131,9 @@
     "convex-bundled": "bin/main.js"
   },
   "scripts": {
-    "build": "npm run clean && shx mkdir -p dist/ && python3 scripts/build.py 2>&1",
-    "build-esm-types": "shx mkdir -p dist/esm-types && echo '{\"type\": \"module\"}' > dist/esm-types/package.json && tsc --outDir ./dist/esm-types",
-    "build-internal-esm-types": "shx mkdir -p dist/internal-esm-types && echo '{\"type\": \"module\"}' > dist/internal-esm-types/package.json && tsc --stripInternal false --outDir ./dist/internal-esm-types",
-    "build-cjs-types": "shx mkdir -p dist/cjs-types && echo '{\"type\": \"commonjs\"}' > dist/cjs-types/package.json && tsc --outDir ./dist/cjs-types",
-    "build-internal-cjs-types": "shx mkdir -p dist/internal-cjs-types && echo '{\"type\": \"commonjs\"}' > dist/internal-cjs-types/package.json && tsc --stripInternal false --outDir ./dist/internal-cjs-types",
-    "build-esm": "shx mkdir -p dist/esm && echo '{\"type\": \"module\"}' > dist/esm/package.json && node scripts/build.cjs esm",
-    "build-cjs": "shx mkdir -p dist/cjs && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json && node scripts/build.cjs cjs",
-    "build-node-esm-and-cjs": "node scripts/node-browser.mjs",
-    "build-browser-script-tag": "node scripts/build.cjs browser-script-tag",
-    "build-react-script-tag": "node scripts/build.cjs react-script-tag",
-    "build-standalone-cli": "node scripts/build.cjs standalone-cli",
+    "build": "python3 scripts/build.py 2>&1",
     "bundle-server": "node scripts/bundle-server.mjs",
-    "clean": "shx rm -rf dist",
+    "clean": "shx rm -rf dist tmpDist*",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "format": "prettier -w . && eslint --fix .",
     "format-check": "prettier -c . && eslint . --ext .js,.jsx,.ts,.tsx",
@@ -203,7 +206,7 @@
     "@typescript-eslint/eslint-plugin": "^6.7.4",
     "@typescript-eslint/parser": "^6.7.4",
     "@swc/core": "1.3.82",
-    "axios": "^0.27.2",
+    "axios": "1.6.2",
     "axios-retry": "^3.2.4",
     "bufferutil": "^4.0.7",
     "chalk": "4",

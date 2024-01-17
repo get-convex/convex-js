@@ -80,13 +80,23 @@ async function dashboardUrlForConfig(
 
 export function dashboardUrl(
   team: string,
+  project: string | null,
+  deploymentName: null
+): string;
+export function dashboardUrl(
+  team: string,
   project: string,
+  deploymentName: string | null
+): string;
+export function dashboardUrl(
+  team: string,
+  project: string | null,
   deploymentName: string | null
 ) {
   const host = process.env.CONVEX_PROVISION_HOST
     ? "http://localhost:6789"
     : "https://dashboard.convex.dev";
-  return `${host}/t/${team}/${project}${
+  return `${host}/t/${team}${project !== null ? `/${project}` : ""}${
     deploymentName !== null ? `/${deploymentName}` : ""
   }`;
 }

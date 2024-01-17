@@ -10,9 +10,13 @@ import url from "url";
 import path from "path";
 import fs from "fs";
 
+const [tempDir] = process.argv
+  .filter((arg) => arg.startsWith("tempDir="))
+  .map((arg) => arg.slice(8));
+
 const __dirname = url.fileURLToPath(new URL(".", import.meta.url));
 const convexDir = path.join(__dirname, "..");
-const distDir = path.join(convexDir, "dist");
+const distDir = path.join(convexDir, tempDir);
 const cjsBrowserIndex = path.join(distDir, "cjs", "browser", "index.js");
 const esmBrowserIndex = path.join(distDir, "esm", "browser", "index.js");
 const cjsBrowserIndexNode = path.join(

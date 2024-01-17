@@ -1,15 +1,15 @@
 import * as dotenv from "dotenv";
 import { Context } from "../../bundler/context.js";
+import { changedEnvVarFile, getEnvVarRegex } from "./envvars.js";
 
 const ENV_VAR_FILE_PATH = ".env.local";
 export const CONVEX_DEPLOYMENT_VAR_NAME = "CONVEX_DEPLOYMENT";
-const ENV_VAR_REGEX = new RegExp(`^${CONVEX_DEPLOYMENT_VAR_NAME}.*$`, "m");
 
 export function readDeploymentEnvVar(): string | null {
   dotenv.config({ path: ENV_VAR_FILE_PATH });
   dotenv.config();
   const raw = process.env[CONVEX_DEPLOYMENT_VAR_NAME] ?? null;
-  if (raw === null) {
+  if (raw === null || raw === "") {
     return null;
   }
   return stripDeploymentTypePrefix(raw);
@@ -43,6 +43,27 @@ export async function writeDeploymentEnvVar(
   return { wroteToGitIgnore: false };
 }
 
+// Only used in the internal --url flow
+export async function eraseDeploymentEnvVar(ctx: Context): Promise<boolean> {
+  const existingFile = ctx.fs.exists(ENV_VAR_FILE_PATH)
+    ? ctx.fs.readUtf8File(ENV_VAR_FILE_PATH)
+    : null;
+  if (existingFile === null) {
+    return false;
+  }
+  const config = dotenv.parse(existingFile);
+  const existing = config[CONVEX_DEPLOYMENT_VAR_NAME];
+  if (existing === undefined) {
+    return false;
+  }
+  const changedFile = existingFile.replace(
+    getEnvVarRegex(CONVEX_DEPLOYMENT_VAR_NAME),
+    ""
+  );
+  ctx.fs.writeUtf8File(ENV_VAR_FILE_PATH, changedFile);
+  return true;
+}
+
 async function gitIgnoreEnvVarFile(ctx: Context): Promise<boolean> {
   const gitIgnorePath = ".gitignore";
   const gitIgnoreContents = ctx.fs.exists(gitIgnorePath)
@@ -67,21 +88,15 @@ export function changesToEnvVarFile(
   }: { team: string; project: string; deploymentName: string }
 ): string | null {
   const deploymentValue = deploymentType + ":" + deploymentName;
-  const comment = "# Deployment used by `npx convex dev`";
-  const varAssignment = `${CONVEX_DEPLOYMENT_VAR_NAME}=${deploymentValue} # team: ${team}, project: ${project}`;
-  if (existingFile === null) {
-    return `${comment}\n${varAssignment}\n`;
-  }
-  const config = dotenv.parse(existingFile);
-  const existing = config[CONVEX_DEPLOYMENT_VAR_NAME];
-  if (existing === deploymentValue) {
-    return null;
-  }
-  if (existing !== undefined) {
-    return existingFile.replace(ENV_VAR_REGEX, `${varAssignment}`);
-  } else {
-    return `${existingFile}\n${comment}\n${varAssignment}\n`;
-  }
+  const commentOnPreviousLine = "# Deployment used by `npx convex dev`";
+  const commentAfterValue = `team: ${team}, project: ${project}`;
+  return changedEnvVarFile(
+    existingFile,
+    CONVEX_DEPLOYMENT_VAR_NAME,
+    deploymentValue,
+    commentAfterValue,
+    commentOnPreviousLine
+  );
 }
 
 // exported for tests

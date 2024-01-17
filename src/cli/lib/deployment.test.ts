@@ -23,6 +23,7 @@ test("env var changes", () => {
 
   expect(changesToEnvVarFile("RAD_DEPLOYMENT=foo", "prod", DEPLOYMENT)).toEqual(
     "RAD_DEPLOYMENT=foo\n" +
+      "\n" +
       "# Deployment used by `npx convex dev`\n" +
       "CONVEX_DEPLOYMENT=prod:tall-bar # team: snoops, project: earth\n"
   );

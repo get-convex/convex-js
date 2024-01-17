@@ -267,6 +267,10 @@ export class WebSocketManager {
   }
 
   private resetServerInactivityTimeout() {
+    if (this.socket.state !== "stopped") {
+      // Don't reset any timers if we were trying to stop.
+      return;
+    }
     if (this.reconnectDueToServerInactivityTimeout !== null) {
       clearTimeout(this.reconnectDueToServerInactivityTimeout);
       this.reconnectDueToServerInactivityTimeout = null;
@@ -343,7 +347,7 @@ export class WebSocketManager {
    * Close the WebSocket and do not reconnect.
    * @returns A Promise that resolves when the WebSocket `onClose` callback is called.
    */
-  stop(): void {
+  stop(): Promise<void> {
     if (this.reconnectDueToServerInactivityTimeout) {
       clearTimeout(this.reconnectDueToServerInactivityTimeout);
     }
@@ -354,13 +358,24 @@ export class WebSocketManager {
       case "connecting":
       case "ready":
         this.close();
-        this.socket = {
-          state: "stopped",
-        };
-        return;
+        if (
+          this.socket.state === "ready" ||
+          this.socket.state === "connecting"
+        ) {
+          const ws = this.socket.ws;
+          this.socket = { state: "stopped" };
+          return new Promise((r) => {
+            ws.onclose = (_event: CloseEvent) => r();
+          });
+        }
+        this.socket = { state: "stopped" };
+        return Promise.resolve();
       default: {
         // Enforce that the switch-case is exhaustive.
         const _: never = this.socket;
+        throw new Error(
+          `Invalid websocket state: ${(this.socket as any).state}`
+        );
       }
     }
   }

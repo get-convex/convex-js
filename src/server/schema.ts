@@ -295,6 +295,18 @@ export class TableDefinition<
   }
 
   /**
+   * Work around for https://github.com/microsoft/TypeScript/issues/57035
+   */
+  protected self(): TableDefinition<
+    Document,
+    FieldPaths,
+    Indexes,
+    SearchIndexes,
+    VectorIndexes
+  > {
+    return this;
+  }
+  /**
    * Export the contents of this definition.
    *
    * This is called internally by the Convex framework.
@@ -580,7 +592,7 @@ const systemSchema = defineSchema({
   }),
 });
 
-export type SystemDataModel = DataModelFromSchemaDefinition<
-  typeof systemSchema
->;
+export interface SystemDataModel
+  extends DataModelFromSchemaDefinition<typeof systemSchema> {}
+
 export type SystemTableNames = TableNamesInDataModel<SystemDataModel>;

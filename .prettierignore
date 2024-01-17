@@ -3,3 +3,4 @@ temp
 dist/
 api-extractor-configs/reports
 api-extractor-configs/temp
+tmpDist*

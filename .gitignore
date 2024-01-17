@@ -7,3 +7,6 @@ package-lock.json
 
 # Using in packaging script
 tmpPackage*
+
+# used while building dist
+tmpDist*

@@ -4,6 +4,7 @@ import inquirer from "inquirer";
 import {
   Context,
   logError,
+  logFailure,
   logFinishedStep,
   logMessage,
   logOutput,
@@ -25,6 +26,7 @@ import { PushOptions, runPush } from "./lib/push.js";
 import { bigBrainAPI } from "./lib/utils.js";
 import { spawnSync } from "child_process";
 import { runFunctionAndLog } from "./lib/run.js";
+import { usageStateWarning } from "./lib/usage.js";
 
 export const deploy = new Command("deploy")
   .description("Deploy to a Convex deployment")
@@ -127,6 +129,8 @@ export const deploy = new Command("deploy")
         );
         await ctx.crash(1);
       }
+
+      await usageStateWarning(ctx);
 
       if (
         configuredDeployKey !== null &&
@@ -325,11 +329,15 @@ async function runCommand(
   if (!options.dryRun) {
     const env = { ...process.env };
     env[urlVar] = options.url;
-    spawnSync(options.cmd, {
+    const result = spawnSync(options.cmd, {
       env,
       stdio: "inherit",
       shell: true,
     });
+    if (result.status !== 0) {
+      logFailure(ctx, `'${options.cmd}' failed`);
+      await ctx.crash(1);
+    }
   }
   logFinishedStep(
     ctx,

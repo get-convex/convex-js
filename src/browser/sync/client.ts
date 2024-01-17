@@ -146,8 +146,6 @@ export class BaseConvexClient {
   private readonly onTransition: (updatedQueries: QueryToken[]) => void;
   private nextRequestId: RequestId;
   private readonly sessionId: string;
-  private fetchToken: null | AuthTokenFetcher = null;
-  private refetchTokenTimeoutId: null | ReturnType<typeof setTimeout> = null;
   private firstMessageReceived = false;
   private readonly verbose: boolean;
   private readonly debug: boolean;

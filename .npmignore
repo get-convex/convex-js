@@ -27,4 +27,5 @@ bundle-server.mjs
 build.py
 build.cjs
 tmpPackage*
+tmpDist*
 api-extractor-configs/temp/

@@ -30,6 +30,10 @@ const allSourceFiles = [...walkSync("src")].filter((name) => {
   );
 });
 
+const [tempDir] = process.argv
+  .filter((arg) => arg.startsWith("tempDir="))
+  .map((arg) => arg.slice(8));
+
 if (process.argv.includes("esm")) {
   const opts = {
     entryPoints: allSourceFiles.filter(
@@ -37,7 +41,7 @@ if (process.argv.includes("esm")) {
     ),
     bundle: false,
     sourcemap: true,
-    outdir: "dist/esm",
+    outdir: tempDir + "/esm",
     target: "es2020",
   };
   require("esbuild")
@@ -50,7 +54,7 @@ if (process.argv.includes("esm")) {
       ...opts,
       entryPoints: ["src/browser/simple_client-node.ts"],
       outdir: undefined,
-      outfile: "dist/esm/browser/simple_client-node.js",
+      outfile: tempDir + "/esm/browser/simple_client-node.js",
       platform: "node",
       format: "esm",
       bundle: true,
@@ -72,7 +76,7 @@ if (process.argv.includes("cjs")) {
     format: "cjs",
     bundle: false,
     sourcemap: true,
-    outdir: "dist/cjs",
+    outdir: tempDir + "/cjs",
     target: "es2020",
   };
   require("esbuild")
@@ -86,7 +90,7 @@ if (process.argv.includes("cjs")) {
       bundle: true,
       outdir: undefined,
       entryPoints: ["src/browser/simple_client-node.ts"],
-      outfile: "dist/cjs/browser/simple_client-node.js",
+      outfile: tempDir + "/cjs/browser/simple_client-node.js",
       platform: "node",
       external: ["./src/browser/simple_client.ts"],
       plugins: [importPathPlugin],
@@ -101,7 +105,7 @@ if (process.argv.includes("browser-script-tag")) {
       bundle: true,
       platform: "browser",
       sourcemap: true,
-      outfile: "dist/browser.bundle.js",
+      outfile: tempDir + "/browser.bundle.js",
       globalName: "convex",
       logLevel: "warning",
     })
@@ -118,7 +122,7 @@ if (process.argv.includes("react-script-tag")) {
       platform: "browser",
       external: ["react", "react-dom"],
       sourcemap: true,
-      outfile: "dist/react.bundle.js",
+      outfile: tempDir + "/react.bundle.js",
       globalName: "convex",
       logLevel: "warning",
       plugins: [
@@ -141,7 +145,7 @@ if (process.argv.includes("standalone-cli")) {
       sourcemap: true,
       target: "node14",
       external: ["esbuild", "fsevents"],
-      outfile: "dist/cli.bundle.cjs",
+      outfile: tempDir + "/cli.bundle.cjs",
       logLevel: "warning",
     })
     .catch(() => process.exit(1));

@@ -25,6 +25,7 @@ import { watchLogs } from "./lib/logs.js";
 import { runFunctionAndLog, subscribe } from "./lib/run.js";
 import { BaseConvexClient } from "../browser/index.js";
 import { Value } from "../values/index.js";
+import { usageStateWarning } from "./lib/usage.js";
 
 export const dev = new Command("dev")
   .summary("Develop against a dev deployment, watching for changes")
@@ -107,6 +108,8 @@ export const dev = new Command("dev")
       configure,
       cmdOptions
     );
+
+    await usageStateWarning(ctx);
 
     const promises = [];
     if (cmdOptions.tailLogs) {
