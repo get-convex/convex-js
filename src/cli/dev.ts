@@ -19,11 +19,11 @@ import {
   formatDuration,
   getCurrentTimeString,
   waitForever,
+  waitUntilCalled,
 } from "./lib/utils.js";
 import { Crash, WatchContext, Watcher } from "./lib/watch.js";
 import { watchLogs } from "./lib/logs.js";
 import { runFunctionAndLog, subscribe } from "./lib/run.js";
-import { BaseConvexClient } from "../browser/index.js";
 import { Value } from "../values/index.js";
 import { usageStateWarning } from "./lib/usage.js";
 
@@ -304,29 +304,34 @@ function getFunctionWatch(
   functionName: string,
   getArgs: () => Record<string, Value> | null
 ) {
-  let client: BaseConvexClient;
+  const [stopPromise, stop] = waitUntilCalled();
   return {
     watch: async () => {
       const args = getArgs();
       if (args === null) {
         return waitForever();
       }
+      let changes = 0;
       return subscribe(
         ctx,
         credentials.url,
         credentials.adminKey,
         functionName,
         args,
-        "first change",
+        stopPromise,
         {
-          onStart: (convex) => {
-            client = convex;
+          onChange: () => {
+            changes++;
+            // First bump is just the initial results reporting
+            if (changes > 1) {
+              stop();
+            }
           },
         }
       );
     },
-    stop: async () => {
-      await client?.close();
+    stop: () => {
+      stop();
     },
   };
 }

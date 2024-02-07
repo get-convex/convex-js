@@ -3,6 +3,7 @@
 /* eslint-disable no-restricted-syntax */
 import chalk from "chalk";
 import stdFs, { Dirent, Mode, ReadStream, Stats } from "fs";
+import * as fsPromises from "fs/promises";
 import os from "os";
 import path from "path";
 
@@ -53,7 +54,14 @@ export interface Filesystem {
   exists(path: string): boolean;
   stat(path: string): Stats;
   readUtf8File(path: string): string;
-  createReadStream(path: string): ReadStream;
+  // createReadStream returns a stream for which [Symbol.asyncIterator]
+  // yields chunks of size highWaterMark (until the last one), or 64KB if
+  // highWaterMark isn't specified.
+  // https://nodejs.org/api/stream.html#readablesymbolasynciterator
+  createReadStream(
+    path: string,
+    options: { highWaterMark?: number }
+  ): ReadStream;
   access(path: string): void;
 
   writeUtf8File(path: string, contents: string, mode?: Mode): void;
@@ -107,8 +115,26 @@ class NodeFs implements Filesystem {
   readUtf8File(path: string) {
     return stdFs.readFileSync(path, { encoding: "utf-8" });
   }
-  createReadStream(path: string): ReadStream {
-    return stdFs.createReadStream(path);
+  createReadStream(
+    path: string,
+    options: { highWaterMark?: number }
+  ): ReadStream {
+    return stdFs.createReadStream(path, options);
+  }
+  // To avoid issues with filesystem events triggering for our own streamed file
+  // writes, writeFileStream is intentionally not on the Filesystem interface
+  // and not implemented by RecordingFs.
+  async writeFileStream(path: string, stream: ReadStream): Promise<void> {
+    // 'wx' means O_CREAT | O_EXCL | O_WRONLY
+    // 0o644 means owner has readwrite access, everyone else has read access.
+    const fileHandle = await fsPromises.open(path, "wx", 0o644);
+    try {
+      for await (const chunk of stream) {
+        await fileHandle.write(chunk);
+      }
+    } finally {
+      await fileHandle.close();
+    }
   }
   access(path: string) {
     return stdFs.accessSync(path);
@@ -162,7 +188,7 @@ class NodeFs implements Filesystem {
     // We don't track invalidations for the node filesystem either.
   }
 }
-export const nodeFs: Filesystem = new NodeFs();
+export const nodeFs = new NodeFs();
 
 // Filesystem implementation that records all paths observed. This is useful
 // for implementing continuous watch commands that need to manage a filesystem
@@ -255,11 +281,14 @@ export class RecordingFs implements Filesystem {
       throw err;
     }
   }
-  createReadStream(path: string): ReadStream {
+  createReadStream(
+    path: string,
+    options: { highWaterMark?: number }
+  ): ReadStream {
     try {
       const st = nodeFs.stat(path);
       this.registerPath(path, st);
-      return nodeFs.createReadStream(path);
+      return nodeFs.createReadStream(path, options);
     } catch (err: any) {
       if (err.code === "ENOENT") {
         this.registerPath(path, null);

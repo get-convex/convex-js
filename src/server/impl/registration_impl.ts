@@ -7,17 +7,17 @@ import {
 } from "../../values/index.js";
 import { GenericDataModel } from "../data_model.js";
 import {
-  ActionCtx,
-  MutationCtx,
-  RegisteredAction,
+  ActionBuilder,
+  DefaultFunctionArgs,
+  GenericActionCtx,
+  GenericMutationCtx,
+  GenericQueryCtx,
+  MutationBuilder,
   PublicHttpAction,
+  QueryBuilder,
+  RegisteredAction,
   RegisteredMutation,
   RegisteredQuery,
-  QueryCtx,
-  DefaultFunctionArgs,
-  MutationBuilder,
-  QueryBuilder,
-  ActionBuilder,
 } from "../registration.js";
 import { setupActionCalls } from "./actions_impl.js";
 import { setupActionVectorSearch } from "./vector_search_impl.js";
@@ -35,7 +35,7 @@ import {
 } from "./storage_impl.js";
 
 async function invokeMutation<
-  F extends (ctx: MutationCtx<GenericDataModel>, ...args: any) => any
+  F extends (ctx: GenericMutationCtx<GenericDataModel>, ...args: any) => any
 >(func: F, argsStr: string) {
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since queries are only running in V8.
@@ -141,7 +141,7 @@ function exportArgs(functionDefinition: FunctionDefinition) {
  * If you're using code generation, use the `mutation` function in
  * `convex/_generated/server.d.ts` which is typed for your data model.
  *
- * @param func - The mutation function. It receives a {@link MutationCtx} as its first argument.
+ * @param func - The mutation function. It receives a {@link GenericMutationCtx} as its first argument.
  * @returns The wrapped mutation. Include this as an `export` to name it and make it accessible.
  *
  * @public
@@ -176,7 +176,7 @@ export const mutationGeneric: MutationBuilder<any, "public"> = (
  * If you're using code generation, use the `internalMutation` function in
  * `convex/_generated/server.d.ts` which is typed for your data model.
  *
- * @param func - The mutation function. It receives a {@link MutationCtx} as its first argument.
+ * @param func - The mutation function. It receives a {@link GenericMutationCtx} as its first argument.
  * @returns The wrapped mutation. Include this as an `export` to name it and make it accessible.
  *
  * @public
@@ -204,7 +204,7 @@ export const internalMutationGeneric: MutationBuilder<any, "internal"> = (
 };
 
 async function invokeQuery<
-  F extends (ctx: QueryCtx<GenericDataModel>, ...args: any) => any
+  F extends (ctx: GenericQueryCtx<GenericDataModel>, ...args: any) => any
 >(func: F, argsStr: string, allowMapsAndSetsInReturnValue: boolean) {
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since queries are only running in V8.
@@ -233,7 +233,7 @@ async function invokeQuery<
  * If you're using code generation, use the `query` function in
  * `convex/_generated/server.d.ts` which is typed for your data model.
  *
- * @param func - The query function. It receives a {@link QueryCtx} as its first argument.
+ * @param func - The query function. It receives a {@link GenericQueryCtx} as its first argument.
  * @returns The wrapped query. Include this as an `export` to name it and make it accessible.
  *
  * @public
@@ -269,7 +269,7 @@ export const queryGeneric: QueryBuilder<any, "public"> = (
  * If you're using code generation, use the `internalQuery` function in
  * `convex/_generated/server.d.ts` which is typed for your data model.
  *
- * @param func - The query function. It receives a {@link QueryCtx} as its first argument.
+ * @param func - The query function. It receives a {@link GenericQueryCtx} as its first argument.
  * @returns The wrapped query. Include this as an `export` to name it and make it accessible.
  *
  * @public
@@ -297,7 +297,7 @@ export const internalQueryGeneric: QueryBuilder<any, "internal"> = (
 };
 
 async function invokeAction<
-  F extends (ctx: ActionCtx<GenericDataModel>, ...args: any) => any
+  F extends (ctx: GenericActionCtx<GenericDataModel>, ...args: any) => any
 >(func: F, requestId: string, argsStr: string) {
   const args = jsonToConvex(JSON.parse(argsStr), false);
   const calls = setupActionCalls(requestId);
@@ -318,7 +318,7 @@ async function invokeAction<
  * If you're using code generation, use the `action` function in
  * `convex/_generated/server.d.ts` which is typed for your data model.
  *
- * @param func - The function. It receives a {@link ActionCtx} as its first argument.
+ * @param func - The function. It receives a {@link GenericActionCtx} as its first argument.
  * @returns The wrapped function. Include this as an `export` to name it and make it accessible.
  *
  * @public
@@ -352,7 +352,7 @@ export const actionGeneric: ActionBuilder<any, "public"> = (
  * If you're using code generation, use the `internalAction` function in
  * `convex/_generated/server.d.ts` which is typed for your data model.
  *
- * @param func - The function. It receives a {@link ActionCtx} as its first argument.
+ * @param func - The function. It receives a {@link GenericActionCtx} as its first argument.
  * @returns The wrapped function. Include this as an `export` to name it and make it accessible.
  *
  * @public
@@ -381,7 +381,7 @@ export const internalActionGeneric: ActionBuilder<any, "internal"> = (
 };
 
 async function invokeHttpAction<
-  F extends (ctx: ActionCtx<GenericDataModel>, request: Request) => any
+  F extends (ctx: GenericActionCtx<GenericDataModel>, request: Request) => any
 >(func: F, request: Request) {
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since http endpoints are only running in V8.
@@ -400,7 +400,7 @@ async function invokeHttpAction<
 /**
  * Define a Convex HTTP action.
  *
- * @param func - The function. It receives an {@link ActionCtx} as its first argument, and a `Request` object
+ * @param func - The function. It receives an {@link GenericActionCtx} as its first argument, and a `Request` object
  * as its second.
  * @returns The wrapped function. Route a URL path to this function in `convex/http.js`.
  *
@@ -408,7 +408,7 @@ async function invokeHttpAction<
  */
 export const httpActionGeneric = (
   func: (
-    ctx: ActionCtx<GenericDataModel>,
+    ctx: GenericActionCtx<GenericDataModel>,
     request: Request
   ) => Promise<Response>
 ): PublicHttpAction => {

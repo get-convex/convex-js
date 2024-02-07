@@ -1,28 +1,48 @@
-import { Command } from "commander";
 import chalk from "chalk";
-import {
-  ProjectConfig,
-  enforceDeprecatedConfigField,
-  readProjectConfig,
-} from "./lib/config.js";
 import open from "open";
-import { Context, logMessage, oneoffContext } from "../bundler/context.js";
-import { fetchTeamAndProject } from "./lib/api.js";
-import { getConfiguredDeploymentOrCrash } from "./lib/utils.js";
+import {
+  Context,
+  logFailure,
+  logMessage,
+  oneoffContext,
+} from "../bundler/context.js";
+import {
+  deploymentSelectionFromOptions,
+  fetchDeploymentCredentialsProvisionProd,
+  fetchTeamAndProject,
+} from "./lib/api.js";
+import { DeploymentCommand } from "./lib/utils.js";
 
-export const dashboard = new Command("dashboard")
+const DASHBOARD_HOST = process.env.CONVEX_PROVISION_HOST
+  ? "http://localhost:6789"
+  : "https://dashboard.convex.dev";
+
+export const dashboard = new DeploymentCommand("dashboard")
   .description("Open the dashboard in the browser")
   .option(
     "--no-open",
     "Don't automatically open the dashboard in the default browser"
   )
+  .addDeploymentSelectionOptions("Open the dashboard for")
+  .showHelpAfterError()
   .action(async (options) => {
     const ctx = oneoffContext;
-    const configuredDeployment = await getConfiguredDeploymentOrCrash(ctx);
-    const loginUrl = await dashboardUrlForConfiguredDeployment(
+
+    const deploymentSelection = deploymentSelectionFromOptions(options);
+    const { deploymentName } = await fetchDeploymentCredentialsProvisionProd(
       ctx,
-      configuredDeployment
+      deploymentSelection
     );
+
+    if (deploymentName === undefined) {
+      logFailure(
+        ctx,
+        "No deployment name, run `npx convex dev` to configure a Convex project"
+      );
+      return await ctx.crash(1, "invalid filesystem data");
+    }
+
+    const loginUrl = await deploymentDashboardUrlPage(ctx, deploymentName, "");
 
     if (options.open) {
       logMessage(
@@ -35,68 +55,35 @@ export const dashboard = new Command("dashboard")
     }
   });
 
-export async function dashboardUrlForConfiguredDeployment(
+export async function deploymentDashboardUrlPage(
   ctx: Context,
-  configuredDeployment: string | null
+  configuredDeployment: string | null,
+  page: string
 ): Promise<string> {
   if (configuredDeployment !== null) {
     const { team, project } = await fetchTeamAndProject(
       ctx,
       configuredDeployment
     );
-    return dashboardUrl(team, project, configuredDeployment);
+    return deploymentDashboardUrl(team, project, configuredDeployment) + page;
+  } else {
+    // If there is no configured deployment, go to the most recently opened deployment.
+    return `${DASHBOARD_HOST}/deployment/${page}`;
   }
-  const { projectConfig } = await readProjectConfig(ctx);
-  return dashboardUrlForConfig(ctx, projectConfig);
 }
 
-async function dashboardUrlForConfig(
-  ctx: Context,
-  projectConfig: ProjectConfig
-): Promise<string> {
-  const team = await enforceDeprecatedConfigField(ctx, projectConfig, "team");
-  const project = await enforceDeprecatedConfigField(
-    ctx,
-    projectConfig,
-    "project"
-  );
-  const prodUrl = await enforceDeprecatedConfigField(
-    ctx,
-    projectConfig,
-    "prodUrl"
-  );
-  const host = process.env.CONVEX_PROVISION_HOST
-    ? "http://localhost:6789"
-    : "https://dashboard.convex.dev";
-
-  // in local dev we don't know the deployment name
-  if (process.env.CONVEX_PROVISION_HOST) {
-    return host;
-  }
-
-  const deployment = prodUrl.match(/https?:\/\/([^.]*)[.]/)![1];
-  return dashboardUrl(team, project, deployment);
-}
-
-export function dashboardUrl(
-  team: string,
-  project: string | null,
-  deploymentName: null
-): string;
-export function dashboardUrl(
+export function deploymentDashboardUrl(
   team: string,
   project: string,
-  deploymentName: string | null
-): string;
-export function dashboardUrl(
-  team: string,
-  project: string | null,
-  deploymentName: string | null
+  deploymentName: string
 ) {
-  const host = process.env.CONVEX_PROVISION_HOST
-    ? "http://localhost:6789"
-    : "https://dashboard.convex.dev";
-  return `${host}/t/${team}${project !== null ? `/${project}` : ""}${
-    deploymentName !== null ? `/${deploymentName}` : ""
-  }`;
+  return `${projectDashboardUrl(team, project)}/${deploymentName}`;
+}
+
+export function projectDashboardUrl(team: string, project: string) {
+  return `${teamDashboardUrl(team)}/${project}`;
+}
+
+export function teamDashboardUrl(team: string) {
+  return `${DASHBOARD_HOST}/t/${team}`;
 }

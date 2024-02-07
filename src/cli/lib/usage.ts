@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { Context, logWarning } from "../../bundler/context.js";
-import { dashboardUrl } from "../dashboard.js";
+import { teamDashboardUrl } from "../dashboard.js";
 import { fetchTeamAndProject } from "./api.js";
 import {
   bigBrainAPI,
@@ -17,7 +17,7 @@ async function warn(ctx: Context, title: string, subtitle: string) {
   logWarning(ctx, chalk.yellow(subtitle));
   logWarning(
     ctx,
-    chalk.yellow(`Visit ${dashboardUrl(team, null, null)} to learn more.`)
+    chalk.yellow(`Visit ${teamDashboardUrl(team)} to learn more.`)
   );
 }
 

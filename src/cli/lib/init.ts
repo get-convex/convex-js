@@ -9,7 +9,7 @@ import {
   logWarning,
   showSpinner,
 } from "../../bundler/context.js";
-import { dashboardUrl } from "../dashboard.js";
+import { projectDashboardUrl } from "../dashboard.js";
 import { DeploymentType, createProjectProvisioningDevOrProd } from "./api.js";
 import { doCodegen, doInitCodegen } from "./codegen.js";
 import {
@@ -85,7 +85,7 @@ export async function init(
     `Created project ${chalk.bold(
       projectSlug
     )}${teamMessage}, manage it at ${chalk.bold(
-      dashboardUrl(teamSlug, projectSlug, null)
+      projectDashboardUrl(teamSlug, projectSlug)
     )}`
   );
 

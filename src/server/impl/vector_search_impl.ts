@@ -28,6 +28,13 @@ export function setupActionVectorSearch(
     validateArg(tableName, 1, "vectorSearch", "tableName");
     validateArg(indexName, 2, "vectorSearch", "indexName");
     validateArg(query, 3, "vectorSearch", "query");
+    if (
+      !query.vector ||
+      !Array.isArray(query.vector) ||
+      query.vector.length === 0
+    ) {
+      throw Error("`vector` must be a non-empty Array in vectorSearch");
+    }
 
     return await new VectorQueryImpl(
       requestId,
@@ -70,6 +77,7 @@ export class VectorQueryImpl {
     }
     const query = this.state.query;
     this.state = { type: "consumed" };
+
     const { results } = await performAsyncSyscall("1.0/actions/vectorSearch", {
       requestId: this.requestId,
       version,

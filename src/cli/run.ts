@@ -1,14 +1,15 @@
-import { Command, Option } from "commander";
+import { Option } from "commander";
 import { logFailure, oneoffContext } from "../bundler/context.js";
 import { watchAndPush } from "./dev.js";
-import { fetchDeploymentCredentialsProvisionProd } from "./lib/api.js";
+import {
+  fetchDeploymentCredentialsProvisionProd,
+  deploymentSelectionFromOptions,
+} from "./lib/api.js";
 import { runFunctionAndLog, subscribeAndLog } from "./lib/run.js";
-import { ensureHasConvexDependency } from "./lib/utils.js";
+import { DeploymentCommand, ensureHasConvexDependency } from "./lib/utils.js";
 
-export const run = new Command("run")
-  .description(
-    "Run a Convex function (query, mutation, or action) after pushing local code."
-  )
+export const run = new DeploymentCommand("run")
+  .description("Run a function (query, mutation, or action) on your deployment")
   .argument(
     "functionName",
     "identifier of the function to run, like `listMessages` or `dir/file:myFunction`"
@@ -24,13 +25,7 @@ export const run = new Command("run")
   .option("--push", "Push code to deployment before running the function.")
   // For backwards compatibility we still support --no-push which is a noop
   .addOption(new Option("--no-push").hideHelp())
-  .option(
-    "--prod",
-    "Run the function on this project's production deployment, instead of the configured deployment. Can only be used with --no-push."
-  )
-  .addOption(new Option("--url <url>").hideHelp())
-  .addOption(new Option("--admin-key <adminKey>").hideHelp())
-
+  .addDeploymentSelectionOptions("Run the function on")
   // Options for the implicit dev deploy
   .addOption(
     new Option(
@@ -50,14 +45,19 @@ export const run = new Command("run")
   .action(async (functionName, argsString, options) => {
     const ctx = oneoffContext;
 
-    const { adminKey, url: deploymentUrl } =
-      await fetchDeploymentCredentialsProvisionProd(ctx, options);
+    const deploymentSelection = deploymentSelectionFromOptions(options);
+
+    const {
+      adminKey,
+      url: deploymentUrl,
+      deploymentType,
+    } = await fetchDeploymentCredentialsProvisionProd(ctx, deploymentSelection);
 
     await ensureHasConvexDependency(ctx, "run");
 
     const args = argsString ? JSON.parse(argsString) : {};
 
-    if (options.prod && options.push) {
+    if (deploymentType === "prod" && options.push) {
       logFailure(
         ctx,
         `\`convex run\` doesn't support pushing functions to prod deployments. ` +

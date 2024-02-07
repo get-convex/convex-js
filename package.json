@@ -1,7 +1,7 @@
 {
   "name": "convex",
   "description": "Client for the Convex Cloud",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "author": "Convex, Inc. <team@convex.dev>",
   "homepage": "https://convex.dev",
   "main": "./dist/cjs/index.js",

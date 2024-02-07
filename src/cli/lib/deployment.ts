@@ -1,6 +1,7 @@
 import * as dotenv from "dotenv";
-import { Context } from "../../bundler/context.js";
+import { Context, logFailure } from "../../bundler/context.js";
 import { changedEnvVarFile, getEnvVarRegex } from "./envvars.js";
+import { CONVEX_DEPLOY_KEY_ENV_VAR_NAME } from "./utils.js";
 
 const ENV_VAR_FILE_PATH = ".env.local";
 export const CONVEX_DEPLOYMENT_VAR_NAME = "CONVEX_DEPLOYMENT";
@@ -8,6 +9,14 @@ export const CONVEX_DEPLOYMENT_VAR_NAME = "CONVEX_DEPLOYMENT";
 export function readDeploymentEnvVar(): string | null {
   dotenv.config({ path: ENV_VAR_FILE_PATH });
   dotenv.config();
+  const rawAdminKey = process.env[CONVEX_DEPLOY_KEY_ENV_VAR_NAME] ?? null;
+  const adminKeyDeploymentName = rawAdminKey
+    ? deploymentNameFromAdminKey(rawAdminKey)
+    : null;
+  if (adminKeyDeploymentName !== null) {
+    return adminKeyDeploymentName;
+  }
+  // If CONVEX_DEPLOY_KEY isn't set, fall back to parsing CONVEX_DEPLOYMENT.
   const raw = process.env[CONVEX_DEPLOYMENT_VAR_NAME] ?? null;
   if (raw === null || raw === "") {
     return null;
@@ -35,6 +44,10 @@ export async function writeDeploymentEnvVar(
     deploymentType,
     deployment
   );
+  // Also update process.env directly, because `dotfile.config()` doesn't pick
+  // up changes to the file.
+  process.env[CONVEX_DEPLOYMENT_VAR_NAME] =
+    deploymentType + ":" + deployment.deploymentName;
   if (changedFile !== null) {
     ctx.fs.writeUtf8File(ENV_VAR_FILE_PATH, changedFile);
     // Only do this if we're not reinitializing an existing setup
@@ -118,4 +131,39 @@ export function changesToGitIgnore(existingFile: string | null): string | null {
   } else {
     return null;
   }
+}
+
+export const deploymentNameFromAdminKeyOrCrash = async (
+  ctx: Context,
+  adminKey: string
+) => {
+  const deploymentName = deploymentNameFromAdminKey(adminKey);
+  if (deploymentName === null) {
+    logFailure(
+      ctx,
+      `Please set ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} to a new key which you can find on your Convex dashboard.`
+    );
+    return await ctx.crash(1);
+  }
+  return deploymentName;
+};
+
+export const deploymentNameFromAdminKey = (adminKey: string) => {
+  const parts = adminKey.split("|");
+  if (parts.length === 1) {
+    return null;
+  }
+  if (deploymentTypeFromAdminKey(adminKey) !== "prod") {
+    // Only prod admin keys contain deployment name.
+    return null;
+  }
+  return stripDeploymentTypePrefix(parts[0]);
+};
+
+export function deploymentTypeFromAdminKey(adminKey: string) {
+  const parts = adminKey.split(":");
+  if (parts.length === 1) {
+    return "prod";
+  }
+  return parts.at(0)!;
 }

@@ -17,7 +17,10 @@ export async function watchLogs(
   ctx: Context,
   url: string,
   adminKey: string,
-  dest: LogDestination
+  dest: LogDestination,
+  options?: {
+    history?: number | boolean;
+  }
 ) {
   const authHeader = createAuthHeader(adminKey);
   let numFailures = 0;
@@ -37,6 +40,16 @@ export async function watchLogs(
       // logs to the client.
       if (isFirst) {
         isFirst = false;
+        if (
+          options?.history === true ||
+          (typeof options?.history === "number" && options?.history > 0)
+        ) {
+          const entriesSlice =
+            options?.history === true
+              ? entries
+              : entries.slice(entries.length - options?.history);
+          processLogs(ctx, entriesSlice, dest);
+        }
       } else {
         processLogs(ctx, entries, dest);
       }
@@ -106,15 +119,32 @@ function processLogs(
   dest: LogDestination
 ) {
   for (let i = 0; i < rawLogs.length; i++) {
-    if (rawLogs[i].logLines) {
-      const id = rawLogs[i].identifier;
-      const udfType = rawLogs[i].udfType;
+    const log = rawLogs[i];
+    if (log.logLines) {
+      const id = log.identifier;
+      const udfType = log.udfType;
 
-      for (let j = 0; j < rawLogs[i].logLines.length; j++) {
-        logToTerminal(ctx, "info", udfType, id, rawLogs[i].logLines[j], dest);
+      for (let j = 0; j < log.logLines.length; j++) {
+        logToTerminal(
+          ctx,
+          "info",
+          log.timestamp,
+          udfType,
+          id,
+          log.logLines[j],
+          dest
+        );
       }
-      if (rawLogs[i].error) {
-        logToTerminal(ctx, "error", udfType, id, rawLogs[i].error!, dest);
+      if (log.error) {
+        logToTerminal(
+          ctx,
+          "error",
+          log.timestamp,
+          udfType,
+          id,
+          log.error!,
+          dest
+        );
       }
     }
   }
@@ -123,12 +153,14 @@ function processLogs(
 function logToTerminal(
   ctx: Context,
   type: "info" | "error",
+  timestamp: number,
   udfType: UdfType,
   udfPath: string,
   message: string,
   dest: LogDestination
 ) {
   const prefix = prefixForSource(udfType);
+  const localizedTimestamp = new Date(timestamp * 1000).toLocaleString();
   if (type === "info") {
     const match = message.match(/^\[.*?\] /);
     if (match === null) {
@@ -145,14 +177,18 @@ function logToTerminal(
     logToDestination(
       ctx,
       dest,
-      chalk.cyan(`> [CONVEX ${prefix}(${udfPath})] [${level}]`),
+      chalk.cyan(
+        `${localizedTimestamp} [CONVEX ${prefix}(${udfPath})] [${level}]`
+      ),
       args
     );
   } else {
     logToDestination(
       ctx,
       dest,
-      chalk.red(`> [CONVEX ${prefix}(${udfPath})] ${message}`)
+      chalk.red(
+        `${localizedTimestamp} [CONVEX ${prefix}(${udfPath})] ${message}`
+      )
     );
   }
 }

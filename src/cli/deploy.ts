@@ -12,10 +12,10 @@ import {
   showSpinner,
 } from "../bundler/context.js";
 import {
-  CONVEX_DEPLOY_KEY_ENV_VAR_NAME,
-  deploymentNameFromAdminKey,
-  fetchProdDeploymentCredentials,
-  readConfiguredAdminKey,
+  fetchDeploymentCredentialsWithinCurrentProject,
+  deploymentSelectionFromOptions,
+  projectSelection,
+  storeAdminKeyEnvVar,
 } from "./lib/api.js";
 import {
   gitBranchFromEnvironment,
@@ -23,13 +23,26 @@ import {
   suggestedEnvVarName,
 } from "./lib/envvars.js";
 import { PushOptions, runPush } from "./lib/push.js";
-import { bigBrainAPI } from "./lib/utils.js";
+import {
+  CONVEX_DEPLOY_KEY_ENV_VAR_NAME,
+  bigBrainAPI,
+  getConfiguredDeployment,
+  readAdminKeyFromEnvVar,
+} from "./lib/utils.js";
 import { spawnSync } from "child_process";
 import { runFunctionAndLog } from "./lib/run.js";
 import { usageStateWarning } from "./lib/usage.js";
+import {
+  deploymentNameFromAdminKeyOrCrash,
+  deploymentTypeFromAdminKey,
+} from "./lib/deployment.js";
 
 export const deploy = new Command("deploy")
-  .description("Deploy to a Convex deployment")
+  .summary("Deploy to your prod deployment")
+  .description(
+    "Deploy to your deployment. By default, this deploys to your prod deployment.\n\n" +
+      "Deploys to a preview deployment if the `CONVEX_DEPLOY_KEY` environment variable is set to a Preview Deploy Key."
+  )
   .option("-v, --verbose", "Show full listing of changes")
   .option(
     "--dry-run",
@@ -72,9 +85,9 @@ export const deploy = new Command("deploy")
   )
   .addOption(
     new Option(
-      "--preview-name <name>",
-      "The name to associate with this deployment if deploying to a preview deployment. Defaults to the current Git branch name in Vercel, Netlify and Github CI. This is ignored if deploying to a production deployment."
-    )
+      "--preview-create <name>",
+      "The name to associate with this deployment if deploying to a newly created preview deployment. Defaults to the current Git branch name in Vercel, Netlify and Github CI. This is ignored if deploying to a production deployment."
+    ).conflicts("preview-name")
   )
   .addOption(
     new Option(
@@ -92,6 +105,14 @@ export const deploy = new Command("deploy")
   .addOption(new Option("--admin-key <adminKey>").hideHelp())
   .addOption(new Option("--url <url>").hideHelp())
   .addOption(new Option("--log-deployment-name").hideHelp())
+  .addOption(
+    new Option(
+      "--preview-name <name>",
+      "[deprecated] Use `--preview-create` instead. The name to associate with this deployment if deploying to a preview deployment."
+    )
+      .hideHelp()
+      .conflicts("preview-create")
+  )
   .showHelpAfterError()
   .action(
     async (cmdOptions: {
@@ -103,6 +124,7 @@ export const deploy = new Command("deploy")
       cmd: string | undefined;
       cmdUrlEnvVarName: string | undefined;
       previewRun: string | undefined;
+      previewCreate: string | undefined;
       previewName: string | undefined;
 
       checkBuildEnvironment: "enable" | "disable";
@@ -114,12 +136,13 @@ export const deploy = new Command("deploy")
     }) => {
       const ctx = oneoffContext;
 
-      const configuredDeployKey =
-        readConfiguredAdminKey(cmdOptions.adminKey) ?? null;
+      storeAdminKeyEnvVar(cmdOptions.adminKey);
+      const configuredDeployKey = readAdminKeyFromEnvVar() ?? null;
       if (
         cmdOptions.checkBuildEnvironment === "enable" &&
         isNonProdBuildEnvironment() &&
-        configuredDeployKey?.startsWith("prod:")
+        configuredDeployKey !== null &&
+        deploymentTypeFromAdminKey(configuredDeployKey) === "prod"
       ) {
         logError(
           ctx,
@@ -129,13 +152,31 @@ export const deploy = new Command("deploy")
         );
         await ctx.crash(1);
       }
+      const configuredDeployment = await getConfiguredDeployment(ctx);
+      if (configuredDeployment === null && cmdOptions.adminKey === null) {
+        // Most commands are primarily for dev, so lack of configuredDeployment
+        // should suggest setting `CONVEX_DEPLOYMENT`. But `npx convex deploy`
+        // is primarily for prod/preview, so we suggest setting `CONVEX_DEPLOY_KEY`.
+        logFailure(
+          ctx,
+          `Please set ${CONVEX_DEPLOY_KEY_ENV_VAR_NAME} to a new key which you can find on the Convex dashboard for your production deployment.`
+        );
+        await ctx.crash(1);
+      }
 
       await usageStateWarning(ctx);
 
       if (
         configuredDeployKey !== null &&
-        configuredDeployKey.startsWith("preview:")
+        deploymentTypeFromAdminKey(configuredDeployKey) === "preview"
       ) {
+        if (cmdOptions.previewName !== undefined) {
+          logError(
+            ctx,
+            "The `--preview-name` flag has been deprecated in favor of `--preview-create`. Please re-run the command using `--preview-create` instead."
+          );
+          await ctx.crash(1);
+        }
         await handlePreview(ctx, { ...cmdOptions, configuredDeployKey });
       } else {
         await handleProduction(ctx, cmdOptions);
@@ -148,7 +189,7 @@ async function handlePreview(
   options: {
     configuredDeployKey: string;
     dryRun: boolean | undefined;
-    previewName: string | undefined;
+    previewCreate: string | undefined;
     previewRun: string | undefined;
     cmdUrlEnvVarName: string | undefined;
     cmd: string | undefined;
@@ -161,11 +202,11 @@ async function handlePreview(
     logDeploymentName: boolean | undefined;
   }
 ) {
-  const previewName = options.previewName ?? gitBranchFromEnvironment();
+  const previewName = options.previewCreate ?? gitBranchFromEnvironment();
   if (previewName === null) {
     logError(
       ctx,
-      "`npx convex deploy` to a preview deployment could not determine the preview name. Provide one using `--preview-name`"
+      "`npx convex deploy` to a preview deployment could not determine the preview name. Provide one using `--preview-create`"
     );
     await ctx.crash(1);
   }
@@ -195,9 +236,12 @@ async function handlePreview(
     ctx,
     method: "POST",
     url: "claim_preview_deployment",
-    getAuthHeader: () =>
-      Promise.resolve(`Bearer ${options.configuredDeployKey}`),
     data: {
+      projectSelection: await projectSelection(
+        ctx,
+        await getConfiguredDeployment(ctx),
+        options.configuredDeployKey
+      ),
       identifier: previewName,
     },
   });
@@ -239,7 +283,7 @@ async function handlePreview(
     );
   }
   if (options.logDeploymentName) {
-    const deploymentName = await deploymentNameFromAdminKey(
+    const deploymentName = await deploymentNameFromAdminKeyOrCrash(
       ctx,
       previewAdminKey
     );
@@ -265,12 +309,27 @@ async function handleProduction(
     logDeploymentName: boolean | undefined;
   }
 ) {
+  const deploymentSelection = deploymentSelectionFromOptions({
+    ...options,
+    prod: true,
+  });
   const { adminKey, url, deploymentNames } =
-    await fetchProdDeploymentCredentials(ctx, options);
-  if (deploymentNames !== undefined) {
+    await fetchDeploymentCredentialsWithinCurrentProject(
+      ctx,
+      deploymentSelection
+    );
+  if (deploymentNames !== undefined && deploymentNames.configured !== null) {
     const shouldPushToProd =
-      deploymentNames.prod === deploymentNames.configured ||
-      (options.yes ?? (await askToConfirmPush(ctx, deploymentNames, url)));
+      deploymentNames.selected === deploymentNames.configured ||
+      (options.yes ??
+        (await askToConfirmPush(
+          ctx,
+          {
+            configured: deploymentNames.configured,
+            prod: deploymentNames.selected,
+          },
+          url
+        )));
     if (!shouldPushToProd) {
       await ctx.crash(1);
     }
@@ -300,7 +359,10 @@ async function handleProduction(
     } Convex functions to ${url}`
   );
   if (options.logDeploymentName) {
-    const deploymentName = await deploymentNameFromAdminKey(ctx, adminKey);
+    const deploymentName = await deploymentNameFromAdminKeyOrCrash(
+      ctx,
+      adminKey
+    );
     logOutput(ctx, deploymentName);
   }
 }

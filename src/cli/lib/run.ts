@@ -13,6 +13,7 @@ import {
   logMessage,
   logOutput,
 } from "../../bundler/context.js";
+import { waitForever, waitUntilCalled } from "./utils.js";
 
 export async function runFunctionAndLog(
   ctx: Context,
@@ -44,6 +45,28 @@ export async function runFunctionAndLog(
   }
 }
 
+export async function runQuery(
+  ctx: Context,
+  deploymentUrl: string,
+  adminKey: string,
+  functionName: string,
+  args: Value
+): Promise<Value> {
+  const client = new ConvexHttpClient(deploymentUrl);
+  client.setAdminAuth(adminKey);
+
+  try {
+    return await client.query(
+      makeFunctionReference<"query">(functionName),
+      args
+    );
+  } catch (err) {
+    logFailure(ctx, `Failed to run query "${functionName}":`);
+    logError(ctx, chalk.red((err as Error).toString().trim()));
+    return await ctx.crash(1, "invalid filesystem or env vars");
+  }
+}
+
 export function formatValue(value: Value) {
   const json = convexToJson(value);
   if (process.stdout.isTTY) {
@@ -68,7 +91,7 @@ export async function subscribeAndLog(
     adminKey,
     functionName,
     args,
-    "indefinitely",
+    waitForever(),
     {
       onStart() {
         logFinishedStep(
@@ -76,11 +99,8 @@ export async function subscribeAndLog(
           `Watching query ${functionName} on ${deploymentUrl}...`
         );
       },
-      onChange(client) {
-        logOutput(
-          ctx,
-          formatValue(client.localQueryResult(functionName, args)!)
-        );
+      onChange(result) {
+        logOutput(ctx, formatValue(result));
       },
       onStop() {
         logMessage(ctx, `Closing connection to ${deploymentUrl}...`);
@@ -95,24 +115,18 @@ export async function subscribe(
   adminKey: string,
   functionName: string,
   args: Record<string, Value>,
-  until: "first change" | "indefinitely",
+  until: Promise<unknown>,
   callbacks?: {
-    onStart?: (client: BaseConvexClient) => void;
-    onChange?: (client: BaseConvexClient) => void;
+    onStart?: () => void;
+    onChange?: (result: Value) => void;
     onStop?: () => void;
   }
 ) {
-  let changes = 0;
   const client = new BaseConvexClient(
     deploymentUrl,
     (updatedQueries) => {
-      // First bump is just the initial results reporting
-      for (const _ of updatedQueries) {
-        changes++;
-        callbacks?.onChange?.(client);
-        if (until === "first change" && changes > 1) {
-          stopWatching();
-        }
+      for (const queryToken of updatedQueries) {
+        callbacks?.onChange?.(client.localQueryResultByToken(queryToken)!);
       }
     },
     {
@@ -124,27 +138,28 @@ export async function subscribe(
   client.setAdminAuth(adminKey);
   const { unsubscribe } = client.subscribe(functionName, args);
 
-  callbacks?.onStart?.(client);
+  callbacks?.onStart?.();
 
   let done = false;
-  let onDone: (v: unknown) => void;
+  const [donePromise, onDone] = waitUntilCalled();
   const stopWatching = () => {
     unsubscribe();
     void client.close();
     process.off("SIGINT", sigintListener);
     done = true;
-    onDone(null);
+    onDone();
+    callbacks?.onStop?.();
   };
-  const doneP = new Promise((resolve) => (onDone = resolve));
   function sigintListener() {
     stopWatching();
   }
   process.on("SIGINT", sigintListener);
+  void until.finally(stopWatching);
   while (!done) {
     // loops once per day (any large value < 2**31 would work)
     const oneDay = 24 * 60 * 60 * 1000;
     await Promise.race([
-      doneP,
+      donePromise,
       new Promise((resolve) => setTimeout(resolve, oneDay)),
     ]);
   }

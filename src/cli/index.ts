@@ -23,6 +23,9 @@ import { convexImport } from "./convexImport.js";
 import { dev } from "./dev.js";
 import { deploy } from "./deploy.js";
 import { logs } from "./logs.js";
+import { networkTest } from "./network_test.js";
+import { convexExport } from "./convexExport.js";
+import { env } from "./env.js";
 
 const MINIMUM_MAJOR_VERSION = 16;
 const MINIMUM_MINOR_VERSION = 15;
@@ -93,15 +96,18 @@ async function main() {
     .addCommand(deploy)
     .addCommand(deployments, { hidden: true })
     .addCommand(run)
+    .addCommand(logs)
     .addCommand(typecheck, { hidden: true })
     .addCommand(auth, { hidden: true })
     .addCommand(convexImport)
-    .addCommand(codegen)
+    .addCommand(convexExport, { hidden: true })
     .addCommand(dashboard)
     .addCommand(docs)
+    .addCommand(codegen)
     .addCommand(update)
-    .addCommand(logs)
     .addCommand(logout)
+    .addCommand(networkTest, { hidden: true })
+    .addCommand(env, { hidden: true })
     .addHelpCommand("help <command>", "Show help for given <command>")
     .version(version)
     // Hide version and help so they don't clutter

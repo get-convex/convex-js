@@ -19,7 +19,7 @@ import {
   entryPointsByEnvironment,
 } from "../../bundler/index.js";
 import { version } from "../version.js";
-import { dashboardUrlForConfiguredDeployment } from "../dashboard.js";
+import { deploymentDashboardUrlPage } from "../dashboard.js";
 import {
   deprecationCheckWarning,
   formatSize,
@@ -420,10 +420,14 @@ export async function upgradeOldAuthInfoToAuthConfig(
   functionsPath: string
 ) {
   if (config.authInfo !== undefined) {
-    const authConfigPath = path.resolve(functionsPath, "auth.config.js");
+    const authConfigPathJS = path.resolve(functionsPath, "auth.config.js");
+    const authConfigPathTS = path.resolve(functionsPath, "auth.config.js");
+    const authConfigPath = ctx.fs.exists(authConfigPathJS)
+      ? authConfigPathJS
+      : authConfigPathTS;
     const authConfigRelativePath = path.join(
       config.functions,
-      "auth.config.js"
+      ctx.fs.exists(authConfigPathJS) ? "auth.config.js" : "auth.config.ts"
     );
     if (ctx.fs.exists(authConfigPath)) {
       logFailure(
@@ -668,24 +672,20 @@ export async function pushConfig(
     ) {
       const errorMessage = (error as any).response.data.message;
       (error as any).wasExpected = true;
-      // If `npx convex dev` is running using --url there might not be a configured deployment
       const configuredDeployment = await getConfiguredDeployment(ctx);
-      if (configuredDeployment !== null) {
-        const [, variableName] =
-          errorMessage.match(/Environment variable (\S+)/i) ?? [];
-        const dashboardUrl = await dashboardUrlForConfiguredDeployment(
-          ctx,
-          configuredDeployment
-        );
-        const variableQuery =
-          variableName !== undefined ? `?var=${variableName}` : "";
-        logFailure(
-          ctx,
-          `Go to ${dashboardUrl}/settings/environment-variables${variableQuery} to setup your environment variable.`
-        );
-      } else {
-        logFailure(ctx, `Fix your auth.config.js.`);
-      }
+      const [, variableName] =
+        errorMessage.match(/Environment variable (\S+)/i) ?? [];
+      const variableQuery =
+        variableName !== undefined ? `?var=${variableName}` : "";
+      const dashboardUrl = await deploymentDashboardUrlPage(
+        ctx,
+        configuredDeployment,
+        `/settings/environment-variables${variableQuery}`
+      );
+      logFailure(
+        ctx,
+        `Go to ${dashboardUrl} to setup your environment variable.`
+      );
       logError(ctx, chalk.red(errorMessage));
       await ctx.crash(1, "invalid filesystem or env vars", error);
     }
@@ -820,7 +820,7 @@ export function diffConfig(oldConfig: Config, newConfig: Config): string {
     (oldConfig.projectConfig.authInfo !== undefined) !==
     (newConfig.projectConfig.authInfo !== undefined)
   ) {
-    diff += "Moved auth config into auth.config.js\n";
+    diff += "Moved auth config into auth.config.ts\n";
   }
 
   let versionMessage = "";

@@ -21,11 +21,54 @@ import { Project } from "./api.js";
 import { spawn } from "child_process";
 import { readDeploymentEnvVar } from "./deployment.js";
 import axiosRetry from "axios-retry";
+import { Command, Option } from "commander";
 
 export const productionProvisionHost = "https://provision.convex.dev";
 export const provisionHost =
   process.env.CONVEX_PROVISION_HOST || productionProvisionHost;
 const BIG_BRAIN_URL = `${provisionHost}/api`;
+export const CONVEX_DEPLOY_KEY_ENV_VAR_NAME = "CONVEX_DEPLOY_KEY";
+
+/// DeploymentCommand is a CLI command that talks to a Convex deployment.
+export class DeploymentCommand extends Command {
+  /**
+   * For a command that talks to the configured dev deployment by default,
+   * add flags for talking to prod, preview, or other deployment in the same
+   * project.
+   *
+   * These flags are added to the end of `command` (ordering matters for `--help`
+   * output). `action` should look like "Import data into" because it is prefixed
+   * onto help strings.
+   *
+   * The options can be passed to `deploymentSelectionFromOptions`.
+   */
+  addDeploymentSelectionOptions(action: string): Command {
+    return this.addOption(
+      new Option("--url <url>")
+        .conflicts(["--prod", "--preview-name", "--deployment-name"])
+        .hideHelp()
+    )
+      .addOption(new Option("--admin-key <adminKey>").hideHelp())
+      .addOption(
+        new Option(
+          "--prod",
+          action + " this project's production deployment."
+        ).conflicts(["--preview-name", "--deployment-name", "--url"])
+      )
+      .addOption(
+        new Option(
+          "--preview-name <previewName>",
+          action + " the preview deployment with the given name."
+        ).conflicts(["--prod", "--deployment-name", "--url"])
+      )
+      .addOption(
+        new Option(
+          "--deployment-name <deploymentName>",
+          action + " the specified deployment."
+        ).conflicts(["--prod", "--preview-name", "--url"])
+      );
+  }
+}
 
 /** Prompt for keyboard input with the given `query` string and return a promise
  * that resolves to the input. */
@@ -415,6 +458,10 @@ async function readGlobalConfig(ctx: Context): Promise<GlobalConfig | null> {
   }
 }
 
+export function readAdminKeyFromEnvVar(): string | undefined {
+  return process.env[CONVEX_DEPLOY_KEY_ENV_VAR_NAME] ?? undefined;
+}
+
 export async function getAuthHeaderFromGlobalConfig(
   ctx: Context
 ): Promise<string | null> {
@@ -424,6 +471,10 @@ export async function getAuthHeaderFromGlobalConfig(
   const globalConfig = await readGlobalConfig(ctx);
   if (globalConfig) {
     return `Bearer ${globalConfig.accessToken}`;
+  }
+  const adminKey = readAdminKeyFromEnvVar();
+  if (adminKey) {
+    return `Bearer ${adminKey}`;
   }
   return null;
 }
@@ -451,13 +502,11 @@ export async function bigBrainAPI({
   ctx,
   method,
   url,
-  getAuthHeader,
   data,
 }: {
   ctx: Context;
   method: Method;
   url: string;
-  getAuthHeader?: (ctx: Context) => Promise<string | null>;
   data?: any;
 }): Promise<any> {
   try {
@@ -465,7 +514,6 @@ export async function bigBrainAPI({
       ctx,
       method,
       url,
-      getAuthHeader: getAuthHeader,
       data,
     });
   } catch (err) {
@@ -477,19 +525,14 @@ export async function bigBrainAPIMaybeThrows({
   ctx,
   method,
   url,
-  getAuthHeader,
   data,
 }: {
   ctx: Context;
   method: Method;
   url: string;
-  getAuthHeader?: (ctx: Context) => Promise<string | null>;
   data?: any;
 }): Promise<any> {
-  const client = await bigBrainClient(
-    ctx,
-    getAuthHeader ?? getAuthHeaderFromGlobalConfig
-  );
+  const client = await bigBrainClient(ctx, getAuthHeaderFromGlobalConfig);
   const res = await client.request({ url, method, data });
   deprecationCheckWarning(ctx, res);
   return res.data;
@@ -533,6 +576,13 @@ export function waitForever() {
   });
 }
 
+// Returns a promise and a function that resolves the promise.
+export function waitUntilCalled(): [Promise<unknown>, () => void] {
+  let onCalled: (v: unknown) => void;
+  const waitPromise = new Promise((resolve) => (onCalled = resolve));
+  return [waitPromise, () => onCalled(null)];
+}
+
 // We can eventually switch to something like `filesize` for i18n and
 // more robust formatting, but let's keep our CLI bundle small for now.
 export function formatSize(n: number): string {
@@ -540,12 +590,12 @@ export function formatSize(n: number): string {
     return `${n} B`;
   }
   if (n < 1024 * 1024) {
-    return `${Math.floor(n / 1024)} KB`;
+    return `${(n / 1024).toFixed(1)} KB`;
   }
   if (n < 1024 * 1024 * 1024) {
-    return `${Math.floor(n / 1024 / 1024)} MB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
   }
-  return `${n} B`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 export function formatDuration(ms: number): string {
@@ -752,7 +802,10 @@ export function spawnAsync(
   });
 }
 
-export function deploymentClient(deploymentURL: string) {
+export function deploymentClient(
+  deploymentURL: string,
+  onError?: (err: any) => void
+) {
   const client = axios.create({
     baseURL: deploymentURL,
   });
@@ -760,8 +813,15 @@ export function deploymentClient(deploymentURL: string) {
     retries: 6,
     retryDelay: axiosRetry.exponentialDelay,
     retryCondition: (error) => {
-      // Retry on 404s since these can sometimes happen with newly created deployments
-      return error.response?.status === 404 || false;
+      if (onError) {
+        onError(error);
+      }
+      // Retry on 404s since these can sometimes happen with newly created deployments.
+      // Also retry on the default conditions.
+      return (
+        error.response?.status === 404 ||
+        axiosRetry.isNetworkOrIdempotentRequestError(error)
+      );
     },
   });
   return client;
