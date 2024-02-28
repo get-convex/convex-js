@@ -22,7 +22,7 @@ export class ExpressionImpl extends Expression<any> {
 }
 
 export function serializeExpression(
-  expr: ExpressionOrValue<Value | undefined>
+  expr: ExpressionOrValue<Value | undefined>,
 ): JSONValue {
   if (expr instanceof ExpressionImpl) {
     return expr.serialize();
@@ -38,7 +38,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   eq<T extends Value | undefined>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean> {
     return new ExpressionImpl({
       $eq: [serializeExpression(l), serializeExpression(r)],
@@ -47,7 +47,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   neq<T extends Value | undefined>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean> {
     return new ExpressionImpl({
       $neq: [serializeExpression(l), serializeExpression(r)],
@@ -56,7 +56,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   lt<T extends Value>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean> {
     return new ExpressionImpl({
       $lt: [serializeExpression(l), serializeExpression(r)],
@@ -65,7 +65,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   lte<T extends Value>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean> {
     return new ExpressionImpl({
       $lte: [serializeExpression(l), serializeExpression(r)],
@@ -74,7 +74,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   gt<T extends Value>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean> {
     return new ExpressionImpl({
       $gt: [serializeExpression(l), serializeExpression(r)],
@@ -83,7 +83,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   gte<T extends Value>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean> {
     return new ExpressionImpl({
       $gte: [serializeExpression(l), serializeExpression(r)],
@@ -94,7 +94,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   add<T extends NumericValue>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<T> {
     return new ExpressionImpl({
       $add: [serializeExpression(l), serializeExpression(r)],
@@ -103,7 +103,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   sub<T extends NumericValue>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<T> {
     return new ExpressionImpl({
       $sub: [serializeExpression(l), serializeExpression(r)],
@@ -112,7 +112,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   mul<T extends NumericValue>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<T> {
     return new ExpressionImpl({
       $mul: [serializeExpression(l), serializeExpression(r)],
@@ -121,7 +121,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   div<T extends NumericValue>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<T> {
     return new ExpressionImpl({
       $div: [serializeExpression(l), serializeExpression(r)],
@@ -130,7 +130,7 @@ export const filterBuilderImpl: FilterBuilder<GenericTableInfo> = {
 
   mod<T extends NumericValue>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<T> {
     return new ExpressionImpl({
       $mod: [serializeExpression(l), serializeExpression(r)],

@@ -31,7 +31,7 @@ test("bundle finds JavaScript functions", async () => {
   const entryPoints = await entryPointsByEnvironment(
     oneoffContext,
     dirname + "/test_fixtures/js",
-    false
+    false,
   );
   const bundles = sorted(
     (
@@ -40,10 +40,10 @@ test("bundle finds JavaScript functions", async () => {
         dirname + "/test_fixtures/js",
         entryPoints.isolate,
         false,
-        "browser"
+        "browser",
       )
     ).modules,
-    (b) => b.path
+    (b) => b.path,
   ).filter((bundle) => !bundle.path.includes("_deps"));
   expect(bundles).toHaveLength(2);
   expect(bundles[0].path).toEqual("bar.js");

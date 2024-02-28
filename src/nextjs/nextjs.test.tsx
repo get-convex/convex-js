@@ -16,7 +16,7 @@ const address = "https://127.0.0.1:3001";
 describe("env setup", () => {
   test("requires NEXT_PUBLIC_CONVEX_URL", async () => {
     await expect(preloadQuery(anyApi.myQuery.default)).rejects.toThrow(
-      "Environment variable NEXT_PUBLIC_CONVEX_URL is not set."
+      "Environment variable NEXT_PUBLIC_CONVEX_URL is not set.",
     );
   });
 });
@@ -45,7 +45,7 @@ describe("preloadQuery and usePreloadedQuery", () => {
       expect.anything(),
       expect.objectContaining({
         cache: "no-store",
-      })
+      }),
     );
 
     expect(serverResult).toStrictEqual({ x: 42 });
@@ -56,7 +56,7 @@ describe("preloadQuery and usePreloadedQuery", () => {
     );
     const { result: hydrationResult } = renderHook(
       () => usePreloadedQuery(preloaded),
-      { wrapper }
+      { wrapper },
     );
     expect(hydrationResult.current).toStrictEqual({ x: 42 });
   });
@@ -77,17 +77,17 @@ describe("preloadQuery and usePreloadedQuery", () => {
             { arg: "something" },
             // Simplest value to return, and make sure we're correctly
             // handling it.
-            null
+            null,
           );
         },
-      }
+      },
     );
     const wrapper = ({ children }: any) => (
       <ConvexProvider client={client}>{children}</ConvexProvider>
     );
     const { result: clientResult } = renderHook(
       () => usePreloadedQuery(preloaded),
-      { wrapper }
+      { wrapper },
     );
     expect(clientResult.current).toStrictEqual(null);
   });

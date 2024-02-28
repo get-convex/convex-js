@@ -1,4 +1,3 @@
-import { AxiosResponse } from "axios";
 import chalk from "chalk";
 import path from "path";
 import { bundleSchema } from "../../bundler/index.js";
@@ -12,9 +11,9 @@ import {
 } from "../../bundler/context.js";
 import {
   poll,
-  logAndHandleAxiosError,
-  deprecationCheckWarning,
-  deploymentClient,
+  logAndHandleFetchError,
+  deploymentFetch,
+  fetchDeprecationCheckWarning,
 } from "./utils.js";
 
 type IndexMetadata = {
@@ -53,7 +52,7 @@ export async function pushSchema(
   origin: string,
   adminKey: string,
   schemaDir: string,
-  dryRun: boolean
+  dryRun: boolean,
 ): Promise<{ schemaId?: string; schemaState?: SchemaState }> {
   if (!ctx.fs.exists(path.resolve(schemaDir, "schema.ts"))) {
     // Don't do anything.
@@ -64,33 +63,32 @@ export async function pushSchema(
   changeSpinner(ctx, "Checking for index or schema changes...");
 
   let data: PrepareSchemaResponse;
-  const client = deploymentClient(origin);
+  const fetch = deploymentFetch(origin);
   try {
-    const res = await client.post<PrepareSchemaResponse>(
-      "/api/prepare_schema",
-      {
+    const res = await fetch("/api/prepare_schema", {
+      method: "POST",
+      headers: {
+        "Convex-Client": `npm-cli-${version}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
         bundle: bundles[0],
         adminKey,
         dryRun,
-      },
-      {
-        headers: {
-          "Convex-Client": `npm-cli-${version}`,
-        },
-      }
-    );
-    deprecationCheckWarning(ctx, res);
-    data = res.data;
-  } catch (err) {
+      }),
+    });
+    fetchDeprecationCheckWarning(ctx, res);
+    data = await res.json();
+  } catch (err: unknown) {
     logFailure(ctx, `Error: Unable to run schema validation on ${origin}`);
-    return await logAndHandleAxiosError(ctx, err);
+    return await logAndHandleFetchError(ctx, err);
   }
 
   const schemaId = data.schemaId;
 
   changeSpinner(
     ctx,
-    "Backfilling indexes and checking that documents match your schema..."
+    "Backfilling indexes and checking that documents match your schema...",
   );
   const schemaState = await waitForReadySchema(ctx, origin, adminKey, schemaId);
   logIndexChanges(ctx, data, dryRun);
@@ -102,41 +100,42 @@ async function waitForReadySchema(
   ctx: Context,
   origin: string,
   adminKey: string,
-  schemaId: string
+  schemaId: string,
 ): Promise<SchemaState> {
-  const path = `/api/schema_state/${schemaId}`;
-  const client = deploymentClient(origin);
+  const path = `api/schema_state/${schemaId}`;
+  const depFetch = deploymentFetch(origin);
   const fetch = async () => {
     try {
-      return await client.get<SchemaStateResponse>(path, {
+      const resp = await depFetch(path, {
         headers: {
           Authorization: `Convex ${adminKey}`,
           "Convex-Client": `npm-cli-${version}`,
+          "Content-Type": "application/json",
         },
-        data: { schemaId },
       });
-    } catch (err) {
+      const data: SchemaStateResponse = await resp.json();
+      return data;
+    } catch (err: unknown) {
       logFailure(
         ctx,
-        `Error: Unable to build indexes and run schema validation on ${origin}`
+        `Error: Unable to build indexes and run schema validation on ${origin}`,
       );
-      return await logAndHandleAxiosError(ctx, err);
+      return await logAndHandleFetchError(ctx, err);
     }
   };
-  const validate = (result: AxiosResponse<SchemaStateResponse, any>) =>
-    result.data.indexes.every((index) => index.backfill.state === "done") &&
-    result.data.schemaState.state !== "pending";
-  const result = await poll(fetch, validate);
-  switch (result.data.schemaState.state) {
+  const validate = (data: SchemaStateResponse) =>
+    data.indexes.every((index) => index.backfill.state === "done") &&
+    data.schemaState.state !== "pending";
+  const data = await poll(fetch, validate);
+  switch (data.schemaState.state) {
     case "failed":
       // Schema validation failed. This could be either because the data
       // is bad or the schema is wrong. Classify this as a filesystem error
       // because adjusting `schema.ts` is the most normal next step.
       logFailure(ctx, "Schema validation failed");
-      logError(ctx, chalk.red(`${result.data.schemaState.error}`));
+      logError(ctx, chalk.red(`${data.schemaState.error}`));
       return await ctx.crash(1, {
-        "invalid filesystem or db data":
-          result.data.schemaState.tableName ?? null,
+        "invalid filesystem or db data": data.schemaState.tableName ?? null,
       });
 
     case "overwritten":
@@ -148,7 +147,7 @@ async function waitForReadySchema(
     case "active":
       break;
   }
-  return result.data.schemaState;
+  return data.schemaState;
 }
 
 function logIndexChanges(
@@ -157,7 +156,7 @@ function logIndexChanges(
     added: IndexMetadata[];
     dropped: IndexMetadata[];
   },
-  dryRun: boolean
+  dryRun: boolean,
 ) {
   if (indexes.dropped.length > 0) {
     let indexDiff = "";
@@ -168,7 +167,7 @@ function logIndexChanges(
     indexDiff = indexDiff.slice(0, -1);
     logFinishedStep(
       ctx,
-      `${dryRun ? "Would delete" : "Deleted"} table indexes:\n${indexDiff}`
+      `${dryRun ? "Would delete" : "Deleted"} table indexes:\n${indexDiff}`,
     );
   }
   if (indexes.added.length > 0) {
@@ -180,7 +179,7 @@ function logIndexChanges(
     indexDiff = indexDiff.slice(0, -1);
     logFinishedStep(
       ctx,
-      `${dryRun ? "Would add" : "Added"} table indexes:\n${indexDiff}`
+      `${dryRun ? "Would add" : "Added"} table indexes:\n${indexDiff}`,
     );
   }
 }

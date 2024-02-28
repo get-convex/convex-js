@@ -74,7 +74,7 @@ test("ConvexReactClient ends subscriptions on close", async () => {
 });
 
 const expectQuerySetModification = (
-  message: ClientMessage
+  message: ClientMessage,
 ): QuerySetModification => {
   expect(message.type).toEqual("ModifyQuerySet");
   if (message.type !== "ModifyQuerySet") throw new Error("Wrong message!");

@@ -68,7 +68,7 @@ export interface ReactMutation<Mutation extends FunctionReference<"mutation">> {
    * @public
    */
   withOptimisticUpdate(
-    optimisticUpdate: OptimisticUpdate<FunctionArgs<Mutation>>
+    optimisticUpdate: OptimisticUpdate<FunctionArgs<Mutation>>,
   ): ReactMutation<Mutation>;
 }
 
@@ -76,7 +76,7 @@ export interface ReactMutation<Mutation extends FunctionReference<"mutation">> {
 export function createMutation(
   mutationReference: FunctionReference<"mutation">,
   client: ConvexReactClient,
-  update?: OptimisticUpdate<any>
+  update?: OptimisticUpdate<any>,
 ): ReactMutation<any> {
   function mutation(args?: Record<string, Value>): Promise<unknown> {
     assertNotAccidentalArgument(args);
@@ -86,13 +86,13 @@ export function createMutation(
     });
   }
   mutation.withOptimisticUpdate = function withOptimisticUpdate(
-    optimisticUpdate: OptimisticUpdate<any>
+    optimisticUpdate: OptimisticUpdate<any>,
   ): ReactMutation<any> {
     if (update !== undefined) {
       throw new Error(
         `Already specified optimistic update for mutation ${getFunctionName(
-          mutationReference
-        )}`
+          mutationReference,
+        )}`,
       );
     }
     return createMutation(mutationReference, client, optimisticUpdate);
@@ -118,7 +118,7 @@ export interface ReactAction<Action extends FunctionReference<"action">> {
 
 function createAction(
   actionReference: FunctionReference<"action">,
-  client: ConvexReactClient
+  client: ConvexReactClient,
 ): ReactAction<any> {
   return function (args?: Record<string, Value>): Promise<unknown> {
     return client.action(actionReference, args);
@@ -237,7 +237,7 @@ export class ConvexReactClient {
     // internal client does not occur synchronously.
     if (typeof address !== "string") {
       throw new Error(
-        "ConvexReactClient requires a URL like 'https://happy-otter-123.convex.cloud'."
+        "ConvexReactClient requires a URL like 'https://happy-otter-123.convex.cloud'.",
       );
     }
     if (!address.includes("://")) {
@@ -264,7 +264,7 @@ export class ConvexReactClient {
     this.cachedSync = new BaseConvexClient(
       this.address,
       (updatedQueries) => this.transition(updatedQueries),
-      this.options
+      this.options,
     );
     if (this.adminAuth) {
       this.cachedSync.setAdminAuth(this.adminAuth, this.fakeUserIdentity);
@@ -282,12 +282,12 @@ export class ConvexReactClient {
    */
   setAuth(
     fetchToken: AuthTokenFetcher,
-    onChange?: (isAuthenticated: boolean) => void
+    onChange?: (isAuthenticated: boolean) => void,
   ) {
     if (typeof fetchToken === "string") {
       throw new Error(
         "Passing a string to ConvexReactClient.setAuth is no longer supported, " +
-          "please upgrade to passing in an async function to handle reauthentication."
+          "please upgrade to passing in an async function to handle reauthentication.",
       );
     }
     this.sync.setAuth(
@@ -295,7 +295,7 @@ export class ConvexReactClient {
       onChange ??
         (() => {
           // Do nothing
-        })
+        }),
     );
   }
 
@@ -344,7 +344,7 @@ export class ConvexReactClient {
         const { queryToken, unsubscribe } = this.sync.subscribe(
           name as string,
           args,
-          options
+          options,
         );
 
         const currentListeners = this.listeners.get(queryToken);
@@ -509,7 +509,7 @@ export class ConvexReactClient {
 }
 
 const ConvexContext = React.createContext<ConvexReactClient>(
-  undefined as unknown as ConvexReactClient // in the future this will be a mocked client for testing
+  undefined as unknown as ConvexReactClient, // in the future this will be a mocked client for testing
 );
 
 /**
@@ -542,7 +542,7 @@ export const ConvexProvider: React.FC<{
   return React.createElement(
     ConvexContext.Provider,
     { value: client },
-    children
+    children,
   );
 };
 
@@ -589,7 +589,7 @@ export function useQuery<Query extends FunctionReference<"query">>(
     // Stringify args so args that are semantically the same don't trigger a
     // rerender. Saves developers from adding `useMemo` on every args usage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(convexToJson(argsObject)), queryName, skip]
+    [JSON.stringify(convexToJson(argsObject)), queryName, skip],
   );
 
   const results = useQueries(queries);
@@ -620,7 +620,7 @@ export function useQuery<Query extends FunctionReference<"query">>(
  * @public
  */
 export function useMutation<Mutation extends FunctionReference<"mutation">>(
-  mutation: Mutation
+  mutation: Mutation,
 ): ReactMutation<Mutation> {
   const mutationReference =
     typeof mutation === "string"
@@ -632,13 +632,13 @@ export function useMutation<Mutation extends FunctionReference<"mutation">>(
     throw new Error(
       "Could not find Convex client! `useMutation` must be used in the React component " +
         "tree under `ConvexProvider`. Did you forget it? " +
-        "See https://docs.convex.dev/quick-start#set-up-convex-in-your-react-app"
+        "See https://docs.convex.dev/quick-start#set-up-convex-in-your-react-app",
     );
   }
   return useMemo(
     () => createMutation(mutationReference, convex),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [convex, getFunctionName(mutationReference)]
+    [convex, getFunctionName(mutationReference)],
   );
 }
 
@@ -661,7 +661,7 @@ export function useMutation<Mutation extends FunctionReference<"mutation">>(
  * @public
  */
 export function useAction<Action extends FunctionReference<"action">>(
-  action: Action
+  action: Action,
 ): ReactAction<Action> {
   const convex = useContext(ConvexContext);
   const actionReference =
@@ -673,13 +673,13 @@ export function useAction<Action extends FunctionReference<"action">>(
     throw new Error(
       "Could not find Convex client! `useAction` must be used in the React component " +
         "tree under `ConvexProvider`. Did you forget it? " +
-        "See https://docs.convex.dev/quick-start#set-up-convex-in-your-react-app"
+        "See https://docs.convex.dev/quick-start#set-up-convex-in-your-react-app",
     );
   }
   return useMemo(
     () => createAction(actionReference, convex),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [convex, getFunctionName(actionReference)]
+    [convex, getFunctionName(actionReference)],
   );
 }
 
@@ -696,7 +696,7 @@ function assertNotAccidentalArgument(value: any) {
     "isDefaultPrevented" in value
   ) {
     throw new Error(
-      `Convex function called with SyntheticEvent object. Did you use a Convex function as an event handler directly? Event handlers like onClick receive an event object as their first argument. These SyntheticEvent objects are not valid Convex values. Try wrapping the function like \`const handler = () => myMutation();\` and using \`handler\` in the event handler.`
+      `Convex function called with SyntheticEvent object. Did you use a Convex function as an event handler directly? Event handlers like onClick receive an event object as their first argument. These SyntheticEvent objects are not valid Convex values. Try wrapping the function like \`const handler = () => myMutation();\` and using \`handler\` in the event handler.`,
     );
   }
 }

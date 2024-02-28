@@ -1,24 +1,30 @@
+import { Command } from "@commander-js/extra-typings";
 import chalk from "chalk";
 import { logMessage, oneoffContext } from "../bundler/context.js";
-import { watchLogs } from "./lib/logs.js";
 import {
   deploymentSelectionFromOptions,
   fetchDeploymentCredentialsProvisionProd,
 } from "./lib/api.js";
-import { DeploymentCommand } from "./lib/utils.js";
-import { InvalidArgumentError } from "commander";
+import { actionDescription } from "./lib/command.js";
+import { watchLogs } from "./lib/logs.js";
+import { parseInteger } from "./lib/utils.js";
 
-export const logs = new DeploymentCommand("logs")
+export const logs = new Command("logs")
   .summary("Watch logs from your deployment")
   .description(
-    "Stream function logs from your Convex deployment.\nBy default, this streams from your project's dev deployment."
+    "Stream function logs from your Convex deployment.\nBy default, this streams from your project's dev deployment.",
   )
   .option(
     "--history [n]",
     "Show `n` most recent logs. Defaults to showing all available logs.",
-    parseInteger
+    parseInteger,
   )
-  .addDeploymentSelectionOptions("Watch logs from")
+  .option(
+    "--success",
+    "Print a log line for every successful function execution",
+    false,
+  )
+  .addDeploymentSelectionOptions(actionDescription("Watch logs from"))
   .showHelpAfterError()
   .action(async (cmdOptions) => {
     const ctx = oneoffContext;
@@ -26,7 +32,7 @@ export const logs = new DeploymentCommand("logs")
     const deploymentSelection = deploymentSelectionFromOptions(cmdOptions);
     const credentials = await fetchDeploymentCredentialsProvisionProd(
       ctx,
-      deploymentSelection
+      deploymentSelection,
     );
     if (cmdOptions.prod) {
       logMessage(
@@ -34,8 +40,8 @@ export const logs = new DeploymentCommand("logs")
         chalk.yellow(
           `Watching logs for production deployment ${
             credentials.deploymentName || ""
-          }...`
-        )
+          }...`,
+        ),
       );
     } else {
       logMessage(
@@ -43,20 +49,12 @@ export const logs = new DeploymentCommand("logs")
         chalk.yellow(
           `Watching logs for dev deployment ${
             credentials.deploymentName || ""
-          }...`
-        )
+          }...`,
+        ),
       );
     }
     await watchLogs(ctx, credentials.url, credentials.adminKey, "stdout", {
       history: cmdOptions.history,
+      success: cmdOptions.success,
     });
   });
-
-function parseInteger(value: string) {
-  const parsedValue = +value;
-  if (isNaN(parsedValue)) {
-    // eslint-disable-next-line no-restricted-syntax
-    throw new InvalidArgumentError("Not a number.");
-  }
-  return parsedValue;
-}

@@ -36,6 +36,8 @@
       //     "message": "Use flushAndExit from convex/src/cli/utils.ts instead of process.exit so that Sentry gets flushed.",
       //     "selector": "CallExpression[callee.object.name='process'][callee.property.name='exit'][callee.value=1]"
       //   }
-    ]
+    ],
+
+    "no-throw-literal": ["error"]
   }
 }

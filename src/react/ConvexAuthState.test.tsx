@@ -50,7 +50,7 @@ test("ConvexProviderWithAuth works", async () => {
       },
       // If `getToken` isn't correctly memoized
       // remove it from this dependency array
-      [getToken]
+      [getToken],
     );
     return useMemo(
       () => ({
@@ -61,7 +61,7 @@ test("ConvexProviderWithAuth works", async () => {
         // The async function to fetch the ID token
         fetchAccessToken,
       }),
-      [isLoading, isAuthenticated, fetchAccessToken]
+      [isLoading, isAuthenticated, fetchAccessToken],
     );
   }
 
@@ -75,8 +75,8 @@ test("ConvexProviderWithAuth works", async () => {
         {isLoading
           ? "Loading..."
           : isAuthenticated
-          ? "Authenticated"
-          : "Unauthenticated"}
+            ? "Authenticated"
+            : "Unauthenticated"}
       </>
     );
   };
@@ -96,7 +96,7 @@ test("ConvexProviderWithAuth works", async () => {
       }}
     >
       {element}
-    </AuthProviderXContext.Provider>
+    </AuthProviderXContext.Provider>,
   );
   expect(screen.getByText("Loading...")).toBeDefined();
 
@@ -111,7 +111,7 @@ test("ConvexProviderWithAuth works", async () => {
       }}
     >
       {element}
-    </AuthProviderXContext.Provider>
+    </AuthProviderXContext.Provider>,
   );
   expect(screen.getByText("Loading...")).toBeDefined();
 
@@ -140,7 +140,7 @@ test("Tokens must be valid JWT", async () => {
     async () => "foo" + tokenId++, // simulate a new token on every fetch
     () => {
       // Do nothing
-    }
+    },
   );
 
   // Wait for token
@@ -156,7 +156,7 @@ test("Tokens must be valid JWT", async () => {
   mockServerConfirmsAuth(client, 1);
 
   expect(consoleSpy).toHaveBeenCalledWith(
-    "Auth token is not a valid JWT, cannot refetch the token"
+    "Auth token is not a valid JWT, cannot refetch the token",
   );
 });
 
@@ -167,8 +167,8 @@ test("Tokens are used to schedule refetch", async () => {
   const tokenFetcher = jest.fn(async () =>
     jwtEncode(
       { iat: 1234500, exp: 1234500 + tokenLifetimeSeconds },
-      "secret" + tokenId++ // simulate a new token on every fetch
-    )
+      "secret" + tokenId++, // simulate a new token on every fetch
+    ),
   );
   void client.setAuth(tokenFetcher, () => {
     // Do nothing
@@ -195,7 +195,7 @@ test("Tokens are used to schedule refetch", async () => {
 
 function mockServerConfirmsAuth(
   client: ConvexReactClient,
-  oldIdentityVersion: number
+  oldIdentityVersion: number,
 ) {
   act(() => {
     const querySetVersion = client.sync["remoteQuerySet"]["version"];

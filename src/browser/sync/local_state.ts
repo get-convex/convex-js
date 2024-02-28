@@ -64,7 +64,7 @@ export class LocalSyncState {
   subscribe(
     udfPath: string,
     args: Record<string, Value>,
-    journal?: QueryJournal
+    journal?: QueryJournal,
   ): {
     queryToken: QueryToken;
     modification: QuerySetModification | null;
@@ -178,7 +178,7 @@ export class LocalSyncState {
 
   setAdminAuth(
     value: string,
-    actingAs?: UserIdentityAttributes
+    actingAs?: UserIdentityAttributes,
   ): AdminAuthentication {
     const auth: typeof this.auth & {
       tokenType: "Admin";
@@ -240,7 +240,7 @@ export class LocalSyncState {
   }
 
   restart(
-    oldRemoteQueryResults: Set<QueryId>
+    oldRemoteQueryResults: Set<QueryId>,
   ): [QuerySetModification, Authenticate?] {
     this.outstandingQueriesOlderThanRestart.clear();
     const modifications = [];
@@ -281,7 +281,7 @@ export class LocalSyncState {
   }
 
   private removeSubscriber(
-    queryToken: QueryToken
+    queryToken: QueryToken,
   ): QuerySetModification | null {
     const localQuery = this.querySet.get(queryToken)!;
 

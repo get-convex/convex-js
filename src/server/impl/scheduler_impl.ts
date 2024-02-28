@@ -12,7 +12,7 @@ export function setupMutationScheduler(): Scheduler {
     runAfter: async (
       delayMs: number,
       functionReference: SchedulableFunctionReference,
-      args?: Record<string, Value>
+      args?: Record<string, Value>,
     ) => {
       const syscallArgs = runAfterSyscallArgs(delayMs, functionReference, args);
       return await performAsyncSyscall("1.0/schedule", syscallArgs);
@@ -20,12 +20,12 @@ export function setupMutationScheduler(): Scheduler {
     runAt: async (
       ms_since_epoch_or_date: number | Date,
       functionReference: SchedulableFunctionReference,
-      args?: Record<string, Value>
+      args?: Record<string, Value>,
     ) => {
       const syscallArgs = runAtSyscallArgs(
         ms_since_epoch_or_date,
         functionReference,
-        args
+        args,
       );
       return await performAsyncSyscall("1.0/schedule", syscallArgs);
     },
@@ -42,7 +42,7 @@ export function setupActionScheduler(requestId: string): Scheduler {
     runAfter: async (
       delayMs: number,
       functionReference: SchedulableFunctionReference,
-      args?: Record<string, Value>
+      args?: Record<string, Value>,
     ) => {
       const syscallArgs = {
         requestId,
@@ -53,7 +53,7 @@ export function setupActionScheduler(requestId: string): Scheduler {
     runAt: async (
       ms_since_epoch_or_date: number | Date,
       functionReference: SchedulableFunctionReference,
-      args?: Record<string, Value>
+      args?: Record<string, Value>,
     ) => {
       const syscallArgs = {
         requestId,
@@ -72,7 +72,7 @@ export function setupActionScheduler(requestId: string): Scheduler {
 function runAfterSyscallArgs(
   delayMs: number,
   functionReference: SchedulableFunctionReference,
-  args?: Record<string, Value>
+  args?: Record<string, Value>,
 ) {
   if (typeof delayMs !== "number") {
     throw new Error("`delayMs` must be a number");
@@ -98,7 +98,7 @@ function runAfterSyscallArgs(
 function runAtSyscallArgs(
   ms_since_epoch_or_date: number | Date,
   functionReference: SchedulableFunctionReference,
-  args?: Record<string, Value>
+  args?: Record<string, Value>,
 ) {
   let ts;
   if (ms_since_epoch_or_date instanceof Date) {

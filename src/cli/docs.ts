@@ -1,24 +1,20 @@
-import { Command } from "commander";
-import open from "open";
+import { Command } from "@commander-js/extra-typings";
 import chalk from "chalk";
-import {
-  bigBrainClient,
-  deprecationCheckWarning,
-  getAuthHeaderFromGlobalConfig,
-} from "./lib/utils.js";
+import open from "open";
 import { oneoffContext } from "../bundler/context.js";
-import { readDeploymentEnvVar } from "./lib/deployment.js";
+import { getTargetDeploymentName } from "./lib/deployment.js";
+import { bigBrainClient, deprecationCheckWarning } from "./lib/utils.js";
 
 export const docs = new Command("docs")
   .description("Open the docs in the browser")
   .option("--no-open", "Print docs URL instead of opening it in your browser")
   .action(async (options) => {
     const ctx = oneoffContext;
-    // Usually we'd call `getConfiguredDeployment` but in this
+    // Usually we'd call `getConfiguredDeploymentName` but in this
     // command we don't care at all if the user is in the right directory
-    const configuredDeployment = readDeploymentEnvVar();
+    const configuredDeployment = getTargetDeploymentName();
     const getCookieUrl = `get_cookie/${configuredDeployment}`;
-    const client = await bigBrainClient(ctx, getAuthHeaderFromGlobalConfig);
+    const client = await bigBrainClient(ctx);
     try {
       const res = await client.get(getCookieUrl);
       deprecationCheckWarning(ctx, res);

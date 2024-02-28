@@ -1,4 +1,3 @@
-import { Option } from "commander";
 import chalk from "chalk";
 import inquirer from "inquirer";
 import {
@@ -7,7 +6,6 @@ import {
   formatSize,
   deploymentClient,
   waitUntilCalled,
-  DeploymentCommand,
 } from "./lib/utils.js";
 import { version } from "./version.js";
 import {
@@ -28,41 +26,43 @@ import {
 } from "./lib/api.js";
 import path from "path";
 import { subscribe } from "./lib/run.js";
+import { Command, Option } from "@commander-js/extra-typings";
+import { actionDescription } from "./lib/command.js";
 
 // Backend has minimum chunk size of 5MiB except for the last chunk,
 // so we use 5MiB as highWaterMark which makes fs.ReadStream[asyncIterator]
 // output 5MiB chunks before the last one.
 const CHUNK_SIZE = 5 * 1024 * 1024;
 
-export const convexImport = new DeploymentCommand("import")
+export const convexImport = new Command("import")
   .summary("Import data from a file to your deployment")
   .description(
     "Import data from a file to your Convex deployment.\n\n" +
       "  From a snapshot: `npx convex import snapshot.zip`\n" +
       "  For a single table: `npx convex import --table tableName file.json`\n\n" +
-      "By default, this imports into your dev deployment."
+      "By default, this imports into your dev deployment.",
   )
   .addOption(
     new Option(
       "--table <table>",
-      "Destination table name. Required if format is csv, jsonLines, or jsonArray. Not supported if format is zip."
-    )
+      "Destination table name. Required if format is csv, jsonLines, or jsonArray. Not supported if format is zip.",
+    ),
   )
   .addOption(
     new Option(
       "--replace",
-      "Replace all existing data in any of the imported tables"
-    ).conflicts("--append")
+      "Replace all existing data in any of the imported tables",
+    ).conflicts("--append"),
   )
   .addOption(
     new Option(
       "--append",
-      "Append imported data to any existing tables"
-    ).conflicts("--replace")
+      "Append imported data to any existing tables",
+    ).conflicts("--replace"),
   )
   .option(
     "-y, --yes",
-    "Skip confirmation prompt when import leads to deleting existing documents"
+    "Skip confirmation prompt when import leads to deleting existing documents",
   )
   .addOption(
     new Option(
@@ -71,19 +71,19 @@ export const convexImport = new DeploymentCommand("import")
         "- CSV files must have a header, and each row's entries are interpreted either as a (floating point) number or a string.\n" +
         "- JSON files must be an array of JSON objects.\n" +
         "- JSONLines files must have a JSON object per line.\n" +
-        "- ZIP files must have one directory per table, containing <table>/documents.jsonl. Snapshot exports from the Convex dashboard have this format."
-    ).choices(["csv", "jsonLines", "jsonArray", "zip"])
+        "- ZIP files must have one directory per table, containing <table>/documents.jsonl. Snapshot exports from the Convex dashboard have this format.",
+    ).choices(["csv", "jsonLines", "jsonArray", "zip"]),
   )
-  .addDeploymentSelectionOptions("Import data into")
+  .addDeploymentSelectionOptions(actionDescription("Import data into"))
   .argument("<path>", "Path to the input file")
   .showHelpAfterError()
-  .action(async (filePath: string, options: any, command: any) => {
+  .action(async (filePath, options, command) => {
     const ctx = oneoffContext;
 
     if (command.args.length > 1) {
       logFailure(
         ctx,
-        `Error: Too many positional arguments. If you're specifying a table name, use the \`--table\` option.`
+        `Error: Too many positional arguments. If you're specifying a table name, use the \`--table\` option.`,
       );
       return await ctx.crash(1, "fatal");
     }
@@ -104,7 +104,7 @@ export const convexImport = new DeploymentCommand("import")
       if (format !== "zip") {
         logFailure(
           ctx,
-          `Error: The \`--table\` option is required for format ${format}`
+          `Error: The \`--table\` option is required for format ${format}`,
         );
         return await ctx.crash(1, "fatal");
       }
@@ -112,7 +112,7 @@ export const convexImport = new DeploymentCommand("import")
       if (format === "zip") {
         logFailure(
           ctx,
-          `Error: The \`--table\` option is not allowed for format ${format}`
+          `Error: The \`--table\` option is not allowed for format ${format}`,
         );
         return await ctx.crash(1, "fatal");
       }
@@ -159,7 +159,7 @@ export const convexImport = new DeploymentCommand("import")
 
       for await (const chunk of data) {
         const partUrl = `/api/import/upload_part?uploadToken=${encodeURIComponent(
-          uploadToken
+          uploadToken,
         )}&partNumber=${partNumber}`;
         const partResp = await client.post(partUrl, chunk, { headers });
         partTokens.push(partResp.data);
@@ -167,8 +167,8 @@ export const convexImport = new DeploymentCommand("import")
         changeSpinner(
           ctx,
           `Uploading ${filePath} (${formatSize(data.bytesRead)}/${formatSize(
-            fileStats.size
-          )})`
+            fileStats.size,
+          )})`,
         );
       }
 
@@ -179,15 +179,15 @@ export const convexImport = new DeploymentCommand("import")
           uploadToken,
           partTokens,
         },
-        { headers }
+        { headers },
       );
       importId = finishResp.data.importId;
     } catch (e) {
       logFailure(
         ctx,
         `Importing data from "${chalk.bold(
-          filePath
-        )}"${tableNotice}${deploymentNotice} failed`
+          filePath,
+        )}"${tableNotice}${deploymentNotice} failed`,
       );
       return await logAndHandleAxiosError(ctx, e);
     }
@@ -198,21 +198,21 @@ export const convexImport = new DeploymentCommand("import")
         ctx,
         importId,
         deploymentUrl,
-        adminKey
+        adminKey,
       );
       switch (snapshotImportState.state) {
         case "completed":
           logFinishedStep(
             ctx,
-            `Added ${snapshotImportState.num_rows_written} documents${tableNotice}${deploymentNotice}.`
+            `Added ${snapshotImportState.num_rows_written} documents${tableNotice}${deploymentNotice}.`,
           );
           return;
         case "failed":
           logFailure(
             ctx,
             `Importing data from "${chalk.bold(
-              filePath
-            )}"${tableNotice}${deploymentNotice} failed`
+              filePath,
+            )}"${tableNotice}${deploymentNotice} failed`,
           );
           logError(ctx, chalk.red(snapshotImportState.error_message));
           return await ctx.crash(1);
@@ -223,7 +223,7 @@ export const convexImport = new DeploymentCommand("import")
             ctx,
             snapshotImportState.message_to_confirm,
             snapshotImportState.require_manual_confirmation,
-            options.yes
+            options.yes,
           );
           showSpinner(ctx, `Importing`);
           const performUrl = `/api/perform_import`;
@@ -233,8 +233,8 @@ export const convexImport = new DeploymentCommand("import")
             logFailure(
               ctx,
               `Importing data from "${chalk.bold(
-                filePath
-              )}"${tableNotice}${deploymentNotice} failed`
+                filePath,
+              )}"${tableNotice}${deploymentNotice} failed`,
             );
             return await logAndHandleAxiosError(ctx, e);
           }
@@ -253,7 +253,7 @@ export const convexImport = new DeploymentCommand("import")
           const _: never = snapshotImportState;
           logFailure(
             ctx,
-            `unknown error: unexpected state ${snapshotImportState as any}`
+            `unknown error: unexpected state ${snapshotImportState as any}`,
           );
           return await ctx.crash(1);
         }
@@ -265,7 +265,7 @@ async function askToConfirmImport(
   ctx: Context,
   messageToConfirm: string | undefined,
   requireManualConfirmation: boolean | undefined,
-  yes: boolean | undefined
+  yes: boolean | undefined,
 ) {
   if (!messageToConfirm?.length) {
     return;
@@ -305,7 +305,7 @@ async function waitForStableImportState(
   ctx: Context,
   importId: string,
   deploymentUrl: string,
-  adminKey: string
+  adminKey: string,
 ): Promise<SnapshotImportState> {
   const [donePromise, onDone] = waitUntilCalled();
   let snapshotImportState: SnapshotImportState;
@@ -338,18 +338,18 @@ async function waitForStableImportState(
             ) {
               logFinishedStep(
                 ctx,
-                snapshotImportState.checkpoint_messages![checkpointCount]
+                snapshotImportState.checkpoint_messages![checkpointCount],
               );
               checkpointCount += 1;
             }
             showSpinner(
               ctx,
-              snapshotImportState.progress_message ?? "Importing"
+              snapshotImportState.progress_message ?? "Importing",
             );
             return;
         }
       },
-    }
+    },
   );
   return snapshotImportState!;
 }
@@ -357,7 +357,7 @@ async function waitForStableImportState(
 async function determineFormat(
   ctx: Context,
   filePath: string,
-  format: string | null
+  format: string | null,
 ) {
   const fileExtension = path.extname(filePath);
   if (fileExtension !== "") {
@@ -368,14 +368,14 @@ async function determineFormat(
       zip: ".zip",
     };
     const extensionToFormat = Object.fromEntries(
-      Object.entries(formatToExtension).map((a) => a.reverse())
+      Object.entries(formatToExtension).map((a) => a.reverse()),
     );
     if (format !== null && fileExtension !== formatToExtension[format]) {
       logWarning(
         ctx,
         chalk.yellow(
-          `Warning: Extension of file ${filePath} (${fileExtension}) does not match specified format: ${format} (${formatToExtension[format]}).`
-        )
+          `Warning: Extension of file ${filePath} (${fileExtension}) does not match specified format: ${format} (${formatToExtension[format]}).`,
+        ),
       );
     }
     format ??= extensionToFormat[fileExtension] ?? null;
@@ -383,7 +383,7 @@ async function determineFormat(
   if (format === null) {
     logFailure(
       ctx,
-      "No input file format inferred by the filename extension or specified. Specify your input file's format using the `--format` flag."
+      "No input file format inferred by the filename extension or specified. Specify your input file's format using the `--format` flag.",
     );
     return await ctx.crash(1, "fatal");
   }

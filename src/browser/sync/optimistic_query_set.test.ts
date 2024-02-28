@@ -41,7 +41,7 @@ test("server results are returned back if no optimistic updates exist", () => {
   ]);
   const changedQueries = optimisticQuerySet.ingestQueryResultsFromServer(
     queryResults,
-    new Set()
+    new Set(),
   );
 
   expect(changedQueries).toEqual([queryToken1, queryToken2]);
@@ -67,11 +67,11 @@ test("errors are thrown if we receive an error from the server", () => {
   ]);
   const changedQueries = optimisticQuerySet.ingestQueryResultsFromServer(
     serverQueryResults,
-    new Set()
+    new Set(),
   );
   expect(changedQueries).toEqual([queryToken]);
   expect(() => optimisticQuerySet.queryResult(queryToken)).toThrow(
-    "[CONVEX Q(query)] Server Error"
+    "[CONVEX Q(query)] Server Error",
   );
 });
 
@@ -93,7 +93,7 @@ test("optimistic updates edit query results", () => {
   // Add a query to our store
   const changedQueries = optimisticQuerySet.ingestQueryResultsFromServer(
     createQueryResults(100),
-    new Set()
+    new Set(),
   );
   expect(changedQueries).toEqual([queryToken]);
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual(100);
@@ -104,7 +104,7 @@ test("optimistic updates edit query results", () => {
       const oldResult = localStore.getQuery(anyApi.query.default, {});
       localStore.setQuery(anyApi.query.default, {}, oldResult + 1);
     },
-    0
+    0,
   );
   expect(changedQueries2).toEqual([queryToken]);
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual(101);
@@ -113,7 +113,7 @@ test("optimistic updates edit query results", () => {
   // replayed on top.
   const changedQueries3 = optimisticQuerySet.ingestQueryResultsFromServer(
     createQueryResults(200),
-    new Set()
+    new Set(),
   );
   expect(changedQueries3).toEqual([queryToken]);
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual(201);
@@ -121,7 +121,7 @@ test("optimistic updates edit query results", () => {
   // The update can be dropped
   const changedQueries4 = optimisticQuerySet.ingestQueryResultsFromServer(
     createQueryResults(300),
-    new Set([0])
+    new Set([0]),
   );
   expect(changedQueries4).toEqual([queryToken]);
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual(300);
@@ -151,7 +151,7 @@ test("optimistic updates only notify changed queries", () => {
   ]);
   const changedQueries = optimisticQuerySet.ingestQueryResultsFromServer(
     queryResults,
-    new Set()
+    new Set(),
   );
   // Confirm they were both added
   expect(changedQueries).toEqual([queryToken1, queryToken2]);
@@ -163,13 +163,13 @@ test("optimistic updates only notify changed queries", () => {
     (localStore) => {
       localStore.setQuery(anyApi.query1.default, {}, "new query1 result");
     },
-    0
+    0,
   );
 
   // Only the first query changed
   expect(changedQueries2).toEqual([queryToken1]);
   expect(optimisticQuerySet.queryResult(queryToken1)).toEqual(
-    "new query1 result"
+    "new query1 result",
   );
   expect(optimisticQuerySet.queryResult(queryToken2)).toEqual("query2 result");
 });
@@ -189,7 +189,7 @@ test("optimistic updates stack", () => {
   ]);
   optimisticQuerySet.ingestQueryResultsFromServer(
     serverQueryResults,
-    new Set()
+    new Set(),
   );
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual(2);
 
@@ -210,13 +210,13 @@ test("optimistic updates stack", () => {
   // Drop the first update. Now we're just multiplying by 2.
   optimisticQuerySet.ingestQueryResultsFromServer(
     serverQueryResults,
-    new Set([0])
+    new Set([0]),
   );
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual(4);
   // Drop the second update. We're back to the start
   optimisticQuerySet.ingestQueryResultsFromServer(
     serverQueryResults,
-    new Set([1])
+    new Set([1]),
   );
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual(2);
 });
@@ -239,7 +239,7 @@ test("optimistic updates can set query results to undefined", () => {
   ]);
   const changedQueries = optimisticQuerySet.ingestQueryResultsFromServer(
     serverQueryResults,
-    new Set()
+    new Set(),
   );
   expect(changedQueries).toEqual([queryToken]);
   expect(optimisticQuerySet.queryResult(queryToken)).toEqual("query value");

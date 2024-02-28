@@ -86,7 +86,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    * */
   eq<T extends Value | undefined>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean>;
 
   /**
@@ -96,7 +96,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    * */
   neq<T extends Value | undefined>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean>;
 
   /**
@@ -106,7 +106,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    */
   lt<T extends Value>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean>;
 
   /**
@@ -116,7 +116,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    */
   lte<T extends Value>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean>;
 
   /**
@@ -126,7 +126,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    */
   gt<T extends Value>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean>;
 
   /**
@@ -136,7 +136,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    */
   gte<T extends Value>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<boolean>;
 
   //  Arithmetic  //////////////////////////////////////////////////////////////
@@ -148,7 +148,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    */
   add<T extends NumericValue>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<T>;
 
   /**
@@ -158,7 +158,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    */
   sub<T extends NumericValue>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<T>;
 
   /**
@@ -168,7 +168,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    */
   mul<T extends NumericValue>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<T>;
 
   /**
@@ -178,7 +178,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    */
   div<T extends NumericValue>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<T>;
 
   /**
@@ -188,7 +188,7 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    */
   mod<T extends NumericValue>(
     l: ExpressionOrValue<T>,
-    r: ExpressionOrValue<T>
+    r: ExpressionOrValue<T>,
   ): Expression<T>;
 
   /**
@@ -244,6 +244,6 @@ export interface FilterBuilder<TableInfo extends GenericTableInfo> {
    * @public
    */
   field<FieldPath extends FieldPaths<TableInfo>>(
-    fieldPath: FieldPath
+    fieldPath: FieldPath,
   ): Expression<FieldTypeFromFieldPath<DocumentByInfo<TableInfo>, FieldPath>>;
 }

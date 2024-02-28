@@ -3,7 +3,7 @@ import { GeneratedJsWithTypes, header } from "./common.js";
 export function serverCodegen(): GeneratedJsWithTypes {
   const serverDTS = `
     ${header(
-      "Generated utilities for implementing server-side Convex query and mutation functions."
+      "Generated utilities for implementing server-side Convex query and mutation functions.",
     )}
     import {
       ActionBuilder,
@@ -140,7 +140,7 @@ export function serverCodegen(): GeneratedJsWithTypes {
 
   const serverJS = `
     ${header(
-      "Generated utilities for implementing server-side Convex query and mutation functions."
+      "Generated utilities for implementing server-side Convex query and mutation functions.",
     )}
     import {
       actionGeneric,

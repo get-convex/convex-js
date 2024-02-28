@@ -26,7 +26,7 @@ test("Subscriptions are deduplicated", async () => {
     const { unsubscribe: unsub1 } = client.onUpdate(
       apiQueryFunc,
       {},
-      () => null
+      () => null,
     );
     expect((await receive()).type).toEqual("ModifyQuerySet");
 
@@ -34,7 +34,7 @@ test("Subscriptions are deduplicated", async () => {
     const { unsubscribe: unsub2 } = client.onUpdate(
       apiQueryFunc,
       {},
-      () => null
+      () => null,
     );
     unsub1();
     void client.mutation(apiMutationFunc, {});

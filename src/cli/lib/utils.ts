@@ -1,13 +1,18 @@
 import axios, { AxiosError, AxiosInstance, AxiosResponse, Method } from "axios";
 import chalk from "chalk";
 import inquirer from "inquirer";
-import * as readline from "readline";
-import path from "path";
 import os from "os";
+import path from "path";
+import * as readline from "readline";
 import { z } from "zod";
 
 import { ProjectConfig } from "./config.js";
 
+import axiosRetry from "axios-retry";
+import { spawn } from "child_process";
+import { InvalidArgumentError } from "commander";
+import fetchRetryFactory, { RequestInitRetryParams } from "fetch-retry";
+import nodeFetch, { Headers as NodeFetchHeaders } from "node-fetch";
 import {
   Context,
   ErrorType,
@@ -18,56 +23,37 @@ import {
 } from "../../bundler/context.js";
 import { version } from "../version.js";
 import { Project } from "./api.js";
-import { spawn } from "child_process";
-import { readDeploymentEnvVar } from "./deployment.js";
-import axiosRetry from "axios-retry";
-import { Command, Option } from "commander";
+import {
+  getConfiguredDeploymentFromEnvVar,
+  isPreviewDeployKey,
+} from "./deployment.js";
+
+// For Node.js 16 support
+const fetch = globalThis.fetch || nodeFetch;
+const retryingFetch = fetchRetryFactory(fetch);
 
 export const productionProvisionHost = "https://provision.convex.dev";
 export const provisionHost =
   process.env.CONVEX_PROVISION_HOST || productionProvisionHost;
-const BIG_BRAIN_URL = `${provisionHost}/api`;
+const BIG_BRAIN_URL = `${provisionHost}/api/`;
 export const CONVEX_DEPLOY_KEY_ENV_VAR_NAME = "CONVEX_DEPLOY_KEY";
 
-/// DeploymentCommand is a CLI command that talks to a Convex deployment.
-export class DeploymentCommand extends Command {
-  /**
-   * For a command that talks to the configured dev deployment by default,
-   * add flags for talking to prod, preview, or other deployment in the same
-   * project.
-   *
-   * These flags are added to the end of `command` (ordering matters for `--help`
-   * output). `action` should look like "Import data into" because it is prefixed
-   * onto help strings.
-   *
-   * The options can be passed to `deploymentSelectionFromOptions`.
-   */
-  addDeploymentSelectionOptions(action: string): Command {
-    return this.addOption(
-      new Option("--url <url>")
-        .conflicts(["--prod", "--preview-name", "--deployment-name"])
-        .hideHelp()
-    )
-      .addOption(new Option("--admin-key <adminKey>").hideHelp())
-      .addOption(
-        new Option(
-          "--prod",
-          action + " this project's production deployment."
-        ).conflicts(["--preview-name", "--deployment-name", "--url"])
-      )
-      .addOption(
-        new Option(
-          "--preview-name <previewName>",
-          action + " the preview deployment with the given name."
-        ).conflicts(["--prod", "--deployment-name", "--url"])
-      )
-      .addOption(
-        new Option(
-          "--deployment-name <deploymentName>",
-          action + " the specified deployment."
-        ).conflicts(["--prod", "--preview-name", "--url"])
-      );
+export function parsePositiveInteger(value: string) {
+  const parsedValue = parseInteger(value);
+  if (parsedValue <= 0) {
+    // eslint-disable-next-line no-restricted-syntax
+    throw new InvalidArgumentError("Not a positive number.");
   }
+  return parsedValue;
+}
+
+export function parseInteger(value: string) {
+  const parsedValue = +value;
+  if (isNaN(parsedValue)) {
+    // eslint-disable-next-line no-restricted-syntax
+    throw new InvalidArgumentError("Not a number.");
+  }
+  return parsedValue;
 }
 
 /** Prompt for keyboard input with the given `query` string and return a promise
@@ -81,7 +67,7 @@ export function prompt(query: string) {
     rl.question(query, (answer) => {
       rl.close();
       resolve(answer);
-    })
+    }),
   );
 }
 
@@ -91,6 +77,124 @@ export type ErrorData = {
 };
 
 /**
+ * Error thrown on non-2XX reponse codes to make most `fetch()` error handling
+ * follow a single code path.
+ */
+export class ThrowingFetchError extends Error {
+  response: Response;
+  serverErrorData?: ErrorData;
+
+  constructor(
+    msg: string,
+    {
+      code,
+      message,
+      response,
+    }: { cause?: Error; code?: string; message?: string; response: Response },
+  ) {
+    if (code !== undefined && message !== undefined) {
+      super(`${msg}: ${code}: ${message}`);
+      this.serverErrorData = { code, message };
+    } else {
+      super(msg);
+    }
+
+    Object.setPrototypeOf(this, ThrowingFetchError.prototype);
+
+    this.response = response;
+  }
+
+  public static async fromResponse(
+    response: Response,
+    msg?: string,
+  ): Promise<ThrowingFetchError> {
+    msg = `${msg ? `${msg} ` : ""}${response.status} ${response.statusText}`;
+    let code, message;
+    try {
+      ({ code, message } = await response.json());
+    } catch (e: unknown) {
+      // Do nothing because the non-2XX response code is the primary error here.
+    }
+    return new ThrowingFetchError(msg, { code, message, response });
+  }
+
+  async handle(ctx: Context): Promise<never> {
+    let error_type: ErrorType = "transient";
+    await checkFetchErrorForDeprecation(ctx, this.response);
+
+    let msg = this.message;
+
+    if (this.response.status === 400) {
+      error_type = "invalid filesystem or env vars";
+    } else if (this.response.status === 401) {
+      error_type = "fatal";
+      msg = `${msg}\nAuthenticate with \`npx convex dev\``;
+    } else if (this.response.status === 404) {
+      error_type = "fatal";
+      msg = `${msg}: ${this.response.url}`;
+    }
+
+    logError(ctx, chalk.red(msg.trim()));
+    return await ctx.crash(1, error_type, this);
+  }
+}
+
+/**
+ * Thin wrapper around `fetch()` which throws a FetchDataError on non-2XX
+ * responses which includes error code and message from the response JSON.
+ * (Axios-style)
+ *
+ * It also accepts retry options from fetch-retry.
+ */
+export async function throwingFetch(
+  resource: RequestInfo | URL,
+  options: (RequestInit & RequestInitRetryParams) | undefined,
+): Promise<Response> {
+  const Headers = globalThis.Headers || NodeFetchHeaders;
+  const headers = new Headers((options || {})["headers"]);
+  if (options?.body) {
+    if (!headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+  }
+  const response = await retryingFetch(resource, options);
+  if (!response.ok) {
+    // This error must always be handled manually.
+    // eslint-disable-next-line no-restricted-syntax
+    throw await ThrowingFetchError.fromResponse(
+      response,
+      `Error fetching ${options?.method ? options.method + " " : ""} ${
+        typeof resource === "string"
+          ? resource
+          : "url" in resource
+            ? resource.url
+            : resource.toString()
+      }`,
+    );
+  }
+  return response;
+}
+
+/**
+ * Handle an error a fetch error or non-2xx response.
+ */
+export async function logAndHandleFetchError(
+  ctx: Context,
+  err: unknown,
+): Promise<never> {
+  if (ctx.spinner) {
+    // Fail the spinner so the stderr lines appear
+    ctx.spinner.fail();
+  }
+  if (err instanceof ThrowingFetchError) {
+    return await err.handle(ctx);
+  } else {
+    logError(ctx, chalk.red(err));
+    return await ctx.crash(1, "transient", err);
+  }
+}
+
+/**
  * Handle an error from an axios request.
  *
  * TODO: Ideally this only takes in err: AxiosError, but currently
@@ -98,7 +202,7 @@ export type ErrorData = {
  */
 export async function logAndHandleAxiosError(
   ctx: Context,
-  err: any
+  err: any,
 ): Promise<never> {
   if (ctx.spinner) {
     // Fail the spinner so the stderr lines appear
@@ -140,9 +244,37 @@ function logDeprecationWarning(ctx: Context, deprecationMessage: string) {
   logWarning(ctx, chalk.yellow(deprecationMessage));
 }
 
+async function checkFetchErrorForDeprecation(ctx: Context, resp: Response) {
+  const headers = resp.headers;
+  if (headers) {
+    const deprecationState = headers.get("x-convex-deprecation-state");
+    const deprecationMessage = headers.get("x-convex-deprecation-message");
+    switch (deprecationState) {
+      case null:
+        break;
+      case "Deprecated":
+        // This version is deprecated. Print a warning and crash.
+
+        // Gotcha:
+        // 1. Don't use `logDeprecationWarning` because we should always print
+        // why this we crashed (even if we printed a warning earlier).
+        logError(ctx, chalk.red(deprecationMessage));
+        return await ctx.crash(1, "fatal");
+      default:
+        // The error included a deprecation warning. Print, but handle the
+        // error normally (it was for another reason).
+        logDeprecationWarning(
+          ctx,
+          deprecationMessage || "(no deprecation message included)",
+        );
+        break;
+    }
+  }
+}
+
 async function checkErrorForDeprecation(
   ctx: Context,
-  resp: AxiosResponse<ErrorData, any>
+  resp: AxiosResponse<ErrorData, any>,
 ) {
   const headers = resp.headers;
   if (headers) {
@@ -170,9 +302,35 @@ async function checkErrorForDeprecation(
 
 /// Call this method after a successful API response to conditionally print the
 /// "please upgrade" message.
+export function fetchDeprecationCheckWarning(ctx: Context, resp: Response) {
+  const headers = resp.headers;
+  if (headers) {
+    const deprecationState = headers.get("x-convex-deprecation-state");
+    const deprecationMessage = headers.get("x-convex-deprecation-message");
+    switch (deprecationState) {
+      case null:
+        break;
+      case "Deprecated":
+        // This should never happen because such states are errors, not warnings.
+        // eslint-disable-next-line no-restricted-syntax
+        throw new Error(
+          "Called deprecationCheckWarning on a fatal error. This is a bug.",
+        );
+      default:
+        logDeprecationWarning(
+          ctx,
+          deprecationMessage || "(no deprecation message included)",
+        );
+        break;
+    }
+  }
+}
+
+/// Call this method after a successful API response to conditionally print the
+/// "please upgrade" message.
 export function deprecationCheckWarning(
   ctx: Context,
-  resp: AxiosResponse<any, any>
+  resp: AxiosResponse<any, any>,
 ) {
   const headers = resp.headers;
   if (headers) {
@@ -185,7 +343,7 @@ export function deprecationCheckWarning(
         // This should never happen because such states are errors, not warnings.
         // eslint-disable-next-line no-restricted-syntax
         throw new Error(
-          "Called deprecationCheckWarning on a fatal error. This is a bug."
+          "Called deprecationCheckWarning on a fatal error. This is a bug.",
         );
       default:
         logDeprecationWarning(ctx, deprecationMessage);
@@ -207,8 +365,8 @@ export async function hasTeam(ctx: Context, teamSlug: string) {
 
 export async function validateOrSelectTeam(
   ctx: Context,
-  teamSlug: string | null,
-  promptMessage: string
+  teamSlug: string | undefined,
+  promptMessage: string,
 ): Promise<{ teamSlug: string; chosen: boolean }> {
   const teams: Team[] = await bigBrainAPI({ ctx, method: "GET", url: "teams" });
   if (teams.length === 0) {
@@ -243,7 +401,7 @@ export async function validateOrSelectTeam(
     if (!teams.find((team) => team.slug === teamSlug)) {
       logFailure(
         ctx,
-        `Error: Team ${teamSlug} not found, fix the --team option or remove it`
+        `Error: Team ${teamSlug} not found, fix the --team option or remove it`,
       );
       await ctx.crash(1, "fatal");
     }
@@ -254,13 +412,13 @@ export async function validateOrSelectTeam(
 export async function hasProject(
   ctx: Context,
   teamSlug: string,
-  projectSlug: string
+  projectSlug: string,
 ) {
   try {
     const projects: Project[] = await bigBrainAPIMaybeThrows({
       ctx,
       method: "GET",
-      url: `/teams/${teamSlug}/projects`,
+      url: `teams/${teamSlug}/projects`,
     });
     return !!projects.find((project) => project.slug === projectSlug);
   } catch (e) {
@@ -269,20 +427,20 @@ export async function hasProject(
 }
 
 export async function hasProjects(ctx: Context) {
-  return !!(await bigBrainAPI({ ctx, method: "GET", url: `/has_projects` }));
+  return !!(await bigBrainAPI({ ctx, method: "GET", url: `has_projects` }));
 }
 
 export async function validateOrSelectProject(
   ctx: Context,
-  projectSlug: string | null,
+  projectSlug: string | undefined,
   teamSlug: string,
   singleProjectPrompt: string,
-  multiProjectPrompt: string
+  multiProjectPrompt: string,
 ): Promise<string | null> {
   const projects: Project[] = await bigBrainAPI({
     ctx,
     method: "GET",
-    url: `/teams/${teamSlug}/projects`,
+    url: `teams/${teamSlug}/projects`,
   });
   if (projects.length === 0) {
     // Unexpected error
@@ -335,7 +493,7 @@ export async function validateOrSelectProject(
     if (!projects.find((project) => project.slug === projectSlug)) {
       logFailure(
         ctx,
-        `Error: Project ${projectSlug} not found, fix the --project option or remove it`
+        `Error: Project ${projectSlug} not found, fix the --project option or remove it`,
       );
       await ctx.crash(1, "fatal");
     }
@@ -349,7 +507,7 @@ export async function validateOrSelectProject(
  * and devDependencies
  */
 export async function loadPackageJson(
-  ctx: Context
+  ctx: Context,
 ): Promise<Record<string, string>> {
   let packageJson;
   try {
@@ -359,7 +517,7 @@ export async function loadPackageJson(
       ctx,
       `Unable to read your package.json: ${
         err as any
-      }. Make sure you're running this command from the root directory of a Convex app that contains the package.json`
+      }. Make sure you're running this command from the root directory of a Convex app that contains the package.json`,
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -387,7 +545,7 @@ export async function ensureHasConvexDependency(ctx: Context, cmd: string) {
   if (!hasConvexDependency) {
     logFailure(
       ctx,
-      `In order to ${cmd}, add \`convex\` to your package.json dependencies.`
+      `In order to ${cmd}, add \`convex\` to your package.json dependencies.`,
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -406,7 +564,7 @@ export const sorted = <T>(arr: T[], key: (el: T) => any): T[] => {
 
 export function functionsDir(
   configPath: string,
-  projectConfig: ProjectConfig
+  projectConfig: ProjectConfig,
 ): string {
   return path.join(path.dirname(configPath), projectConfig.functions);
 }
@@ -451,8 +609,8 @@ async function readGlobalConfig(ctx: Context): Promise<GlobalConfig | null> {
       chalk.red(
         `Failed to parse global config in ${configPath} with error ${
           err as any
-        }.`
-      )
+        }.`,
+      ),
     );
     return null;
   }
@@ -462,8 +620,8 @@ export function readAdminKeyFromEnvVar(): string | undefined {
   return process.env[CONVEX_DEPLOY_KEY_ENV_VAR_NAME] ?? undefined;
 }
 
-export async function getAuthHeaderFromGlobalConfig(
-  ctx: Context
+export async function getAuthHeaderForBigBrain(
+  ctx: Context,
 ): Promise<string | null> {
   if (process.env.CONVEX_OVERRIDE_ACCESS_TOKEN) {
     return `Bearer ${process.env.CONVEX_OVERRIDE_ACCESS_TOKEN}`;
@@ -473,17 +631,47 @@ export async function getAuthHeaderFromGlobalConfig(
     return `Bearer ${globalConfig.accessToken}`;
   }
   const adminKey = readAdminKeyFromEnvVar();
-  if (adminKey) {
+  if (adminKey !== undefined && isPreviewDeployKey(adminKey)) {
     return `Bearer ${adminKey}`;
   }
   return null;
 }
 
-export async function bigBrainClient(
-  ctx: Context,
-  getAuthHeader: (ctx: Context) => Promise<string | null>
-): Promise<AxiosInstance> {
-  const authHeader = await getAuthHeader(ctx);
+export async function bigBrainFetch(ctx: Context): Promise<typeof fetch> {
+  const authHeader = await getAuthHeaderForBigBrain(ctx);
+  const bigBrainHeaders: Record<string, string> = authHeader
+    ? {
+        Authorization: authHeader,
+        "Convex-Client": `npm-cli-${version}`,
+      }
+    : {
+        "Convex-Client": `npm-cli-${version}`,
+      };
+  return (resource: RequestInfo | URL, options: RequestInit | undefined) => {
+    const { headers: optionsHeaders, ...rest } = options || {};
+    const headers = {
+      ...bigBrainHeaders,
+      ...(optionsHeaders || {}),
+    };
+    const opts = {
+      retries: 6,
+      retryDelay,
+      headers,
+      ...rest,
+    };
+
+    const url =
+      resource instanceof URL
+        ? resource.pathname
+        : typeof resource === "string"
+          ? new URL(resource, BIG_BRAIN_URL)
+          : new URL(resource.url, BIG_BRAIN_URL);
+    return throwingFetch(url, opts);
+  };
+}
+
+export async function bigBrainClient(ctx: Context): Promise<AxiosInstance> {
+  const authHeader = await getAuthHeaderForBigBrain(ctx);
   const headers: Record<string, string> = authHeader
     ? {
         Authorization: authHeader,
@@ -509,15 +697,21 @@ export async function bigBrainAPI({
   url: string;
   data?: any;
 }): Promise<any> {
+  const dataString =
+    data === undefined
+      ? undefined
+      : typeof data === "string"
+        ? data
+        : JSON.stringify(data);
   try {
     return await bigBrainAPIMaybeThrows({
       ctx,
       method,
       url,
-      data,
+      data: dataString,
     });
-  } catch (err) {
-    return await logAndHandleAxiosError(ctx, err);
+  } catch (err: unknown) {
+    return await logAndHandleFetchError(ctx, err);
   }
 }
 
@@ -532,10 +726,29 @@ export async function bigBrainAPIMaybeThrows({
   url: string;
   data?: any;
 }): Promise<any> {
-  const client = await bigBrainClient(ctx, getAuthHeaderFromGlobalConfig);
-  const res = await client.request({ url, method, data });
-  deprecationCheckWarning(ctx, res);
-  return res.data;
+  const fetch = await bigBrainFetch(ctx);
+  const dataString =
+    data === undefined
+      ? method === "POST" || method === "post"
+        ? JSON.stringify({})
+        : undefined
+      : typeof data === "string"
+        ? data
+        : JSON.stringify(data);
+  const res = await fetch(url, {
+    method,
+    ...(dataString ? { body: dataString } : {}),
+    headers:
+      method === "POST" || method === "post"
+        ? {
+            "Content-Type": "application/json",
+          }
+        : {},
+  });
+  fetchDeprecationCheckWarning(ctx, res);
+  if (res.status === 200) {
+    return await res.json();
+  }
 }
 
 export type GlobalConfig = {
@@ -553,7 +766,7 @@ export type GlobalConfig = {
 export const poll = async function <Result>(
   fetch: () => Promise<Result>,
   condition: (data: Result) => boolean,
-  waitMs = 1000
+  waitMs = 1000,
 ) {
   let result = await fetch();
   while (!condition(result)) {
@@ -636,7 +849,7 @@ export async function findParentConfigs(ctx: Context): Promise<{
   if (!parentPackageJson) {
     logFailure(
       ctx,
-      "No package.json found. To create a new project using Convex, see https://docs.convex.dev/home#quickstarts"
+      "No package.json found. To create a new project using Convex, see https://docs.convex.dev/home#quickstarts",
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -686,26 +899,26 @@ export async function isInExistingProject(ctx: Context) {
 }
 
 export async function getConfiguredDeploymentOrCrash(
-  ctx: Context
+  ctx: Context,
 ): Promise<string> {
-  const configuredDeployment = await getConfiguredDeployment(ctx);
+  const configuredDeployment = await getConfiguredDeploymentName(ctx);
   if (configuredDeployment !== null) {
     return configuredDeployment;
   }
   logFailure(
     ctx,
-    "No CONVEX_DEPLOYMENT set, run `npx convex dev` to configure a Convex project"
+    "No CONVEX_DEPLOYMENT set, run `npx convex dev` to configure a Convex project",
   );
   return await ctx.crash(1, "invalid filesystem data");
 }
 
-export async function getConfiguredDeployment(ctx: Context) {
+export async function getConfiguredDeploymentName(ctx: Context) {
   const { parentPackageJson } = await findParentConfigs(ctx);
   if (parentPackageJson !== path.resolve("package.json")) {
     logFailure(ctx, "Run this command from the root directory of a project.");
     return await ctx.crash(1, "invalid filesystem data");
   }
-  return readDeploymentEnvVar();
+  return getConfiguredDeploymentFromEnvVar().name;
 }
 
 // `spawnAsync` is the async version of Node's `spawnSync` (and `spawn`).
@@ -719,7 +932,7 @@ export async function getConfiguredDeployment(ctx: Context) {
 export function spawnAsync(
   ctx: Context,
   command: string,
-  args: ReadonlyArray<string>
+  args: ReadonlyArray<string>,
 ): Promise<{
   stdout: string;
   stderr: string;
@@ -730,13 +943,13 @@ export function spawnAsync(
   ctx: Context,
   command: string,
   args: ReadonlyArray<string>,
-  options: { stdio: "inherit" }
+  options: { stdio: "inherit" },
 ): Promise<void>;
 export function spawnAsync(
   ctx: Context,
   command: string,
   args: ReadonlyArray<string>,
-  options?: { stdio: "inherit" }
+  options?: { stdio: "inherit" },
 ) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args);
@@ -747,10 +960,10 @@ export function spawnAsync(
 
     if (pipeOutput) {
       child.stdout.on("data", (text) =>
-        logMessage(ctx, text.toString("utf-8").trimEnd())
+        logMessage(ctx, text.toString("utf-8").trimEnd()),
       );
       child.stderr.on("data", (text) =>
-        logError(ctx, text.toString("utf-8").trimEnd())
+        logError(ctx, text.toString("utf-8").trimEnd()),
       );
     } else {
       child.stdout.on("data", (data) => {
@@ -771,7 +984,7 @@ export function spawnAsync(
         const argumentString =
           args && args.length > 0 ? ` ${args.join(" ")}` : "";
         const error = new Error(
-          `\`${command}${argumentString}\` exited with non-zero code: ${code}`
+          `\`${command}${argumentString}\` exited with non-zero code: ${code}`,
         );
         if (pipeOutput) {
           reject({ ...result, error });
@@ -802,9 +1015,94 @@ export function spawnAsync(
   });
 }
 
+const IDEMPOTENT_METHODS = ["GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE"];
+
+function retryDelay(
+  attempt: number,
+  _error: Error | null,
+  _response: Response | null,
+): number {
+  // immediate, 1s delay, 2s delay, 4s delay, etc.
+  const delay = attempt === 0 ? 1 : 2 ** (attempt - 1) * 1000;
+  const randomSum = delay * 0.2 * Math.random();
+  return delay + randomSum;
+}
+
+export function deploymentFetch(
+  deploymentUrl: string,
+  onError?: (err: any) => void,
+): typeof throwingFetch {
+  return (resource: RequestInfo | URL, options: RequestInit | undefined) => {
+    const url =
+      resource instanceof URL
+        ? resource.pathname
+        : typeof resource === "string"
+          ? new URL(resource, deploymentUrl)
+          : new URL(resource.url, deploymentUrl);
+    const func = throwingFetch(url, {
+      retries: 6,
+      retryDelay,
+      retryOn: function (
+        _attempt: number,
+        error: Error | null,
+        response: Response | null,
+      ) {
+        if (onError) {
+          onError(error);
+        }
+
+        // Retry on network errors.
+        if (error) {
+          // TODO filter out all SSL errors
+          // https://github.com/nodejs/node/blob/8a41d9b636be86350cd32847c3f89d327c4f6ff7/src/crypto/crypto_common.cc#L218-L245
+          return true;
+        }
+        // Retry on 404s since these can sometimes happen with newly created
+        // deployments for POSTs.
+        if (response?.status === 404) {
+          return true;
+        }
+
+        const method = options?.method?.toUpperCase();
+        // Whatever the error code it doesn't hurt to retry idempotent requests.
+        if (
+          response &&
+          !response.ok &&
+          method &&
+          IDEMPOTENT_METHODS.includes(method)
+        ) {
+          // ...but it's a bit annoying to wait for things we know won't succced
+          if (
+            [
+              400, // Bad Request
+              401, // Unauthorized
+              402, // PaymentRequired
+              403, // Forbidden
+              405, // Method Not Allowed
+              406, // Not Acceptable
+              412, // Precondition Failed
+              413, // Payload Too Large
+              414, // URI Too Long
+              415, // Unsupported Media Type
+              416, // Range Not Satisfiable
+            ].includes(response.status)
+          ) {
+            return false;
+          }
+          return true;
+        }
+
+        return false;
+      },
+      ...options,
+    });
+    return func;
+  };
+}
+
 export function deploymentClient(
   deploymentURL: string,
-  onError?: (err: any) => void
+  onError?: (err: any) => void,
 ) {
   const client = axios.create({
     baseURL: deploymentURL,

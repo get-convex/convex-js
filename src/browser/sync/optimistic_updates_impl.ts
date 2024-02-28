@@ -47,7 +47,7 @@ class OptimisticLocalStoreImpl implements OptimisticLocalStore {
     const queryArgs = parseArgs(args[0]);
     const name = getFunctionName(query);
     const queryResult = this.queryResults.get(
-      serializePathAndArgs(name, queryArgs)
+      serializePathAndArgs(name, queryArgs),
     );
     if (queryResult === undefined) {
       return undefined;
@@ -56,7 +56,7 @@ class OptimisticLocalStoreImpl implements OptimisticLocalStore {
   }
 
   getAllQueries<Query extends FunctionReference<"query">>(
-    query: Query
+    query: Query,
   ): {
     args: FunctionArgs<Query>;
     value: undefined | FunctionReturnType<Query>;
@@ -80,7 +80,7 @@ class OptimisticLocalStoreImpl implements OptimisticLocalStore {
   setQuery<QueryReference extends FunctionReference<"query">>(
     queryReference: QueryReference,
     args: FunctionArgs<QueryReference>,
-    value: undefined | FunctionReturnType<QueryReference>
+    value: undefined | FunctionReturnType<QueryReference>,
   ): void {
     const queryArgs = parseArgs(args);
     const name = getFunctionName(queryReference);
@@ -107,7 +107,7 @@ class OptimisticLocalStoreImpl implements OptimisticLocalStore {
   }
 
   private static queryValue(
-    result: FunctionResult | undefined
+    result: FunctionResult | undefined,
   ): Value | undefined {
     if (result === undefined) {
       return undefined;
@@ -154,7 +154,7 @@ export class OptimisticQueryResults {
 
   ingestQueryResultsFromServer(
     serverQueryResults: QueryResultsMap,
-    optimisticUpdatesToDrop: Set<RequestId>
+    optimisticUpdatesToDrop: Set<RequestId>,
   ): ChangedQueries {
     this.optimisticUpdates = this.optimisticUpdates.filter((updateAndId) => {
       return !optimisticUpdatesToDrop.has(updateAndId.mutationId);
@@ -182,7 +182,7 @@ export class OptimisticQueryResults {
 
   applyOptimisticUpdate(
     update: WrappedOptimisticUpdate,
-    mutationId: RequestId
+    mutationId: RequestId,
   ): ChangedQueries {
     // Apply the update to our store
     this.optimisticUpdates.push({
@@ -212,12 +212,12 @@ export class OptimisticQueryResults {
         throw forwardData(
           result,
           new ConvexError(
-            createHybridErrorStacktrace("query", query.udfPath, result)
-          )
+            createHybridErrorStacktrace("query", query.udfPath, result),
+          ),
         );
       }
       throw new Error(
-        createHybridErrorStacktrace("query", query.udfPath, result)
+        createHybridErrorStacktrace("query", query.udfPath, result),
       );
     }
   }

@@ -13,7 +13,7 @@ import { ConvexProvider } from "./client.js";
 type IConvexReactClient = {
   setAuth(
     fetchToken: AuthTokenFetcher,
-    onChange: (isAuthenticated: boolean) => void
+    onChange: (isAuthenticated: boolean) => void,
   ): void;
   clearAuth(): void;
 };
@@ -51,7 +51,7 @@ export function useConvexAuth(): {
         "or `ConvexProviderWithAuth0`) " +
         "as an ancestor component. This component may be missing, or you " +
         "might have two instances of the `convex/react` module loaded in your " +
-        "project."
+        "project.",
     );
   }
   return authContext;
@@ -108,7 +108,7 @@ export function ConvexProviderWithAuth({
         // If we haven't finished fetching the token by now
         // we shouldn't transition to a loaded state
         setIsConvexAuthenticated((isConvexAuthenticated) =>
-          isConvexAuthenticated ? false : null
+          isConvexAuthenticated ? false : null,
         );
         client.clearAuth();
       };

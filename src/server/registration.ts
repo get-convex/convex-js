@@ -147,7 +147,7 @@ export interface GenericActionCtx<DataModel extends GenericDataModel> {
    * @returns A promise of the mutation's result.
    */
   runMutation<
-    Mutation extends FunctionReference<"mutation", "public" | "internal">
+    Mutation extends FunctionReference<"mutation", "public" | "internal">,
   >(
     mutation: Mutation,
     ...args: OptionalRestArgs<Mutation>
@@ -195,13 +195,13 @@ export interface GenericActionCtx<DataModel extends GenericDataModel> {
    */
   vectorSearch<
     TableName extends TableNamesInDataModel<DataModel>,
-    IndexName extends VectorIndexNames<NamedTableInfo<DataModel, TableName>>
+    IndexName extends VectorIndexNames<NamedTableInfo<DataModel, TableName>>,
   >(
     tableName: TableName,
     indexName: IndexName,
     query: Expand<
       VectorSearchQuery<NamedTableInfo<DataModel, TableName>, IndexName>
-    >
+    >,
   ): Promise<Array<{ _id: Id<TableName>; _score: number }>>;
 }
 
@@ -215,7 +215,7 @@ export interface GenericActionCtx<DataModel extends GenericDataModel> {
  * @deprecated
  */
 export interface ActionCtx<
-  DataModel extends GenericDataModel = GenericDataModel
+  DataModel extends GenericDataModel = GenericDataModel,
 > extends GenericActionCtx<DataModel> {}
 
 /**
@@ -263,11 +263,8 @@ export type EmptyObject = Record<string, never>;
  *
  * Empty arguments arrays are converted to {@link EmptyObject}.
  */
-type ArgsArrayToObject<Args extends ArgsArray> = Args extends OneArgArray<
-  infer ArgsObject
->
-  ? ArgsObject
-  : EmptyObject;
+type ArgsArrayToObject<Args extends ArgsArray> =
+  Args extends OneArgArray<infer ArgsObject> ? ArgsObject : EmptyObject;
 
 /**
  * A type representing the visibility of a Convex function.
@@ -300,7 +297,7 @@ type VisibilityProperties<Visiblity extends FunctionVisibility> =
 export type RegisteredMutation<
   Visibility extends FunctionVisibility,
   Args extends DefaultFunctionArgs,
-  Output
+  Output,
 > = {
   (ctx: GenericMutationCtx<any>, args: Args): Output;
 
@@ -326,7 +323,7 @@ export type RegisteredMutation<
 export type RegisteredQuery<
   Visibility extends FunctionVisibility,
   Args extends DefaultFunctionArgs,
-  Output
+  Output,
 > = {
   (ctx: GenericQueryCtx<any>, args: Args): Output;
 
@@ -335,10 +332,7 @@ export type RegisteredQuery<
   isRegistered?: true;
 
   /** @internal */
-  invokeQuery(
-    argsStr: string,
-    allowMapsAndSetsInReturnValue: boolean
-  ): Promise<string>;
+  invokeQuery(argsStr: string): Promise<string>;
 
   /** @internal */
   exportArgs(): string;
@@ -355,7 +349,7 @@ export type RegisteredQuery<
 export type RegisteredAction<
   Visibility extends FunctionVisibility,
   Args extends DefaultFunctionArgs,
-  Output
+  Output,
 > = {
   (ctx: GenericActionCtx<any>, args: Args): Output;
 
@@ -449,7 +443,7 @@ export type UnvalidatedFunction<Ctx, Args extends ArgsArray, Output> =
 export interface ValidatedFunction<
   Ctx,
   ArgsValidator extends PropertyValidators,
-  Output
+  Output,
 > {
   /**
    * A validator for the arguments of this function.
@@ -491,18 +485,18 @@ export interface ValidatedFunction<
  */
 export type MutationBuilder<
   DataModel extends GenericDataModel,
-  Visibility extends FunctionVisibility
+  Visibility extends FunctionVisibility,
 > = {
   <Output, ArgsValidator extends PropertyValidators>(
     func: ValidatedFunction<
       GenericMutationCtx<DataModel>,
       ArgsValidator,
       Output
-    >
+    >,
   ): RegisteredMutation<Visibility, ObjectType<ArgsValidator>, Output>;
 
   <Output, Args extends ArgsArray = OneArgArray>(
-    func: UnvalidatedFunction<GenericMutationCtx<DataModel>, Args, Output>
+    func: UnvalidatedFunction<GenericMutationCtx<DataModel>, Args, Output>,
   ): RegisteredMutation<Visibility, ArgsArrayToObject<Args>, Output>;
 };
 
@@ -514,14 +508,14 @@ export type MutationBuilder<
  */
 export type QueryBuilder<
   DataModel extends GenericDataModel,
-  Visibility extends FunctionVisibility
+  Visibility extends FunctionVisibility,
 > = {
   <Output, ArgsValidator extends PropertyValidators>(
-    func: ValidatedFunction<GenericQueryCtx<DataModel>, ArgsValidator, Output>
+    func: ValidatedFunction<GenericQueryCtx<DataModel>, ArgsValidator, Output>,
   ): RegisteredQuery<Visibility, ObjectType<ArgsValidator>, Output>;
 
   <Output, Args extends ArgsArray = OneArgArray>(
-    func: UnvalidatedFunction<GenericQueryCtx<DataModel>, Args, Output>
+    func: UnvalidatedFunction<GenericQueryCtx<DataModel>, Args, Output>,
   ): RegisteredQuery<Visibility, ArgsArrayToObject<Args>, Output>;
 };
 
@@ -533,14 +527,14 @@ export type QueryBuilder<
  */
 export type ActionBuilder<
   DataModel extends GenericDataModel,
-  Visibility extends FunctionVisibility
+  Visibility extends FunctionVisibility,
 > = {
   <Output, ArgsValidator extends PropertyValidators>(
-    func: ValidatedFunction<GenericActionCtx<DataModel>, ArgsValidator, Output>
+    func: ValidatedFunction<GenericActionCtx<DataModel>, ArgsValidator, Output>,
   ): RegisteredAction<Visibility, ObjectType<ArgsValidator>, Output>;
 
   <Output, Args extends ArgsArray = OneArgArray>(
-    func: UnvalidatedFunction<GenericActionCtx<DataModel>, Args, Output>
+    func: UnvalidatedFunction<GenericActionCtx<DataModel>, Args, Output>,
   ): RegisteredAction<Visibility, ArgsArrayToObject<Args>, Output>;
 };
 
@@ -552,5 +546,5 @@ export type ActionBuilder<
  * @public
  */
 export type HttpActionBuilder = (
-  func: (ctx: GenericActionCtx<any>, request: Request) => Promise<Response>
+  func: (ctx: GenericActionCtx<any>, request: Request) => Promise<Response>,
 ) => PublicHttpAction;

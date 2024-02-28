@@ -31,7 +31,7 @@ export const ROUTABLE_HTTP_METHODS = [
 export type RoutableMethod = (typeof ROUTABLE_HTTP_METHODS)[number];
 
 export function normalizeMethod(
-  method: RoutableMethod | "HEAD"
+  method: RoutableMethod | "HEAD",
 ): RoutableMethod {
   // This router routes HEAD requests as GETs, letting Axum strip thee response
   // bodies are response bodies afterward.
@@ -122,7 +122,7 @@ export class HttpRouter {
     const { method, handler } = spec;
     if (!ROUTABLE_HTTP_METHODS.includes(method)) {
       throw new Error(
-        `'${method}' is not an allowed HTTP method (like GET, POST, PUT etc.)`
+        `'${method}' is not an allowed HTTP method (like GET, POST, PUT etc.)`,
       );
     }
 
@@ -135,7 +135,7 @@ export class HttpRouter {
       for (const [prefix, _] of prefixes.entries()) {
         if (spec.path.startsWith(prefix)) {
           throw new Error(
-            `${spec.method} path ${spec.path} is shadowed by pathPrefix ${prefix}`
+            `${spec.method} path ${spec.path} is shadowed by pathPrefix ${prefix}`,
           );
         }
       }
@@ -145,7 +145,7 @@ export class HttpRouter {
           : new Map();
       if (methods.has(method)) {
         throw new Error(
-          `Path '${spec.path}' for method ${method} already in use`
+          `Path '${spec.path}' for method ${method} already in use`,
         );
       }
       methods.set(method, handler);
@@ -162,7 +162,7 @@ export class HttpRouter {
       for (const [prefix, _] of prefixes.entries()) {
         if (spec.pathPrefix.startsWith(prefix)) {
           throw new Error(
-            `${spec.method} pathPrefix ${spec.pathPrefix} is shadowed by pathPrefix ${prefix}`
+            `${spec.method} pathPrefix ${spec.pathPrefix} is shadowed by pathPrefix ${prefix}`,
           );
         }
       }
@@ -170,7 +170,7 @@ export class HttpRouter {
       this.prefixRoutes.set(method, prefixes);
     } else {
       throw new Error(
-        `Invalid httpRouter route entry: must contain either field 'path' or 'pathPrefix'`
+        `Invalid httpRouter route entry: must contain either field 'path' or 'pathPrefix'`,
       );
     }
   };
@@ -191,8 +191,8 @@ export class HttpRouter {
         .sort()
         .map(
           (method) =>
-            [path, method, this.exactRoutes.get(path)!.get(method)!] as const
-        )
+            [path, method, this.exactRoutes.get(path)!.get(method)!] as const,
+        ),
     );
 
     const prefixPathMethods = [...this.prefixRoutes.keys()].sort();
@@ -205,8 +205,8 @@ export class HttpRouter {
               `${pathPrefix}*`,
               method,
               this.prefixRoutes.get(method)!.get(pathPrefix)!,
-            ] as const
-        )
+            ] as const,
+        ),
     );
 
     return [...exact, ...prefixes];
@@ -230,7 +230,7 @@ export class HttpRouter {
    */
   lookup = (
     path: string,
-    method: RoutableMethod | "HEAD"
+    method: RoutableMethod | "HEAD",
   ): Readonly<[PublicHttpAction, RoutableMethod, string]> | null => {
     method = normalizeMethod(method);
     const exactMatch = this.exactRoutes.get(path)?.get(method);
@@ -268,13 +268,13 @@ export class HttpRouter {
         status: 404,
       });
       return JSON.stringify(
-        performJsSyscall("convexJsonFromResponse", { response })
+        performJsSyscall("convexJsonFromResponse", { response }),
       );
     }
     const [endpoint, _method, _path] = match;
     const response = await endpoint.invokeHttpAction(request);
     return JSON.stringify(
-      performJsSyscall("convexJsonFromResponse", { response })
+      performJsSyscall("convexJsonFromResponse", { response }),
     );
   };
 }

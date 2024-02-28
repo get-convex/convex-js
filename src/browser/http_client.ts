@@ -160,12 +160,12 @@ export class ConvexHttpClient {
     }
     switch (respJSON.status) {
       case "success":
-        return jsonToConvex(respJSON.value, true);
+        return jsonToConvex(respJSON.value);
       case "error":
         if (respJSON.errorData !== undefined) {
           throw forwardErrorData(
             respJSON.errorData,
-            new ConvexError(respJSON.errorMessage)
+            new ConvexError(respJSON.errorMessage),
           );
         }
         throw new Error(respJSON.errorMessage);
@@ -221,12 +221,12 @@ export class ConvexHttpClient {
     }
     switch (respJSON.status) {
       case "success":
-        return jsonToConvex(respJSON.value, true);
+        return jsonToConvex(respJSON.value);
       case "error":
         if (respJSON.errorData !== undefined) {
           throw forwardErrorData(
             respJSON.errorData,
-            new ConvexError(respJSON.errorMessage)
+            new ConvexError(respJSON.errorMessage),
           );
         }
         throw new Error(respJSON.errorMessage);
@@ -282,12 +282,12 @@ export class ConvexHttpClient {
     }
     switch (respJSON.status) {
       case "success":
-        return jsonToConvex(respJSON.value, true);
+        return jsonToConvex(respJSON.value);
       case "error":
         if (respJSON.errorData !== undefined) {
           throw forwardErrorData(
             respJSON.errorData,
-            new ConvexError(respJSON.errorMessage)
+            new ConvexError(respJSON.errorMessage),
           );
         }
         throw new Error(respJSON.errorMessage);
@@ -307,7 +307,7 @@ export class ConvexHttpClient {
    * @internal
    */
   async function<
-    AnyFunction extends FunctionReference<"query" | "mutation" | "action">
+    AnyFunction extends FunctionReference<"query" | "mutation" | "action">,
   >(
     anyFunction: AnyFunction | string,
     ...args: OptionalRestArgs<AnyFunction>
@@ -350,12 +350,12 @@ export class ConvexHttpClient {
     }
     switch (respJSON.status) {
       case "success":
-        return jsonToConvex(respJSON.value, true);
+        return jsonToConvex(respJSON.value);
       case "error":
         if (respJSON.errorData !== undefined) {
           throw forwardErrorData(
             respJSON.errorData,
-            new ConvexError(respJSON.errorMessage)
+            new ConvexError(respJSON.errorMessage),
           );
         }
         throw new Error(respJSON.errorMessage);

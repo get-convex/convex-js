@@ -58,7 +58,7 @@ import { FunctionReference } from "../server/api.js";
  * @public
  */
 export function useQueries(
-  queries: RequestForQueries
+  queries: RequestForQueries,
 ): Record<string, any | undefined | Error> {
   const convex = useConvex();
   if (convex === undefined) {
@@ -67,14 +67,14 @@ export function useQueries(
     throw new Error(
       "Could not find Convex client! `useQuery` must be used in the React component " +
         "tree under `ConvexProvider`. Did you forget it? " +
-        "See https://docs.convex.dev/quick-start#set-up-convex-in-your-react-app"
+        "See https://docs.convex.dev/quick-start#set-up-convex-in-your-react-app",
     );
   }
   const createWatch = useMemo(() => {
     return (
       query: FunctionReference<"query">,
       args: Record<string, Value>,
-      journal?: QueryJournal
+      journal?: QueryJournal,
     ) => {
       return convex.watchQuery(query, args, { journal });
     };
@@ -87,7 +87,7 @@ export function useQueries(
  */
 export function useQueriesHelper(
   queries: RequestForQueries,
-  createWatch: CreateWatch
+  createWatch: CreateWatch,
 ): Record<string, any | undefined | Error> {
   const [observer] = useState(() => new QueriesObserver(createWatch));
 
@@ -108,7 +108,7 @@ export function useQueriesHelper(
         return observer.subscribe(callback);
       },
     }),
-    [observer, queries]
+    [observer, queries],
   );
 
   return useSubscription(subscription);

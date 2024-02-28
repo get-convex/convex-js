@@ -1,44 +1,45 @@
-import { Option } from "commander";
+import { Command, Option } from "@commander-js/extra-typings";
 import { logFailure, oneoffContext } from "../bundler/context.js";
 import { watchAndPush } from "./dev.js";
 import {
   fetchDeploymentCredentialsProvisionProd,
   deploymentSelectionFromOptions,
 } from "./lib/api.js";
+import { actionDescription } from "./lib/command.js";
 import { runFunctionAndLog, subscribeAndLog } from "./lib/run.js";
-import { DeploymentCommand, ensureHasConvexDependency } from "./lib/utils.js";
+import { ensureHasConvexDependency } from "./lib/utils.js";
 
-export const run = new DeploymentCommand("run")
+export const run = new Command("run")
   .description("Run a function (query, mutation, or action) on your deployment")
   .argument(
     "functionName",
-    "identifier of the function to run, like `listMessages` or `dir/file:myFunction`"
+    "identifier of the function to run, like `listMessages` or `dir/file:myFunction`",
   )
   .argument(
     "[args]",
-    "JSON-formatted arguments object to pass to the function."
+    "JSON-formatted arguments object to pass to the function.",
   )
   .option(
     "-w, --watch",
-    "Watch a query, printing its result if the underlying data changes. Given function must be a query."
+    "Watch a query, printing its result if the underlying data changes. Given function must be a query.",
   )
   .option("--push", "Push code to deployment before running the function.")
   // For backwards compatibility we still support --no-push which is a noop
   .addOption(new Option("--no-push").hideHelp())
-  .addDeploymentSelectionOptions("Run the function on")
+  .addDeploymentSelectionOptions(actionDescription("Run the function on"))
   // Options for the implicit dev deploy
   .addOption(
     new Option(
       "--typecheck <mode>",
-      `Whether to check TypeScript files with \`tsc --noEmit\`.`
+      `Whether to check TypeScript files with \`tsc --noEmit\`.`,
     )
-      .choices(["enable", "try", "disable"])
-      .default("try")
+      .choices(["enable", "try", "disable"] as const)
+      .default("try" as const),
   )
   .addOption(
     new Option("--codegen <mode>", "Regenerate code in `convex/_generated/`")
-      .choices(["enable", "disable"])
-      .default("enable")
+      .choices(["enable", "disable"] as const)
+      .default("enable" as const),
   )
 
   .showHelpAfterError()
@@ -61,7 +62,7 @@ export const run = new DeploymentCommand("run")
       logFailure(
         ctx,
         `\`convex run\` doesn't support pushing functions to prod deployments. ` +
-          `Remove the --push flag. To push to production use \`npx convex deploy\`.`
+          `Remove the --push flag. To push to production use \`npx convex deploy\`.`,
       );
       return await ctx.crash(1, "fatal");
     }
@@ -71,7 +72,7 @@ export const run = new DeploymentCommand("run")
         ctx,
         {
           adminKey,
-          verbose: !!options.verbose,
+          verbose: false,
           dryRun: false,
           typecheck: options.typecheck,
           debug: false,
@@ -82,7 +83,7 @@ export const run = new DeploymentCommand("run")
           once: true,
           traceEvents: false,
           untilSuccess: true,
-        }
+        },
       );
     }
 
@@ -92,7 +93,7 @@ export const run = new DeploymentCommand("run")
         deploymentUrl,
         adminKey,
         functionName,
-        args
+        args,
       );
     }
     return await runFunctionAndLog(
@@ -100,6 +101,6 @@ export const run = new DeploymentCommand("run")
       deploymentUrl,
       adminKey,
       functionName,
-      args
+      args,
     );
   });

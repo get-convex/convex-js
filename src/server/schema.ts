@@ -76,7 +76,7 @@ type ExtractDocument<T extends Validator<any, any, any>> =
  */
 export interface SearchIndexConfig<
   SearchField extends string,
-  FilterFields extends string
+  FilterFields extends string,
 > {
   /**
    * The field to index for full text search.
@@ -98,7 +98,7 @@ export interface SearchIndexConfig<
  */
 export interface VectorIndexConfig<
   VectorField extends string,
-  FilterFields extends string
+  FilterFields extends string,
 > {
   /**
    * The field to index for vector search.
@@ -156,7 +156,7 @@ export class TableDefinition<
   // eslint-disable-next-line @typescript-eslint/ban-types
   SearchIndexes extends GenericTableSearchIndexes = {},
   // eslint-disable-next-line @typescript-eslint/ban-types
-  VectorIndexes extends GenericTableVectorIndexes = {}
+  VectorIndexes extends GenericTableVectorIndexes = {},
 > {
   private indexes: Index[];
   private searchIndexes: SearchIndex[];
@@ -187,10 +187,10 @@ export class TableDefinition<
   index<
     IndexName extends string,
     FirstFieldPath extends FieldPaths,
-    RestFieldPaths extends FieldPaths[]
+    RestFieldPaths extends FieldPaths[],
   >(
     name: IndexName,
-    fields: [FirstFieldPath, ...RestFieldPaths]
+    fields: [FirstFieldPath, ...RestFieldPaths],
   ): TableDefinition<
     Document,
     FieldPaths,
@@ -222,10 +222,10 @@ export class TableDefinition<
   searchIndex<
     IndexName extends string,
     SearchField extends FieldPaths,
-    FilterFields extends FieldPaths = never
+    FilterFields extends FieldPaths = never,
   >(
     name: IndexName,
-    indexConfig: Expand<SearchIndexConfig<SearchField, FilterFields>>
+    indexConfig: Expand<SearchIndexConfig<SearchField, FilterFields>>,
   ): TableDefinition<
     Document,
     FieldPaths,
@@ -264,10 +264,10 @@ export class TableDefinition<
   vectorIndex<
     IndexName extends string,
     VectorField extends FieldPaths,
-    FilterFields extends FieldPaths = never
+    FilterFields extends FieldPaths = never,
   >(
     name: IndexName,
-    indexConfig: Expand<VectorIndexConfig<VectorField, FilterFields>>
+    indexConfig: Expand<VectorIndexConfig<VectorField, FilterFields>>,
   ): TableDefinition<
     Document,
     FieldPaths,
@@ -348,9 +348,9 @@ export class TableDefinition<
  * @public
  */
 export function defineTable<
-  DocumentSchema extends Validator<Record<string, any>, false, any>
+  DocumentSchema extends Validator<Record<string, any>, false, any>,
 >(
-  documentSchema: DocumentSchema
+  documentSchema: DocumentSchema,
 ): TableDefinition<
   ExtractDocument<DocumentSchema>,
   ExtractFieldPaths<DocumentSchema>
@@ -381,9 +381,9 @@ export function defineTable<
  * @public
  */
 export function defineTable<
-  DocumentSchema extends Record<string, Validator<any, any, any>>
+  DocumentSchema extends Record<string, Validator<any, any, any>>,
 >(
-  documentSchema: DocumentSchema
+  documentSchema: DocumentSchema,
 ): TableDefinition<
   ExtractDocument<ObjectValidator<DocumentSchema>>,
   ExtractFieldPaths<ObjectValidator<DocumentSchema>>
@@ -391,7 +391,7 @@ export function defineTable<
 export function defineTable<
   DocumentSchema extends
     | Validator<Record<string, any>, false, any>
-    | Record<string, Validator<any, any, any>>
+    | Record<string, Validator<any, any, any>>,
 >(documentSchema: DocumentSchema): TableDefinition<any, any> {
   if (documentSchema instanceof Validator) {
     return new TableDefinition(documentSchema);
@@ -418,7 +418,7 @@ export type GenericSchema = Record<string, TableDefinition>;
  */
 export class SchemaDefinition<
   Schema extends GenericSchema,
-  StrictTableTypes extends boolean
+  StrictTableTypes extends boolean,
 > {
   public tables: Schema;
   public strictTableNameTypes!: StrictTableTypes;
@@ -523,10 +523,10 @@ export interface DefineSchemaOptions<StrictTableNameTypes extends boolean> {
  */
 export function defineSchema<
   Schema extends GenericSchema,
-  StrictTableNameTypes extends boolean = true
+  StrictTableNameTypes extends boolean = true,
 >(
   schema: Schema,
-  options?: DefineSchemaOptions<StrictTableNameTypes>
+  options?: DefineSchemaOptions<StrictTableNameTypes>,
 ): SchemaDefinition<Schema, StrictTableNameTypes> {
   return new SchemaDefinition(schema, options);
 }
@@ -539,7 +539,7 @@ export function defineSchema<
  * @public
  */
 export type DataModelFromSchemaDefinition<
-  SchemaDef extends SchemaDefinition<any, boolean>
+  SchemaDef extends SchemaDefinition<any, boolean>,
 > = MaybeMakeLooseDataModel<
   {
     [TableName in keyof SchemaDef["tables"] &
@@ -566,7 +566,7 @@ export type DataModelFromSchemaDefinition<
 
 type MaybeMakeLooseDataModel<
   DataModel extends GenericDataModel,
-  StrictTableNameTypes extends boolean
+  StrictTableNameTypes extends boolean,
 > = StrictTableNameTypes extends true
   ? DataModel
   : Expand<DataModel & AnyDataModel>;
@@ -582,7 +582,7 @@ const systemSchema = defineSchema({
       v.object({ kind: v.literal("inProgress") }),
       v.object({ kind: v.literal("success") }),
       v.object({ kind: v.literal("failed"), error: v.string() }),
-      v.object({ kind: v.literal("canceled") })
+      v.object({ kind: v.literal("canceled") }),
     ),
   }),
   _storage: defineTable({

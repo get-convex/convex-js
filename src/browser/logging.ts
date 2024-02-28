@@ -25,7 +25,7 @@ export function logToConsole(
   type: "info" | "error",
   source: UdfType,
   udfPath: string,
-  message: string | { errorData: Value }
+  message: string | { errorData: Value },
 ) {
   const prefix = prefix_for_source(source);
 
@@ -36,7 +36,7 @@ export function logToConsole(
     const match = message.match(/^\[.*?\] /);
     if (match === null) {
       console.error(
-        `[CONVEX ${prefix}(${udfPath})] Could not parse console.log`
+        `[CONVEX ${prefix}(${udfPath})] Could not parse console.log`,
       );
       return;
     }
@@ -46,7 +46,7 @@ export function logToConsole(
     console.log(
       `%c[CONVEX ${prefix}(${udfPath})] [${level}]`,
       INFO_COLOR,
-      args
+      args,
     );
   } else {
     console.error(`[CONVEX ${prefix}(${udfPath})] ${message}`);
@@ -62,7 +62,7 @@ export function logFatalError(message: string): Error {
 export function createHybridErrorStacktrace(
   source: UdfType,
   udfPath: string,
-  result: FunctionFailure
+  result: FunctionFailure,
 ): string {
   const prefix = prefix_for_source(source);
   return `[CONVEX ${prefix}(${udfPath})] ${result.errorMessage}\n  Called by client`;
@@ -70,7 +70,7 @@ export function createHybridErrorStacktrace(
 
 export function forwardData(
   result: FunctionFailure,
-  error: ConvexError<string>
+  error: ConvexError<string>,
 ) {
   (error as ConvexError<any>).data = result.errorData;
   return error;

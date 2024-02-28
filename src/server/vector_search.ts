@@ -18,7 +18,7 @@ import {
  */
 export interface VectorSearchQuery<
   TableInfo extends GenericTableInfo,
-  IndexName extends VectorIndexNames<TableInfo>
+  IndexName extends VectorIndexNames<TableInfo>,
 > {
   /**
    * The query vector.
@@ -48,18 +48,18 @@ export interface VectorSearchQuery<
     q: VectorFilterBuilder<
       DocumentByInfo<TableInfo>,
       NamedVectorIndex<TableInfo, IndexName>
-    >
+    >,
   ) => FilterExpression<boolean>;
 }
 
 export type VectorSearch<
   DataModel extends GenericDataModel,
   TableName extends TableNamesInDataModel<DataModel>,
-  IndexName extends VectorIndexNames<NamedTableInfo<DataModel, TableName>>
+  IndexName extends VectorIndexNames<NamedTableInfo<DataModel, TableName>>,
 > = (
   tableName: TableName,
   indexName: IndexName,
-  query: VectorSearchQuery<NamedTableInfo<DataModel, TableName>, IndexName>
+  query: VectorSearchQuery<NamedTableInfo<DataModel, TableName>, IndexName>,
 ) => Promise<Array<{ _id: Id<TableName>; _score: number }>>;
 
 /**
@@ -98,7 +98,7 @@ export abstract class FilterExpression<T extends Value | undefined> {
  */
 export interface VectorFilterBuilder<
   Document extends GenericDocument,
-  VectorIndexConfig extends GenericVectorIndexConfig
+  VectorIndexConfig extends GenericVectorIndexConfig,
 > {
   //  Comparisons  /////////////////////////////////////////////////////////////
 
@@ -109,7 +109,7 @@ export interface VectorFilterBuilder<
    * */
   eq<FieldName extends VectorIndexConfig["filterFields"]>(
     fieldName: FieldName,
-    value: FieldTypeFromFieldPath<Document, FieldName>
+    value: FieldTypeFromFieldPath<Document, FieldName>,
   ): FilterExpression<boolean>;
 
   //  Logic  ///////////////////////////////////////////////////////////////////

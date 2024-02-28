@@ -11,19 +11,20 @@ import {
   fetchDeploymentCredentialsProvisionProd,
   fetchTeamAndProject,
 } from "./lib/api.js";
-import { DeploymentCommand } from "./lib/utils.js";
+import { Command } from "@commander-js/extra-typings";
+import { actionDescription } from "./lib/command.js";
 
 const DASHBOARD_HOST = process.env.CONVEX_PROVISION_HOST
   ? "http://localhost:6789"
   : "https://dashboard.convex.dev";
 
-export const dashboard = new DeploymentCommand("dashboard")
+export const dashboard = new Command("dashboard")
   .description("Open the dashboard in the browser")
   .option(
     "--no-open",
-    "Don't automatically open the dashboard in the default browser"
+    "Don't automatically open the dashboard in the default browser",
   )
-  .addDeploymentSelectionOptions("Open the dashboard for")
+  .addDeploymentSelectionOptions(actionDescription("Open the dashboard for"))
   .showHelpAfterError()
   .action(async (options) => {
     const ctx = oneoffContext;
@@ -31,13 +32,13 @@ export const dashboard = new DeploymentCommand("dashboard")
     const deploymentSelection = deploymentSelectionFromOptions(options);
     const { deploymentName } = await fetchDeploymentCredentialsProvisionProd(
       ctx,
-      deploymentSelection
+      deploymentSelection,
     );
 
     if (deploymentName === undefined) {
       logFailure(
         ctx,
-        "No deployment name, run `npx convex dev` to configure a Convex project"
+        "No deployment name, run `npx convex dev` to configure a Convex project",
       );
       return await ctx.crash(1, "invalid filesystem data");
     }
@@ -47,7 +48,7 @@ export const dashboard = new DeploymentCommand("dashboard")
     if (options.open) {
       logMessage(
         ctx,
-        chalk.gray(`Opening ${loginUrl} in the default browser...`)
+        chalk.gray(`Opening ${loginUrl} in the default browser...`),
       );
       await open(loginUrl);
     } else {
@@ -58,12 +59,12 @@ export const dashboard = new DeploymentCommand("dashboard")
 export async function deploymentDashboardUrlPage(
   ctx: Context,
   configuredDeployment: string | null,
-  page: string
+  page: string,
 ): Promise<string> {
   if (configuredDeployment !== null) {
     const { team, project } = await fetchTeamAndProject(
       ctx,
-      configuredDeployment
+      configuredDeployment,
     );
     return deploymentDashboardUrl(team, project, configuredDeployment) + page;
   } else {
@@ -75,7 +76,7 @@ export async function deploymentDashboardUrlPage(
 export function deploymentDashboardUrl(
   team: string,
   project: string,
-  deploymentName: string
+  deploymentName: string,
 ) {
   return `${projectDashboardUrl(team, project)}/${deploymentName}`;
 }

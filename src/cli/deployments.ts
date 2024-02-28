@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command } from "@commander-js/extra-typings";
 import { readProjectConfig } from "./lib/config.js";
 import chalk from "chalk";
 import { bigBrainAPI } from "./lib/utils.js";
@@ -17,7 +17,7 @@ export const deployments = new Command("deployments")
     const ctx = oneoffContext;
     const { projectConfig: config } = await readProjectConfig(ctx);
 
-    const url = `/teams/${config.team}/projects/${config.project}/deployments`;
+    const url = `teams/${config.team}/projects/${config.project}/deployments`;
 
     logMessage(ctx, `Deployments for project ${config.team}/${config.project}`);
     const deployments = (await bigBrainAPI({

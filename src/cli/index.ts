@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* eslint-disable no-restricted-syntax */
-import { Command } from "commander";
+import { Command } from "@commander-js/extra-typings";
 import { init } from "./init.js";
 import { dashboard } from "./dashboard.js";
 import { deployments } from "./deployments.js";
@@ -26,6 +26,7 @@ import { logs } from "./logs.js";
 import { networkTest } from "./network_test.js";
 import { convexExport } from "./convexExport.js";
 import { env } from "./env.js";
+import { data } from "./data.js";
 
 const MINIMUM_MAJOR_VERSION = 16;
 const MINIMUM_MINOR_VERSION = 15;
@@ -60,27 +61,27 @@ async function main() {
   ) {
     console.error(
       chalk.red(
-        `Your Node version ${nodeVersion} is too old. Convex requires at least Node v${MINIMUM_MAJOR_VERSION}.${MINIMUM_MINOR_VERSION}`
-      )
+        `Your Node version ${nodeVersion} is too old. Convex requires at least Node v${MINIMUM_MAJOR_VERSION}.${MINIMUM_MINOR_VERSION}`,
+      ),
     );
     console.error(
       chalk.gray(
         `You can use ${chalk.bold(
-          "nvm"
-        )} (https://github.com/nvm-sh/nvm#installing-and-updating) to manage different versions of Node.`
-      )
+          "nvm",
+        )} (https://github.com/nvm-sh/nvm#installing-and-updating) to manage different versions of Node.`,
+      ),
     );
     console.error(
       chalk.gray(
         "After installing `nvm`, install the latest version of Node with " +
-          chalk.bold("`nvm install node`.")
-      )
+          chalk.bold("`nvm install node`."),
+      ),
     );
     console.error(
       chalk.gray(
         "Then, activate the installed version in your terminal with " +
-          chalk.bold("`nvm use`.")
-      )
+          chalk.bold("`nvm use`."),
+      ),
     );
     process.exit(1);
   }
@@ -89,6 +90,7 @@ async function main() {
   program
     .name("convex")
     .usage("<command> [options]")
+    .description("Start developing with Convex by running `npx convex dev`.")
     .addCommand(login, { hidden: true })
     .addCommand(init, { hidden: true })
     .addCommand(reinit, { hidden: true })
@@ -96,18 +98,19 @@ async function main() {
     .addCommand(deploy)
     .addCommand(deployments, { hidden: true })
     .addCommand(run)
+    .addCommand(convexImport)
+    .addCommand(dashboard)
+    .addCommand(docs)
     .addCommand(logs)
     .addCommand(typecheck, { hidden: true })
     .addCommand(auth, { hidden: true })
-    .addCommand(convexImport)
-    .addCommand(convexExport, { hidden: true })
-    .addCommand(dashboard)
-    .addCommand(docs)
+    .addCommand(convexExport)
+    .addCommand(env)
+    .addCommand(data)
     .addCommand(codegen)
     .addCommand(update)
     .addCommand(logout)
     .addCommand(networkTest, { hidden: true })
-    .addCommand(env, { hidden: true })
     .addHelpCommand("help <command>", "Show help for given <command>")
     .version(version)
     // Hide version and help so they don't clutter

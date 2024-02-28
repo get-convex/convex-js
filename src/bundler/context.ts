@@ -136,7 +136,7 @@ export async function showSpinnerIfSlow(
   ctx: Context,
   message: string,
   delayMs: number,
-  fn: () => Promise<any>
+  fn: () => Promise<any>,
 ) {
   const timeout = setTimeout(() => {
     showSpinner(ctx, message);

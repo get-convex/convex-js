@@ -1,11 +1,11 @@
-import { Command, Option } from "commander";
+import { Command, Option } from "@commander-js/extra-typings";
 import { logFailure, oneoffContext } from "../bundler/context.js";
 
 const list = new Command("list").action(async () => {
   const ctx = oneoffContext;
   logFailure(
     ctx,
-    "convex auth commands were removed, see https://docs.convex.dev/auth for up to date instructions."
+    "convex auth commands were removed, see https://docs.convex.dev/auth for up to date instructions.",
   );
   await ctx.crash(1, "fatal", "Ran deprecated `convex auth list`");
 });
@@ -14,7 +14,7 @@ const rm = new Command("remove").action(async () => {
   const ctx = oneoffContext;
   logFailure(
     ctx,
-    "convex auth commands were removed, see https://docs.convex.dev/auth for up to date instructions."
+    "convex auth commands were removed, see https://docs.convex.dev/auth for up to date instructions.",
   );
   await ctx.crash(1, "fatal", "Ran deprecated `convex auth remove`");
 });
@@ -26,7 +26,7 @@ const add = new Command("add")
     const ctx = oneoffContext;
     logFailure(
       ctx,
-      "convex auth commands were removed, see https://docs.convex.dev/auth for up to date instructions."
+      "convex auth commands were removed, see https://docs.convex.dev/auth for up to date instructions.",
     );
     await ctx.crash(1, "fatal", "Ran deprecated `convex auth add`");
   });

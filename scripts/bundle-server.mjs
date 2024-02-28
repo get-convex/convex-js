@@ -5,7 +5,7 @@ import path from "path";
 
 if (process.argv.length < 3) {
   throw new Error(
-    "USAGE: node bundle-server.mjs <udf system dir> <system dir>*"
+    "USAGE: node bundle-server.mjs <udf system dir> <system dir>*",
   );
 }
 const systemDirs = process.argv.slice(3);
@@ -29,7 +29,7 @@ for (const systemDir of systemDirs) {
   const entryPoints = await entryPointsByEnvironment(
     oneoffContext,
     systemDir,
-    false
+    false,
   );
   const bundles = (
     await bundle(
@@ -37,7 +37,7 @@ for (const systemDir of systemDirs) {
       systemDir,
       entryPoints.isolate,
       false,
-      "browser"
+      "browser",
     )
   ).modules;
   out.push(...bundles);

@@ -61,7 +61,7 @@ export interface StorageReader {
    * @returns - A url which fetches the file via an HTTP GET, or `null` if it no longer exists.
    */
   getUrl<T extends StorageId>(
-    storageId: T extends { __tableName: any } ? never : T
+    storageId: T extends { __tableName: any } ? never : T,
   ): Promise<string | null>;
 
   /**
@@ -83,7 +83,7 @@ export interface StorageReader {
    * @returns - A {@link FileMetadata} object if found or `null` if not found.
    */
   getMetadata<T extends StorageId>(
-    storageId: T extends { __tableName: any } ? never : T
+    storageId: T extends { __tableName: any } ? never : T,
   ): Promise<FileMetadata | null>;
 }
 
@@ -122,7 +122,7 @@ export interface StorageWriter extends StorageReader {
    * @param storageId - The {@link StorageId} of the file to delete from Convex storage.
    */
   delete<T extends StorageId>(
-    storageId: T extends { __tableName: any } ? never : T
+    storageId: T extends { __tableName: any } ? never : T,
   ): Promise<void>;
 }
 
@@ -143,7 +143,7 @@ export interface StorageActionWriter extends StorageWriter {
    * Get a Blob containing the file associated with the provided {@link StorageId}, or `null` if there is no file.
    */
   get<T extends StorageId>(
-    storageId: T extends { __tableName: any } ? never : T
+    storageId: T extends { __tableName: any } ? never : T,
   ): Promise<Blob | null>;
   /**
    * Store the file contained in the Blob.
@@ -152,6 +152,6 @@ export interface StorageActionWriter extends StorageWriter {
    */
   store(
     blob: Blob,
-    options?: { sha256?: string }
+    options?: { sha256?: string },
   ): Promise<GenericId<"_storage">>;
 }

@@ -1,4 +1,3 @@
-import { AxiosError } from "axios";
 import chalk from "chalk";
 import equal from "deep-equal";
 import { EOL } from "os";
@@ -21,15 +20,16 @@ import {
 import { version } from "../version.js";
 import { deploymentDashboardUrlPage } from "../dashboard.js";
 import {
-  deprecationCheckWarning,
   formatSize,
   functionsDir,
-  getConfiguredDeployment,
-  logAndHandleAxiosError,
   ErrorData,
-  deploymentClient,
   loadPackageJson,
+  deploymentFetch,
+  fetchDeprecationCheckWarning,
+  logAndHandleFetchError,
+  ThrowingFetchError,
 } from "./utils.js";
+import { getTargetDeploymentName } from "./deployment.js";
 export { productionProvisionHost, provisionHost } from "./utils.js";
 
 /** Type representing auth configuration. */
@@ -93,7 +93,7 @@ class ParseError extends Error {}
 /** Parse object to ProjectConfig. */
 export async function parseProjectConfig(
   ctx: Context,
-  obj: any
+  obj: any,
 ): Promise<ProjectConfig> {
   if (typeof obj !== "object") {
     logError(ctx, "Expected `convex.json` to contain an object");
@@ -111,7 +111,7 @@ export async function parseProjectConfig(
   ) {
     logError(
       ctx,
-      "Expected `node.externalPackages` in `convex.json` to be an array of strings"
+      "Expected `node.externalPackages` in `convex.json` to be an array of strings",
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -120,7 +120,7 @@ export async function parseProjectConfig(
   } else if (typeof obj.generateCommonJSApi !== "boolean") {
     logError(
       ctx,
-      "Expected `generateCommonJSApi` in `convex.json` to be true or false"
+      "Expected `generateCommonJSApi` in `convex.json` to be true or false",
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -137,7 +137,7 @@ export async function parseProjectConfig(
     if (!isAuthInfos(obj.authInfo)) {
       logError(
         ctx,
-        "Expected `authInfo` in `convex.json` to be of type AuthInfo[]"
+        "Expected `authInfo` in `convex.json` to be of type AuthInfo[]",
       );
       return await ctx.crash(1, "invalid filesystem data");
     }
@@ -196,8 +196,8 @@ export async function configFilepath(ctx: Context): Promise<string> {
     logError(
       ctx,
       chalk.red(
-        `Error: both ${preferredLocation} and ${wrongLocation} files exist!`
-      )
+        `Error: both ${preferredLocation} and ${wrongLocation} files exist!`,
+      ),
     );
     logFailure(ctx, `Consolidate these and remove ${wrongLocation}.`);
     return await ctx.crash(1, "invalid filesystem data");
@@ -205,7 +205,7 @@ export async function configFilepath(ctx: Context): Promise<string> {
   if (!preferredLocationExists && wrongLocationExists) {
     logFailure(
       ctx,
-      `Error: Please move ${wrongLocation} to the root of your project`
+      `Error: Please move ${wrongLocation} to the root of your project`,
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -246,7 +246,7 @@ export async function readProjectConfig(ctx: Context): Promise<{
   try {
     projectConfig = await parseProjectConfig(
       ctx,
-      JSON.parse(ctx.fs.readUtf8File(configPath))
+      JSON.parse(ctx.fs.readUtf8File(configPath)),
     );
   } catch (err) {
     if (err instanceof ParseError || err instanceof SyntaxError) {
@@ -256,7 +256,7 @@ export async function readProjectConfig(ctx: Context): Promise<{
       logFailure(
         ctx,
         `Error: Unable to read project config file "${configPath}"\n` +
-          "  Are you running this command from the root directory of a Convex project? If so, run `npx convex dev` first."
+          "  Are you running this command from the root directory of a Convex project? If so, run `npx convex dev` first.",
       );
       if (err instanceof Error) {
         logError(ctx, chalk.red(err.message));
@@ -273,7 +273,7 @@ export async function readProjectConfig(ctx: Context): Promise<{
 export async function enforceDeprecatedConfigField(
   ctx: Context,
   config: ProjectConfig,
-  field: "team" | "project" | "prodUrl"
+  field: "team" | "project" | "prodUrl",
 ): Promise<string> {
   const value = config[field];
   if (typeof value === "string") {
@@ -293,7 +293,7 @@ export async function configFromProjectConfig(
   ctx: Context,
   projectConfig: ProjectConfig,
   configPath: string,
-  verbose: boolean
+  verbose: boolean,
 ): Promise<{
   config: Config;
   bundledModuleInfos: BundledModuleInfo[];
@@ -312,13 +312,13 @@ export async function configFromProjectConfig(
     baseDir,
     entryPoints.isolate,
     true,
-    "browser"
+    "browser",
   );
   if (verbose) {
     logMessage(
       ctx,
       "Convex's runtime modules: ",
-      convexResult.modules.map((m) => m.path)
+      convexResult.modules.map((m) => m.path),
     );
   }
 
@@ -333,21 +333,21 @@ export async function configFromProjectConfig(
     true,
     "node",
     path.join("_deps", "node"),
-    projectConfig.node.externalPackages
+    projectConfig.node.externalPackages,
   );
   if (verbose) {
     logMessage(
       ctx,
       "Node.js runtime modules: ",
-      nodeResult.modules.map((m) => m.path)
+      nodeResult.modules.map((m) => m.path),
     );
     if (projectConfig.node.externalPackages.length > 0) {
       logMessage(
         ctx,
         "Node.js runtime external dependencies (to be installed on the server): ",
         [...nodeResult.externalDependencies.entries()].map(
-          (a) => `${a[0]}: ${a[1]}`
-        )
+          (a) => `${a[0]}: ${a[1]}`,
+        ),
       );
     }
   }
@@ -361,7 +361,7 @@ export async function configFromProjectConfig(
   }
 
   const bundledModuleInfos: BundledModuleInfo[] = Array.from(
-    convexResult.bundledModuleNames.keys()
+    convexResult.bundledModuleNames.keys(),
   ).map((moduleName) => {
     return {
       name: moduleName,
@@ -375,8 +375,8 @@ export async function configFromProjectConfig(
           name: moduleName,
           platform: "node",
         };
-      }
-    )
+      },
+    ),
   );
 
   return {
@@ -398,7 +398,7 @@ export async function configFromProjectConfig(
  */
 export async function readConfig(
   ctx: Context,
-  verbose: boolean
+  verbose: boolean,
 ): Promise<{
   config: Config;
   configPath: string;
@@ -409,7 +409,7 @@ export async function readConfig(
     ctx,
     projectConfig,
     configPath,
-    verbose
+    verbose,
   );
   return { config, configPath, bundledModuleInfos };
 }
@@ -417,7 +417,7 @@ export async function readConfig(
 export async function upgradeOldAuthInfoToAuthConfig(
   ctx: Context,
   config: ProjectConfig,
-  functionsPath: string
+  functionsPath: string,
 ) {
   if (config.authInfo !== undefined) {
     const authConfigPathJS = path.resolve(functionsPath, "auth.config.js");
@@ -427,13 +427,13 @@ export async function upgradeOldAuthInfoToAuthConfig(
       : authConfigPathTS;
     const authConfigRelativePath = path.join(
       config.functions,
-      ctx.fs.exists(authConfigPathJS) ? "auth.config.js" : "auth.config.ts"
+      ctx.fs.exists(authConfigPathJS) ? "auth.config.js" : "auth.config.ts",
     );
     if (ctx.fs.exists(authConfigPath)) {
       logFailure(
         ctx,
         `Cannot set auth config in both \`${authConfigRelativePath}\` and convex.json,` +
-          ` remove it from convex.json`
+          ` remove it from convex.json`,
       );
       await ctx.crash(1, "invalid filesystem data");
     }
@@ -441,7 +441,7 @@ export async function upgradeOldAuthInfoToAuthConfig(
       const providersStringLines = JSON.stringify(
         config.authInfo,
         null,
-        2
+        2,
       ).split(EOL);
       const indentedProvidersString = [providersStringLines[0]]
         .concat(providersStringLines.slice(1).map((line) => `  ${line}`))
@@ -451,13 +451,13 @@ export async function upgradeOldAuthInfoToAuthConfig(
         `\
   export default {
     providers: ${indentedProvidersString},
-  };`
+  };`,
       );
       logMessage(
         ctx,
         chalk.yellowBright(
-          `Moved auth config from config.json to \`${authConfigRelativePath}\``
-        )
+          `Moved auth config from config.json to \`${authConfigRelativePath}\``,
+        ),
       );
     }
     delete config.authInfo;
@@ -471,7 +471,7 @@ export async function writeProjectConfig(
   projectConfig: ProjectConfig,
   { deleteIfAllDefault }: { deleteIfAllDefault: boolean } = {
     deleteIfAllDefault: false,
-  }
+  },
 ) {
   const configPath = await configFilepath(ctx);
   const strippedConfig = filterWriteableConfig(stripDefaults(projectConfig));
@@ -483,7 +483,7 @@ export async function writeProjectConfig(
       logFailure(
         ctx,
         `Error: Unable to write project config file "${configPath}" in current directory\n` +
-          "  Are you running this command from the root directory of a Convex project?"
+          "  Are you running this command from the root directory of a Convex project?",
       );
       return await ctx.crash(1, "invalid filesystem data", err);
     }
@@ -492,8 +492,8 @@ export async function writeProjectConfig(
     logMessage(
       ctx,
       chalk.yellowBright(
-        `Deleted ${configPath} since it completely matched defaults`
-      )
+        `Deleted ${configPath} since it completely matched defaults`,
+      ),
     );
   }
   ctx.fs.mkdir(functionsDir(configPath, projectConfig), {
@@ -533,7 +533,7 @@ function filterWriteableConfig(projectConfig: any) {
 export function removedExistingConfig(
   ctx: Context,
   configPath: string,
-  options: { allowExistingConfig?: boolean }
+  options: { allowExistingConfig?: boolean },
 ) {
   if (!options.allowExistingConfig) {
     return false;
@@ -549,22 +549,21 @@ export async function pullConfig(
   project: string | undefined,
   team: string | undefined,
   origin: string,
-  adminKey: string
+  adminKey: string,
 ): Promise<Config> {
-  const client = deploymentClient(origin);
+  const fetch = deploymentFetch(origin);
   try {
-    const res = await client.post(
-      "/api/get_config",
-      { version, adminKey },
-      {
-        maxContentLength: Infinity,
-        headers: {
-          "Convex-Client": `npm-cli-${version}`,
-        },
-      }
-    );
-    deprecationCheckWarning(ctx, res);
-    const backendConfig = parseBackendConfig(res.data.config);
+    const res = await fetch("/api/get_config", {
+      method: "POST",
+      body: JSON.stringify({ version, adminKey }),
+      headers: {
+        "Content-Type": "application/json",
+        "Convex-Client": `npm-cli-${version}`,
+      },
+    });
+    fetchDeprecationCheckWarning(ctx, res);
+    const data = await res.json();
+    const backendConfig = parseBackendConfig(data.config);
     const projectConfig = {
       ...backendConfig,
       // This field is not stored in the backend, which is ok since it is also
@@ -580,14 +579,14 @@ export async function pullConfig(
     };
     return {
       projectConfig,
-      modules: res.data.modules,
+      modules: data.modules,
       // TODO(presley): Add this to diffConfig().
-      nodeDependencies: res.data.nodeDependencies,
-      udfServerVersion: res.data.udfServerVersion,
+      nodeDependencies: data.nodeDependencies,
+      udfServerVersion: data.udfServerVersion,
     };
-  } catch (err) {
+  } catch (err: unknown) {
     logFailure(ctx, `Error: Unable to pull deployment config from ${origin}`);
-    return await logAndHandleAxiosError(ctx, err);
+    return await logAndHandleFetchError(ctx, err);
   }
 }
 
@@ -601,7 +600,7 @@ export function configJSON(
   adminKey: string,
   schemaId?: string,
   pushMetrics?: PushMetrics,
-  bundledModuleInfos?: BundledModuleInfo[]
+  bundledModuleInfos?: BundledModuleInfo[],
 ) {
   // Override origin with the url
   const projectConfig = {
@@ -639,40 +638,40 @@ export async function pushConfig(
   url: string,
   pushMetrics?: PushMetrics,
   schemaId?: string,
-  bundledModuleInfos?: BundledModuleInfo[]
+  bundledModuleInfos?: BundledModuleInfo[],
 ): Promise<void> {
   const serializedConfig = configJSON(
     config,
     adminKey,
     schemaId,
     pushMetrics,
-    bundledModuleInfos
+    bundledModuleInfos,
   );
-  const client = deploymentClient(url);
+  const fetch = deploymentFetch(url);
   try {
     if (config.nodeDependencies.length > 0) {
       changeSpinner(
         ctx,
-        "Installing external packages and deploying source code..."
+        "Installing external packages and deploying source code...",
       );
     } else {
       changeSpinner(ctx, "Analyzing and deploying source code...");
     }
-    await client.post("/api/push_config", serializedConfig, {
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
+    await fetch("/api/push_config", {
+      body: JSON.stringify(serializedConfig),
+      method: "POST",
       headers: {
+        "Content-Type": "application/json",
         "Convex-Client": `npm-cli-${version}`,
       },
     });
-  } catch (error) {
-    if (
-      (error as AxiosError<ErrorData>).response?.data?.code ===
-      "AuthConfigMissingEnvironmentVariable"
-    ) {
-      const errorMessage = (error as any).response.data.message;
-      (error as any).wasExpected = true;
-      const configuredDeployment = await getConfiguredDeployment(ctx);
+  } catch (error: unknown) {
+    const data: ErrorData | undefined =
+      error instanceof ThrowingFetchError ? error.serverErrorData : undefined;
+    if (data?.code === "AuthConfigMissingEnvironmentVariable") {
+      const errorMessage = data.message || "(no error message given)";
+      // If `npx convex dev` is running using --url there might not be a configured deployment
+      const configuredDeployment = getTargetDeploymentName();
       const [, variableName] =
         errorMessage.match(/Environment variable (\S+)/i) ?? [];
       const variableQuery =
@@ -680,18 +679,18 @@ export async function pushConfig(
       const dashboardUrl = await deploymentDashboardUrlPage(
         ctx,
         configuredDeployment,
-        `/settings/environment-variables${variableQuery}`
+        `/settings/environment-variables${variableQuery}`,
       );
       logFailure(
         ctx,
-        `Go to ${dashboardUrl} to setup your environment variable.`
+        `Go to ${dashboardUrl} to setup your environment variable.`,
       );
       logError(ctx, chalk.red(errorMessage));
       await ctx.crash(1, "invalid filesystem or env vars", error);
     }
 
     logFailure(ctx, "Error: Unable to push deployment config to " + url);
-    return await logAndHandleAxiosError(ctx, error);
+    return await logAndHandleFetchError(ctx, error);
   }
 }
 

@@ -105,7 +105,7 @@ export async function preloadQuery<Query extends FunctionReference<"query">>(
  * @returns The query result.
  */
 export function preloadedQueryResult<Query extends FunctionReference<"query">>(
-  preloaded: Preloaded<Query>
+  preloaded: Preloaded<Query>,
 ): FunctionReturnType<Query> {
   return jsonToConvex(preloaded._valueJSON);
 }
@@ -140,7 +140,7 @@ export async function fetchQuery<Query extends FunctionReference<"query">>(
  * @returns A promise of the mutation's result.
  */
 export async function fetchMutation<
-  Mutation extends FunctionReference<"mutation">
+  Mutation extends FunctionReference<"mutation">,
 >(
   mutation: Mutation,
   ...args: ArgsAndOptions<Mutation, NextjsOptions>
@@ -189,18 +189,18 @@ function getConvexUrl(deploymentUrl: string | undefined) {
 
 function validateDeploymentUrl(
   deploymentUrl: string | undefined,
-  isFromEnv: boolean
+  isFromEnv: boolean,
 ) {
   if (typeof deploymentUrl === "undefined") {
     throw new Error(
       isFromEnv
         ? `Environment variable NEXT_PUBLIC_CONVEX_URL is not set.`
-        : `Convex function called with undefined deployment address.`
+        : `Convex function called with undefined deployment address.`,
     );
   }
   if (typeof deploymentUrl !== "string") {
     throw new Error(
-      `Invalid deployment address: found ${deploymentUrl as any}".`
+      `Invalid deployment address: found ${deploymentUrl as any}".`,
     );
   }
   if (
@@ -209,7 +209,7 @@ function validateDeploymentUrl(
     throw new Error(
       `Invalid ${
         isFromEnv ? "NEXT_PUBLIC_CONVEX_URL" : "deployment address"
-      }: Must start with "https://" or "http://". Found "${deploymentUrl}".`
+      }: Must start with "https://" or "http://". Found "${deploymentUrl}".`,
     );
   }
 
@@ -225,7 +225,7 @@ function validateDeploymentUrl(
     throw new Error(
       `Invalid ${
         isFromEnv ? "NEXT_PUBLIC_CONVEX_URL" : "deployment address"
-      }: Must end with ".convex.cloud". Found "${deploymentUrl}".`
+      }: Must end with ".convex.cloud". Found "${deploymentUrl}".`,
     );
   }
 }

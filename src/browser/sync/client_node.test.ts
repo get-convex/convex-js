@@ -24,7 +24,7 @@ test("BaseConvexClient protocol in node", async () => {
       () => {
         // ignore updates.
       },
-      { webSocketConstructor: nodeWebSocket, unsavedChangesWarning: false }
+      { webSocketConstructor: nodeWebSocket, unsavedChangesWarning: false },
     );
 
     expect((await receive()).type).toEqual("Connect");
@@ -55,7 +55,7 @@ test("BaseConvexClient closes cleanly", () => {
         FORCE_COLOR: "false",
         NODE_OPTIONS: "--experimental-vm-modules",
       },
-    }
+    },
   );
 
   // If this is a timeout, the test didn't exit cleanly! Check for timers.
@@ -70,7 +70,7 @@ test("BaseConvexClient closes cleanly", () => {
 
   // "Jest couldn't exit" means not a clean exit! Check for timers.
   expect(p.stderr).not.toMatch(
-    "Jest did not exit one second after the test run has completed."
+    "Jest did not exit one second after the test run has completed.",
   );
 });
 

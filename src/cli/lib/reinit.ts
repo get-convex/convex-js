@@ -22,9 +22,9 @@ export async function reinit(
   ctx: Context,
   deploymentType: DeploymentType = "prod",
   config: {
-    team: string | null;
-    project: string | null;
-  }
+    team?: string | undefined;
+    project?: string | undefined;
+  },
 ) {
   const { teamSlug } = await validateOrSelectTeam(ctx, config.team, "Team:");
 
@@ -33,7 +33,7 @@ export async function reinit(
     config.project,
     teamSlug,
     "Configure project",
-    "Project:"
+    "Project:",
   );
   if (!projectSlug) {
     logFailure(ctx, "Run the command again to create a new project instead.");
@@ -47,7 +47,7 @@ export async function reinit(
     await fetchDeploymentCredentialsProvisioningDevOrProd(
       ctx,
       { teamSlug, projectSlug },
-      deploymentType
+      deploymentType,
     );
 
   const { configPath, projectConfig: existingProjectConfig } =
@@ -62,13 +62,13 @@ export async function reinit(
       team: teamSlug,
       project: projectSlug,
       deploymentName: deploymentName!,
-    }
+    },
   );
 
   const projectConfig = await upgradeOldAuthInfoToAuthConfig(
     ctx,
     existingProjectConfig,
-    functionsPath
+    functionsPath,
   );
   await writeProjectConfig(ctx, projectConfig, {
     deleteIfAllDefault: true,
@@ -86,7 +86,7 @@ export async function reinit(
     functionsDir(configPath, projectConfig),
     deploymentType,
     url,
-    wroteToGitIgnore
+    wroteToGitIgnore,
   );
 
   return { deploymentName, url, adminKey };

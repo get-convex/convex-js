@@ -39,7 +39,7 @@ function writeFile(
   dryRun: boolean,
   debug: boolean,
   quiet: boolean,
-  filetype = "typescript"
+  filetype = "typescript",
 ) {
   const formattedSource = format(source, filetype);
   const dest = path.join(dir.tmpPath, filename);
@@ -74,15 +74,15 @@ async function writeJsWithTypes(
   codegenDir: TempDir,
   dryRun: boolean,
   debug: boolean,
-  quiet: boolean
+  quiet: boolean,
 ) {
   const [jsName, dtsName] = name.endsWith(".cjs")
     ? [name, `${name.slice(0, -4)}.d.cts`]
     : name.endsWith(".mjs")
-    ? [name, `${name.slice(0, -4)}.d.mts`]
-    : name.endsWith(".js")
-    ? [name, `${name.slice(0, -3)}.d.ts`]
-    : [`${name}.js`, `${name}.d.ts`];
+      ? [name, `${name.slice(0, -4)}.d.mts`]
+      : name.endsWith(".js")
+        ? [name, `${name.slice(0, -3)}.d.ts`]
+        : [`${name}.js`, `${name}.d.ts`];
   writeFile(ctx, dtsName, content.DTS, codegenDir, dryRun, debug, quiet);
   if (content.JS) {
     writeFile(ctx, jsName, content.JS, codegenDir, dryRun, debug, quiet);
@@ -95,7 +95,7 @@ async function doServerCodegen(
   dryRun: boolean,
   hasSchemaFile: boolean,
   debug: boolean,
-  quiet = false
+  quiet = false,
 ) {
   if (hasSchemaFile) {
     await writeJsWithTypes(
@@ -105,7 +105,7 @@ async function doServerCodegen(
       codegenDir,
       dryRun,
       debug,
-      quiet
+      quiet,
     );
   } else {
     await writeJsWithTypes(
@@ -115,7 +115,7 @@ async function doServerCodegen(
       codegenDir,
       dryRun,
       debug,
-      quiet
+      quiet,
     );
   }
   await writeJsWithTypes(
@@ -125,7 +125,7 @@ async function doServerCodegen(
     codegenDir,
     dryRun,
     debug,
-    quiet
+    quiet,
   );
 }
 
@@ -136,10 +136,10 @@ async function doApiCodegen(
   dryRun: boolean,
   debug: boolean,
   quiet = false,
-  commonjs = false
+  commonjs = false,
 ) {
   const modulePaths = (await entryPoints(ctx, functionsDir, false)).map(
-    (entryPoint) => path.relative(functionsDir, entryPoint)
+    (entryPoint) => path.relative(functionsDir, entryPoint),
   );
   await writeJsWithTypes(
     ctx,
@@ -148,7 +148,7 @@ async function doApiCodegen(
     codegenDir,
     dryRun,
     debug,
-    quiet
+    quiet,
   );
   if (commonjs) {
     // We might generate a .d.ts file too if users need it
@@ -160,7 +160,7 @@ async function doApiCodegen(
       codegenDir,
       dryRun,
       debug,
-      quiet
+      quiet,
     );
   }
 }
@@ -193,7 +193,7 @@ export async function doCodegen({
     } else {
       logError(
         ctx,
-        `Command would delete legacy codegen file: ${legacyCodegenPath}}`
+        `Command would delete legacy codegen file: ${legacyCodegenPath}}`,
       );
     }
   }
@@ -228,7 +228,7 @@ export async function doCodegen({
       dryRun,
       hasSchemaFile,
       debug,
-      quiet
+      quiet,
     );
 
     // 2. Generate API
@@ -239,7 +239,7 @@ export async function doCodegen({
       dryRun,
       debug,
       quiet,
-      generateCommonJSApi || projectConfig.generateCommonJSApi
+      generateCommonJSApi || projectConfig.generateCommonJSApi,
     );
 
     // If any files differ replace the codegen directory with its new contents
@@ -266,7 +266,7 @@ function canSkipSync(ctx: Context, tempDir: TempDir, destDir: string) {
   if (!ctx.fs.exists(destDir)) return false;
   for (const [tmp, dest] of zipLongest(
     [...walkDir(ctx.fs, tempDir.tmpPath)],
-    [...walkDir(ctx.fs, destDir)]
+    [...walkDir(ctx.fs, destDir)],
   )) {
     if (!tmp || !dest) return false;
     const tmpRelPath = path.relative(tempDir.tmpPath, tmp.path);
@@ -290,14 +290,14 @@ function syncFromTemp(
   ctx: Context,
   tempDir: TempDir,
   destDir: string,
-  eliminateExtras: boolean // Eliminate extra files in destDir
+  eliminateExtras: boolean, // Eliminate extra files in destDir
 ) {
   ctx.fs.mkdir(destDir, { allowExisting: true });
   const added = new Set();
   // Copy in the newly codegen'd files
   // Use Array.from to prevent mutation-while-iterating
   for (const { isDir, path: fpath } of Array.from(
-    walkDir(ctx.fs, tempDir.tmpPath)
+    walkDir(ctx.fs, tempDir.tmpPath),
   )) {
     const relPath = path.relative(tempDir.tmpPath, fpath);
     const destPath = path.join(destDir, relPath);
@@ -363,7 +363,7 @@ export async function doInitCodegen({
       dryRun,
       debug,
       quiet,
-      overwrite ? undefined : functionsDirectoryPath
+      overwrite ? undefined : functionsDirectoryPath,
     );
     doTsconfigCodegen(
       ctx,
@@ -371,7 +371,7 @@ export async function doInitCodegen({
       dryRun,
       debug,
       quiet,
-      overwrite ? undefined : functionsDirectoryPath
+      overwrite ? undefined : functionsDirectoryPath,
     );
     syncFromTemp(ctx, tempFunctionsDir, functionsDirectoryPath, false);
   });
@@ -383,7 +383,7 @@ function doReadmeCodegen(
   dryRun = false,
   debug = false,
   quiet = false,
-  dontOverwriteFinalDestination?: string
+  dontOverwriteFinalDestination?: string,
 ) {
   if (
     dontOverwriteFinalDestination &&
@@ -400,7 +400,7 @@ function doReadmeCodegen(
     dryRun,
     debug,
     quiet,
-    "markdown"
+    "markdown",
   );
 }
 
@@ -410,7 +410,7 @@ function doTsconfigCodegen(
   dryRun = false,
   debug = false,
   quiet = false,
-  dontOverwriteFinalDestination?: string
+  dontOverwriteFinalDestination?: string,
 ) {
   if (
     dontOverwriteFinalDestination &&
@@ -427,6 +427,6 @@ function doTsconfigCodegen(
     dryRun,
     debug,
     quiet,
-    "json"
+    "json",
   );
 }

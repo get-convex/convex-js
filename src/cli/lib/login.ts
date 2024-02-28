@@ -3,15 +3,15 @@ import {
   globalConfigPath,
   rootDirectory,
   GlobalConfig,
-  getAuthHeaderFromGlobalConfig,
+  getAuthHeaderForBigBrain,
   bigBrainAPI,
-  logAndHandleAxiosError,
+  logAndHandleFetchError,
+  throwingFetch,
 } from "./utils.js";
 import open from "open";
 import chalk from "chalk";
 import { provisionHost } from "./config.js";
 import { version } from "../version.js";
-import axios, { AxiosRequestConfig } from "axios";
 import {
   Context,
   changeSpinner,
@@ -21,11 +21,15 @@ import {
   logMessage,
   showSpinner,
 } from "../../bundler/context.js";
+import nodeFetch from "node-fetch";
 import { Issuer } from "openid-client";
 import inquirer from "inquirer";
 import { hostname } from "os";
 import { execSync } from "child_process";
 import os from "os";
+
+// For Node.js 16 support
+const fetch = globalThis.fetch || nodeFetch;
 
 const SCOPE = "openid email profile";
 /// This value was created long ago, and cannot be changed easily.
@@ -48,8 +52,8 @@ async function writeGlobalConfig(ctx: Context, config: GlobalConfig) {
     logFailure(
       ctx,
       chalk.red(
-        `Failed to write auth config to ${path} with error: ${err as any}`
-      )
+        `Failed to write auth config to ${path} with error: ${err as any}`,
+      ),
     );
     return await ctx.crash(1, "invalid filesystem data", err);
   }
@@ -66,33 +70,33 @@ function formatPathForPrinting(path: string) {
 
 export async function checkAuthorization(
   ctx: Context,
-  acceptOptIns: boolean
+  acceptOptIns: boolean,
 ): Promise<boolean> {
-  const header = await getAuthHeaderFromGlobalConfig(ctx);
+  const header = await getAuthHeaderForBigBrain(ctx);
   if (!header) {
     return false;
   }
   try {
-    const resp = await axios.head(`${provisionHost}/api/authorize`, {
+    const resp = await fetch(`${provisionHost}/api/authorize`, {
+      method: "HEAD",
       headers: {
         Authorization: header,
         "Convex-Client": `npm-cli-${version}`,
       },
-      // Don't throw an error if this request returns a non-200 status.
-      // Big Brain responds with a variety of error codes -- 401 if the token is correctly-formed but not valid, and either 400 or 500 if the token is ill-formed.
-      // We only care if this check returns a 200 code (so we can skip logging in again) -- any other errors should be silently skipped and we'll run the whole login flow again.
-      validateStatus: (_) => true,
     });
+    // Don't throw an error if this request returns a non-200 status.
+    // Big Brain responds with a variety of error codes -- 401 if the token is correctly-formed but not valid, and either 400 or 500 if the token is ill-formed.
+    // We only care if this check returns a 200 code (so we can skip logging in again) -- any other errors should be silently skipped and we'll run the whole login flow again.
     if (resp.status !== 200) {
       return false;
     }
   } catch (e: any) {
-    // This `catch` block should only be hit if a network error was encountered and axios didn't receive any sort of response.
+    // This `catch` block should only be hit if a network error was encountered
     logError(
       ctx,
-      `Unexpected error when authorizing - are you connected to the internet?`
+      `Unexpected error when authorizing - are you connected to the internet?`,
     );
-    return await logAndHandleAxiosError(ctx, e);
+    return await logAndHandleFetchError(ctx, e);
   }
 
   // Check that we have optin as well
@@ -106,7 +110,7 @@ export async function checkAuthorization(
 async function performDeviceAuthorization(
   ctx: Context,
   auth0Client: BaseClient,
-  shouldOpen: boolean
+  shouldOpen: boolean,
 ): Promise<string> {
   // Device authorization flow follows this guide: https://github.com/auth0/auth0-device-flow-cli-sample/blob/9f0f3b76a6cd56ea8d99e76769187ea5102d519d/cli.js
   // License: MIT License
@@ -166,7 +170,7 @@ async function performDeviceAuthorization(
         expires_in % 60 === 0
           ? `${expires_in / 60} minutes`
           : `${expires_in} seconds`
-      }: ${user_code}`
+      }: ${user_code}`,
   );
   if (shouldOpen) {
     shouldOpen = (
@@ -184,22 +188,22 @@ async function performDeviceAuthorization(
   if (shouldOpen) {
     showSpinner(
       ctx,
-      `Opening ${verification_uri_complete} in your browser to log in...\n`
+      `Opening ${verification_uri_complete} in your browser to log in...\n`,
     );
     try {
       await open(verification_uri_complete);
       changeSpinner(ctx, "Waiting for the confirmation...");
-    } catch (err: any) {
+    } catch (err: unknown) {
       logError(ctx, chalk.red(`Unable to open browser.`));
       changeSpinner(
         ctx,
-        `Manually open ${verification_uri_complete} in your browser to log in.`
+        `Manually open ${verification_uri_complete} in your browser to log in.`,
       );
     }
   } else {
     showSpinner(
       ctx,
-      `Open ${verification_uri_complete} in your browser to log in.`
+      `Open ${verification_uri_complete} in your browser to log in.`,
     );
   }
 
@@ -226,7 +230,7 @@ async function performDeviceAuthorization(
         if (err instanceof errors.OPError) {
           logFailure(
             ctx,
-            `Error = ${err.error}; error_description = ${err.error_description}`
+            `Error = ${err.error}; error_description = ${err.error_description}`,
           );
         } else {
           logFailure(ctx, `Login failed with error: ${err}`);
@@ -241,14 +245,13 @@ async function performPasswordAuthentication(
   issuer: string,
   clientId: string,
   username: string,
-  password: string
+  password: string,
 ): Promise<string> {
   // Unfortunately, `openid-client` doesn't support the resource owner password credentials flow so we need to manually send the requests.
-  const options: AxiosRequestConfig = {
+  const options: Parameters<typeof throwingFetch>[1] = {
     method: "POST",
-    url: new URL("/oauth/token", issuer).href,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    data: new URLSearchParams({
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
       grant_type: "password",
       username: username,
       password: password,
@@ -260,9 +263,13 @@ async function performPasswordAuthentication(
   };
 
   try {
-    const response = await axios.request(options);
-    if (typeof response.data.access_token === "string") {
-      return response.data.access_token;
+    const response = await throwingFetch(
+      new URL("/oauth/token", issuer).href,
+      options,
+    );
+    const data = await response.json();
+    if (typeof data.access_token === "string") {
+      return data.access_token;
     } else {
       // Unexpected error
       // eslint-disable-next-line no-restricted-syntax
@@ -301,7 +308,7 @@ export async function performLogin(
     acceptOptIns?: boolean;
     dumpAccessToken?: boolean;
     deviceName?: string;
-  } = {}
+  } = {},
 ) {
   // Get access token from big-brain
   // Default the device name to the hostname, but allow the user to change this if the terminal is interactive.
@@ -320,7 +327,7 @@ export async function performLogin(
   if (process.stdin.isTTY && !deviceNameOverride) {
     logMessage(
       ctx,
-      chalk.bold(`Welcome to developing with Convex, let's get you logged in.`)
+      chalk.bold(`Welcome to developing with Convex, let's get you logged in.`),
     );
     const answers = await inquirer.prompt([
       {
@@ -351,13 +358,13 @@ export async function performLogin(
       issuer,
       clientId,
       overrideAuthUsername,
-      overrideAuthPassword
+      overrideAuthPassword,
     );
   } else {
     accessToken = await performDeviceAuthorization(
       ctx,
       auth0Client,
-      open ?? true
+      open ?? true,
     );
   }
 
@@ -383,7 +390,7 @@ export async function performLogin(
   const globalConfig = { accessToken: data.accessToken };
   try {
     await writeGlobalConfig(ctx, globalConfig);
-  } catch (err: any) {
+  } catch (err: unknown) {
     return await ctx.crash(1, "invalid filesystem data", err);
   }
 

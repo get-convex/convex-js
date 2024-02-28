@@ -31,7 +31,7 @@ interface BaseDatabaseReader<DataModel extends GenericDataModel> {
    * @returns - The {@link GenericDocument} of the document at the given {@link values.GenericId}, or `null` if it no longer exists.
    */
   get<TableName extends TableNamesInDataModel<DataModel>>(
-    id: GenericId<TableName>
+    id: GenericId<TableName>,
   ): Promise<DocumentByName<DataModel, TableName> | null>;
 
   /**
@@ -44,7 +44,7 @@ interface BaseDatabaseReader<DataModel extends GenericDataModel> {
    * @returns - A {@link QueryInitializer} object to start building a query.
    */
   query<TableName extends TableNamesInDataModel<DataModel>>(
-    tableName: TableName
+    tableName: TableName,
   ): QueryInitializer<NamedTableInfo<DataModel, TableName>>;
 
   /**
@@ -61,7 +61,7 @@ interface BaseDatabaseReader<DataModel extends GenericDataModel> {
    */
   normalizeId<TableName extends TableNamesInDataModel<DataModel>>(
     tableName: TableName,
-    id: string
+    id: string,
   ): GenericId<TableName> | null;
 }
 
@@ -111,7 +111,7 @@ export interface DatabaseWriter<DataModel extends GenericDataModel>
    */
   insert<TableName extends TableNamesInDataModel<DataModel>>(
     table: TableName,
-    value: WithoutSystemFields<DocumentByName<DataModel, TableName>>
+    value: WithoutSystemFields<DocumentByName<DataModel, TableName>>,
   ): Promise<GenericId<TableName>>;
 
   /**
@@ -127,7 +127,7 @@ export interface DatabaseWriter<DataModel extends GenericDataModel>
    */
   patch<TableName extends TableNamesInDataModel<DataModel>>(
     id: GenericId<TableName>,
-    value: Partial<DocumentByName<DataModel, TableName>>
+    value: Partial<DocumentByName<DataModel, TableName>>,
   ): Promise<void>;
 
   /**
@@ -139,7 +139,7 @@ export interface DatabaseWriter<DataModel extends GenericDataModel>
    */
   replace<TableName extends TableNamesInDataModel<DataModel>>(
     id: GenericId<TableName>,
-    value: WithOptionalSystemFields<DocumentByName<DataModel, TableName>>
+    value: WithOptionalSystemFields<DocumentByName<DataModel, TableName>>,
   ): Promise<void>;
 
   /**

@@ -1,11 +1,10 @@
-import { Option } from "commander";
+import { Command, Option } from "@commander-js/extra-typings";
 import chalk from "chalk";
 import {
   ensureHasConvexDependency,
   logAndHandleAxiosError,
   deploymentClient,
   waitUntilCalled,
-  DeploymentCommand,
 } from "./lib/utils.js";
 import { version } from "./version.js";
 import {
@@ -27,26 +26,27 @@ import { AxiosResponse } from "axios";
 import { nodeFs } from "../bundler/fs.js";
 import path from "path";
 import { deploymentDashboardUrlPage } from "./dashboard.js";
+import { actionDescription } from "./lib/command.js";
 
-export const convexExport = new DeploymentCommand("export")
+export const convexExport = new Command("export")
   .summary("Export data from your deployment to a ZIP file")
   .description(
     "Export data, and optionally file storage, from your Convex deployment to a ZIP file.\n" +
-      "By default, this exports from your dev deployment."
+      "By default, this exports from your dev deployment.",
   )
   .requiredOption(
     "--path <zipFilePath>",
-    "Exports data into a ZIP file at this path, which may be a directory or unoccupied .zip path"
+    "Exports data into a ZIP file at this path, which may be a directory or unoccupied .zip path",
   )
   .addOption(
     new Option(
       "--include-file-storage",
-      "Includes stored files (https://dashboard.convex.dev/deployment/files) in a _storage folder within the ZIP file"
-    )
+      "Includes stored files (https://dashboard.convex.dev/deployment/files) in a _storage folder within the ZIP file",
+    ),
   )
-  .addDeploymentSelectionOptions("Export data from")
+  .addDeploymentSelectionOptions(actionDescription("Export data from"))
   .showHelpAfterError()
-  .action(async (options: any) => {
+  .action(async (options) => {
     const ctx = oneoffContext;
 
     const deploymentSelection = deploymentSelectionFromOptions(options);
@@ -76,7 +76,7 @@ export const convexExport = new DeploymentCommand("export")
       await client.post(
         `/api/export/request/zip?includeStorage=${includeStorage}`,
         null,
-        { headers }
+        { headers },
       );
     } catch (e) {
       return await logAndHandleAxiosError(ctx, e);
@@ -85,22 +85,22 @@ export const convexExport = new DeploymentCommand("export")
     const snapshotExportState = await waitForStableExportState(
       ctx,
       deploymentUrl,
-      adminKey
+      adminKey,
     );
     switch (snapshotExportState.state) {
       case "completed":
         stopSpinner(ctx);
         logFinishedStep(
           ctx,
-          `Created snapshot export at timestamp ${snapshotExportState.start_ts}`
+          `Created snapshot export at timestamp ${snapshotExportState.start_ts}`,
         );
         logFinishedStep(
           ctx,
           `Export is available at ${await deploymentDashboardUrlPage(
             ctx,
             deploymentName ?? null,
-            "/settings/snapshot-export"
-          )}`
+            "/settings/snapshot-export",
+          )}`,
         );
         break;
       case "requested":
@@ -112,7 +112,7 @@ export const convexExport = new DeploymentCommand("export")
         const _: never = snapshotExportState;
         logFailure(
           ctx,
-          `unknown error: unexpected state ${snapshotExportState as any}`
+          `unknown error: unexpected state ${snapshotExportState as any}`,
         );
         return await ctx.crash(1);
       }
@@ -120,7 +120,7 @@ export const convexExport = new DeploymentCommand("export")
 
     showSpinner(ctx, `Downloading snapshot export to ${chalk.bold(inputPath)}`);
     const exportUrl = `/api/export/zip/${snapshotExportState.start_ts.toString()}?adminKey=${encodeURIComponent(
-      adminKey
+      adminKey,
     )}`;
     let response: AxiosResponse;
     try {
@@ -152,7 +152,7 @@ export const convexExport = new DeploymentCommand("export")
     }
     changeSpinner(
       ctx,
-      `Downloading snapshot export to ${chalk.bold(filePath)}`
+      `Downloading snapshot export to ${chalk.bold(filePath)}`,
     );
 
     try {
@@ -165,7 +165,7 @@ export const convexExport = new DeploymentCommand("export")
     stopSpinner(ctx);
     logFinishedStep(
       ctx,
-      `Downloaded snapshot export to ${chalk.bold(filePath)}`
+      `Downloaded snapshot export to ${chalk.bold(filePath)}`,
     );
   });
 
@@ -182,7 +182,7 @@ type SnapshotExportState =
 async function waitForStableExportState(
   ctx: Context,
   deploymentUrl: string,
-  adminKey: string
+  adminKey: string,
 ): Promise<SnapshotExportState> {
   const [donePromise, onDone] = waitUntilCalled();
   let snapshotExportState: SnapshotExportState;
@@ -212,7 +212,7 @@ async function waitForStableExportState(
           }
         }
       },
-    }
+    },
   );
   return snapshotExportState!;
 }

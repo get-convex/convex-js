@@ -24,7 +24,7 @@ export class IndexRangeBuilderImpl
   private rangeExpressions: ReadonlyArray<SerializedRangeExpression>;
   private isConsumed: boolean;
   private constructor(
-    rangeExpressions: ReadonlyArray<SerializedRangeExpression>
+    rangeExpressions: ReadonlyArray<SerializedRangeExpression>,
   ) {
     super();
     this.rangeExpressions = rangeExpressions;
@@ -38,7 +38,7 @@ export class IndexRangeBuilderImpl
   private consume() {
     if (this.isConsumed) {
       throw new Error(
-        "IndexRangeBuilder has already been used! Chain your method calls like `q => q.eq(...).eq(...)`. See https://docs.convex.dev/using/indexes"
+        "IndexRangeBuilder has already been used! Chain your method calls like `q => q.eq(...).eq(...)`. See https://docs.convex.dev/using/indexes",
       );
     }
     this.isConsumed = true;
@@ -51,7 +51,7 @@ export class IndexRangeBuilderImpl
         type: "Eq",
         fieldPath: fieldName,
         value: convexOrUndefinedToJson(value),
-      })
+      }),
     );
   }
 
@@ -62,7 +62,7 @@ export class IndexRangeBuilderImpl
         type: "Gt",
         fieldPath: fieldName,
         value: convexToJson(value),
-      })
+      }),
     );
   }
   gte(fieldName: string, value: Value) {
@@ -72,7 +72,7 @@ export class IndexRangeBuilderImpl
         type: "Gte",
         fieldPath: fieldName,
         value: convexToJson(value),
-      })
+      }),
     );
   }
   lt(fieldName: string, value: Value) {
@@ -82,7 +82,7 @@ export class IndexRangeBuilderImpl
         type: "Lt",
         fieldPath: fieldName,
         value: convexToJson(value),
-      })
+      }),
     );
   }
   lte(fieldName: string, value: Value) {
@@ -92,7 +92,7 @@ export class IndexRangeBuilderImpl
         type: "Lte",
         fieldPath: fieldName,
         value: convexToJson(value),
-      })
+      }),
     );
   }
 

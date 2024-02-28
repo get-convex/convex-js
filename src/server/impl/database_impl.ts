@@ -14,7 +14,7 @@ import { patchValueToJson } from "../../values/value.js";
 
 export function setupReader(): GenericDatabaseReader<GenericDataModel> {
   const reader = (
-    isSystem = false
+    isSystem = false,
   ): GenericDatabaseReader<GenericDataModel> => {
     return {
       get: async (id: GenericId<string>) => {
@@ -23,7 +23,7 @@ export function setupReader(): GenericDatabaseReader<GenericDataModel> {
           throw new Error(
             `Invalid argument \`id\` for \`db.get\`, expected string but got '${typeof id}': ${
               id as any
-            }`
+            }`,
           );
         }
         const args = {
@@ -33,7 +33,7 @@ export function setupReader(): GenericDatabaseReader<GenericDataModel> {
         };
         const syscallJSON = await performAsyncSyscall("1.0/get", args);
 
-        return jsonToConvex(syscallJSON, true) as GenericDocument;
+        return jsonToConvex(syscallJSON) as GenericDocument;
       },
       query: (tableName: string) => {
         const accessingSystemTable = tableName.startsWith("_");
@@ -43,14 +43,14 @@ export function setupReader(): GenericDatabaseReader<GenericDataModel> {
               accessingSystemTable ? "System" : "User"
             } tables can only be accessed from db.${
               isSystem ? "" : "system."
-            }query().`
+            }query().`,
           );
         }
         return new QueryInitializerImpl(tableName);
       },
       normalizeId: <TableName extends string>(
         tableName: TableName,
-        id: string
+        id: string,
       ): GenericId<TableName> | null => {
         validateArg(tableName, 1, "normalizeId", "tableName");
         validateArg(id, 2, "normalizeId", "id");
@@ -61,14 +61,14 @@ export function setupReader(): GenericDatabaseReader<GenericDataModel> {
               accessingSystemTable ? "System" : "User"
             } tables can only be accessed from db.${
               isSystem ? "" : "system."
-            }normalizeId().`
+            }normalizeId().`,
           );
         }
         const syscallJSON = performSyscall("1.0/db/normalizeId", {
           table: tableName,
           idString: id,
         });
-        const syscallResult = jsonToConvex(syscallJSON, false) as any;
+        const syscallResult = jsonToConvex(syscallJSON) as any;
         return syscallResult.id;
       },
       // We set the system reader on the next line
@@ -98,7 +98,7 @@ export function setupWriter(): GenericDatabaseWriter<GenericDataModel> {
         table,
         value: convexToJson(value),
       });
-      const syscallResult = jsonToConvex(syscallJSON, false) as any;
+      const syscallResult = jsonToConvex(syscallJSON) as any;
       return syscallResult._id;
     },
     patch: async (id, value) => {

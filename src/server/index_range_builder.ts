@@ -24,7 +24,7 @@ type PlusOne<N extends number> = [
   12,
   13,
   14,
-  15
+  15,
 ][N];
 
 /**
@@ -64,7 +64,7 @@ type PlusOne<N extends number> = [
 export interface IndexRangeBuilder<
   Document extends GenericDocument,
   IndexFields extends GenericIndexFields,
-  FieldNum extends number = 0
+  FieldNum extends number = 0,
 > extends LowerBoundIndexRangeBuilder<Document, IndexFields[FieldNum]> {
   /**
    * Restrict this range to documents where `doc[fieldName] === value`.
@@ -75,7 +75,7 @@ export interface IndexRangeBuilder<
    */
   eq(
     fieldName: IndexFields[FieldNum],
-    value: FieldTypeFromFieldPath<Document, IndexFields[FieldNum]>
+    value: FieldTypeFromFieldPath<Document, IndexFields[FieldNum]>,
   ): NextIndexRangeBuilder<Document, IndexFields, FieldNum>;
 }
 
@@ -88,10 +88,11 @@ export interface IndexRangeBuilder<
 type NextIndexRangeBuilder<
   Document extends GenericDocument,
   IndexFields extends GenericIndexFields,
-  FieldNum extends number
-> = PlusOne<FieldNum> extends IndexFields["length"]
-  ? IndexRange
-  : IndexRangeBuilder<Document, IndexFields, PlusOne<FieldNum>>;
+  FieldNum extends number,
+> =
+  PlusOne<FieldNum> extends IndexFields["length"]
+    ? IndexRange
+    : IndexRangeBuilder<Document, IndexFields, PlusOne<FieldNum>>;
 
 /**
  * Builder to define the lower bound of an index range.
@@ -102,7 +103,7 @@ type NextIndexRangeBuilder<
  */
 export interface LowerBoundIndexRangeBuilder<
   Document extends GenericDocument,
-  IndexFieldName extends string
+  IndexFieldName extends string,
 > extends UpperBoundIndexRangeBuilder<Document, IndexFieldName> {
   /**
    * Restrict this range to documents where `doc[fieldName] > value`.
@@ -113,7 +114,7 @@ export interface LowerBoundIndexRangeBuilder<
    */
   gt(
     fieldName: IndexFieldName,
-    value: FieldTypeFromFieldPath<Document, IndexFieldName>
+    value: FieldTypeFromFieldPath<Document, IndexFieldName>,
   ): UpperBoundIndexRangeBuilder<Document, IndexFieldName>;
   /**
    * Restrict this range to documents where `doc[fieldName] >= value`.
@@ -124,7 +125,7 @@ export interface LowerBoundIndexRangeBuilder<
    */
   gte(
     fieldName: IndexFieldName,
-    value: FieldTypeFromFieldPath<Document, IndexFieldName>
+    value: FieldTypeFromFieldPath<Document, IndexFieldName>,
   ): UpperBoundIndexRangeBuilder<Document, IndexFieldName>;
 }
 
@@ -137,7 +138,7 @@ export interface LowerBoundIndexRangeBuilder<
  */
 export interface UpperBoundIndexRangeBuilder<
   Document extends GenericDocument,
-  IndexFieldName extends string
+  IndexFieldName extends string,
 > extends IndexRange {
   /**
    * Restrict this range to documents where `doc[fieldName] < value`.
@@ -149,7 +150,7 @@ export interface UpperBoundIndexRangeBuilder<
    */
   lt(
     fieldName: IndexFieldName,
-    value: FieldTypeFromFieldPath<Document, IndexFieldName>
+    value: FieldTypeFromFieldPath<Document, IndexFieldName>,
   ): IndexRange;
 
   /**
@@ -162,7 +163,7 @@ export interface UpperBoundIndexRangeBuilder<
    */
   lte(
     fieldName: IndexFieldName,
-    value: FieldTypeFromFieldPath<Document, IndexFieldName>
+    value: FieldTypeFromFieldPath<Document, IndexFieldName>,
   ): IndexRange;
 }
 

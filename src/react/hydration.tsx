@@ -32,19 +32,19 @@ export type Preloaded<Query extends FunctionReference<"query">> = {
  * @public
  */
 export function usePreloadedQuery<Query extends FunctionReference<"query">>(
-  preloadedQuery: Preloaded<Query>
+  preloadedQuery: Preloaded<Query>,
 ): Query["_returnType"] {
   const args = useMemo(
     () => jsonToConvex(preloadedQuery._argsJSON),
-    [preloadedQuery._argsJSON]
+    [preloadedQuery._argsJSON],
   ) as Query["_args"];
   const preloadedResult = useMemo(
     () => jsonToConvex(preloadedQuery._valueJSON),
-    [preloadedQuery._valueJSON]
+    [preloadedQuery._valueJSON],
   );
   const result = useQuery(
     makeFunctionReference(preloadedQuery._name) as Query,
-    args
+    args,
   );
   return result === undefined ? preloadedResult : result;
 }

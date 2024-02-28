@@ -161,11 +161,11 @@ export class BaseConvexClient {
   constructor(
     address: string,
     onTransition: (updatedQueries: QueryToken[]) => void,
-    options?: BaseConvexClientOptions
+    options?: BaseConvexClientOptions,
   ) {
     if (typeof address === "object") {
       throw new Error(
-        "Passing a ClientConfig object is no longer supported. Pass the URL of the Convex deployment as a string directly."
+        "Passing a ClientConfig object is no longer supported. Pass the URL of the Convex deployment as a string directly.",
       );
     }
     validateDeploymentUrl(address);
@@ -173,7 +173,7 @@ export class BaseConvexClient {
     let webSocketConstructor = options.webSocketConstructor;
     if (!webSocketConstructor && typeof WebSocket === "undefined") {
       throw new Error(
-        "No WebSocket global variable defined! To use Convex in an environment without WebSocket try the HTTP client: https://docs.convex.dev/api/classes/browser.ConvexHttpClient"
+        "No WebSocket global variable defined! To use Convex in an environment without WebSocket try the HTTP client: https://docs.convex.dev/api/classes/browser.ConvexHttpClient",
       );
     }
     webSocketConstructor = webSocketConstructor || WebSocket;
@@ -200,7 +200,7 @@ export class BaseConvexClient {
 
     this.state = new LocalSyncState();
     this.remoteQuerySet = new RemoteQuerySet((queryId) =>
-      this.state.queryPath(queryId)
+      this.state.queryPath(queryId),
     );
     this.requestManager = new RequestManager();
     this.authenticationManager = new AuthenticationManager(this.state, {
@@ -227,7 +227,7 @@ export class BaseConvexClient {
     ) {
       if (unsavedChangesWarning === true) {
         throw new Error(
-          "unsavedChangesWarning requested, but window.addEventListener not found! Remove {unsavedChangesWarning: true} from Convex client options."
+          "unsavedChangesWarning requested, but window.addEventListener not found! Remove {unsavedChangesWarning: true} from Convex client options.",
         );
       }
     } else if (unsavedChangesWarning !== false) {
@@ -263,13 +263,13 @@ export class BaseConvexClient {
         // Throw out our remote query, reissue queries
         // and outstanding mutations, and reauthenticate.
         const oldRemoteQueryResults = new Set(
-          this.remoteQuerySet.remoteQueryResults().keys()
+          this.remoteQuerySet.remoteQueryResults().keys(),
         );
         this.remoteQuerySet = new RemoteQuerySet((queryId) =>
-          this.state.queryPath(queryId)
+          this.state.queryPath(queryId),
         );
         const [querySetModification, authModification] = this.state.restart(
-          oldRemoteQueryResults
+          oldRemoteQueryResults,
         );
         if (authModification) {
           this.webSocketManager.sendMessage(authModification);
@@ -294,7 +294,7 @@ export class BaseConvexClient {
             this.remoteQuerySet.transition(serverMessage);
             this.state.transition(serverMessage);
             const completedRequests = this.requestManager.removeCompleted(
-              this.remoteQuerySet.timestamp()
+              this.remoteQuerySet.timestamp(),
             );
             this.notifyOnQueryResultChanges(completedRequests);
             break;
@@ -335,7 +335,7 @@ export class BaseConvexClient {
         };
       },
       webSocketConstructor,
-      this.verbose
+      this.verbose,
     );
     this.mark("convexClientConstructed");
   }
@@ -395,8 +395,8 @@ export class BaseConvexClient {
     this.onTransition(
       this.optimisticQueryResults.ingestQueryResultsFromServer(
         queryTokenToValue,
-        completedRequest
-      )
+        completedRequest,
+      ),
     );
   }
 
@@ -410,7 +410,7 @@ export class BaseConvexClient {
    */
   setAuth(
     fetchToken: AuthTokenFetcher,
-    onChange: (isAuthenticated: boolean) => void
+    onChange: (isAuthenticated: boolean) => void,
   ) {
     void this.authenticationManager.setConfig(fetchToken, onChange);
   }
@@ -447,14 +447,14 @@ export class BaseConvexClient {
   subscribe(
     name: string,
     args?: Record<string, Value>,
-    options?: SubscribeOptions
+    options?: SubscribeOptions,
   ): { queryToken: QueryToken; unsubscribe: () => void } {
     const argsObject = parseArgs(args);
 
     const { modification, queryToken, unsubscribe } = this.state.subscribe(
       name,
       argsObject,
-      options?.journal
+      options?.journal,
     );
     if (modification !== null) {
       this.webSocketManager.sendMessage(modification);
@@ -478,7 +478,7 @@ export class BaseConvexClient {
    */
   localQueryResult(
     udfPath: string,
-    args?: Record<string, Value>
+    args?: Record<string, Value>,
   ): Value | undefined {
     const argsObject = parseArgs(args);
     const queryToken = serializePathAndArgs(udfPath, argsObject);
@@ -513,7 +513,7 @@ export class BaseConvexClient {
    */
   localQueryLogs(
     udfPath: string,
-    args?: Record<string, Value>
+    args?: Record<string, Value>,
   ): string[] | undefined {
     const argsObject = parseArgs(args);
     const queryToken = serializePathAndArgs(udfPath, argsObject);
@@ -531,7 +531,7 @@ export class BaseConvexClient {
    */
   queryJournal(
     name: string,
-    args?: Record<string, Value>
+    args?: Record<string, Value>,
   ): QueryJournal | undefined {
     const argsObject = parseArgs(args);
     const queryToken = serializePathAndArgs(name, argsObject);
@@ -566,14 +566,16 @@ export class BaseConvexClient {
   async mutation(
     name: string,
     args?: Record<string, Value>,
-    options?: MutationOptions
+    options?: MutationOptions,
   ): Promise<any> {
     const result = await this.mutationInternal(name, args, options);
     if (!result.success) {
       if (result.errorData !== undefined) {
         throw forwardData(
           result,
-          new ConvexError(createHybridErrorStacktrace("mutation", name, result))
+          new ConvexError(
+            createHybridErrorStacktrace("mutation", name, result),
+          ),
         );
       }
       throw new Error(createHybridErrorStacktrace("mutation", name, result));
@@ -587,7 +589,7 @@ export class BaseConvexClient {
   async mutationInternal(
     udfPath: string,
     args?: Record<string, Value>,
-    options?: MutationOptions
+    options?: MutationOptions,
   ): Promise<FunctionResult> {
     const mutationArgs = parseArgs(args);
     this.tryReportLongDisconnect();
@@ -604,7 +606,7 @@ export class BaseConvexClient {
         const changedQueries =
           this.optimisticQueryResults.applyOptimisticUpdate(
             wrappedUpdate,
-            requestId
+            requestId,
           );
         this.onTransition(changedQueries);
       }
@@ -634,7 +636,7 @@ export class BaseConvexClient {
       if (result.errorData !== undefined) {
         throw forwardData(
           result,
-          new ConvexError(createHybridErrorStacktrace("action", name, result))
+          new ConvexError(createHybridErrorStacktrace("action", name, result)),
         );
       }
       throw new Error(createHybridErrorStacktrace("action", name, result));
@@ -647,7 +649,7 @@ export class BaseConvexClient {
    */
   async actionInternal(
     udfPath: string,
-    args?: Record<string, Value>
+    args?: Record<string, Value>,
   ): Promise<FunctionResult> {
     const actionArgs = parseArgs(args);
     const requestId = this.nextRequestId;
@@ -731,7 +733,7 @@ export class BaseConvexClient {
         if (!response.ok) {
           console.warn(
             "Analytics request failed with response:",
-            response.body
+            response.body,
           );
         }
       })

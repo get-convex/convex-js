@@ -28,8 +28,8 @@ export function apiCodegen(modulePaths: string[]): GeneratedJsWithTypes {
     .map(
       (modulePath) =>
         `import type * as ${moduleIdentifier(modulePath)} from "../${importPath(
-          modulePath
-        )}.js";`
+          modulePath,
+        )}.js";`,
     )
     .join("\n")}
 
@@ -45,7 +45,7 @@ export function apiCodegen(modulePaths: string[]): GeneratedJsWithTypes {
     ${modulePaths
       .map(
         (modulePath) =>
-          `"${importPath(modulePath)}": typeof ${moduleIdentifier(modulePath)},`
+          `"${importPath(modulePath)}": typeof ${moduleIdentifier(modulePath)},`,
       )
       .join("\n")}
   }>;

@@ -17,7 +17,7 @@ export function longToU64(raw: U64): EncodedU64 {
 }
 
 export function parseServerMessage(
-  encoded: EncodedServerMessage
+  encoded: EncodedServerMessage,
 ): ServerMessage {
   switch (encoded.type) {
     case "FatalError":
@@ -54,7 +54,7 @@ export function parseServerMessage(
 }
 
 export function encodeClientMessage(
-  message: ClientMessage
+  message: ClientMessage,
 ): EncodedClientMessage {
   switch (message.type) {
     case "Authenticate":

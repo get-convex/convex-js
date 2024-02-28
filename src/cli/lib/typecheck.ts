@@ -20,7 +20,7 @@ type TypecheckResultHandler = (
   // If given, we run it to print out errors.
   // We expect it to throw or resolve to "success"
   // if a concurrent change invalidated the error result.
-  runOnError?: () => Promise<"success">
+  runOnError?: () => Promise<"success">,
 ) => Promise<void>;
 
 /**
@@ -35,7 +35,7 @@ type TypecheckResultHandler = (
 export async function typeCheckFunctionsInMode(
   ctx: Context,
   typeCheckMode: TypeCheckMode,
-  functionsDir: string
+  functionsDir: string,
 ): Promise<void> {
   if (typeCheckMode === "disable") {
     return;
@@ -51,7 +51,7 @@ export async function typeCheckFunctionsInMode(
         logSpecificError?.();
         logError(
           ctx,
-          chalk.gray("To ignore failing typecheck, use `--typecheck=disable`.")
+          chalk.gray("To ignore failing typecheck, use `--typecheck=disable`."),
         );
         try {
           const result = await runOnError?.();
@@ -64,7 +64,7 @@ export async function typeCheckFunctionsInMode(
         }
         await ctx.crash(1, "invalid filesystem data");
       }
-    }
+    },
   );
 }
 
@@ -72,14 +72,14 @@ export async function typeCheckFunctionsInMode(
 export async function typeCheckFunctions(
   ctx: Context,
   functionsDir: string,
-  handleResult: TypecheckResultHandler
+  handleResult: TypecheckResultHandler,
 ): Promise<void> {
   const tsconfig = path.join(functionsDir, "tsconfig.json");
   if (!ctx.fs.exists(tsconfig)) {
     return handleResult("cantTypeCheck", () => {
       logError(
         ctx,
-        "Found no convex/tsconfig.json to use to typecheck Convex functions, so skipping typecheck."
+        "Found no convex/tsconfig.json to use to typecheck Convex functions, so skipping typecheck.",
       );
       logError(ctx, "Run `npx convex codegen --init` to create one.");
     });
@@ -90,19 +90,19 @@ export async function typeCheckFunctions(
 async function runTsc(
   ctx: Context,
   tscArgs: string[],
-  handleResult: TypecheckResultHandler
+  handleResult: TypecheckResultHandler,
 ): Promise<void> {
   // Check if tsc is even installed
   const tscPath = path.join(
     "node_modules",
     ".bin",
-    process.platform === "win32" ? "tsc.CMD" : "tsc"
+    process.platform === "win32" ? "tsc.CMD" : "tsc",
   );
   if (!ctx.fs.exists(tscPath)) {
     return handleResult("cantTypeCheck", () => {
       logError(
         ctx,
-        chalk.gray("No TypeScript binary found, so skipping typecheck.")
+        chalk.gray("No TypeScript binary found, so skipping typecheck."),
       );
     });
   }
@@ -120,8 +120,8 @@ async function runTsc(
     logError(
       ctx,
       chalk.yellow(
-        "Convex works best with TypeScript version 4.8.4 or newer -- npm i --save-dev typescript@latest to update."
-      )
+        "Convex works best with TypeScript version 4.8.4 or newer -- npm i --save-dev typescript@latest to update.",
+      ),
     );
   }
 }
@@ -130,7 +130,7 @@ async function runTscInner(
   ctx: Context,
   tscPath: string,
   tscArgs: string[],
-  handleResult: TypecheckResultHandler
+  handleResult: TypecheckResultHandler,
 ) {
   // Run `tsc` once and have it print out the files it touched. This output won't
   // be very useful if there's an error, but we'll run it again to get a nice
@@ -168,7 +168,7 @@ async function runTscInner(
   }
   if (filesTouched.length > 0 && !anyPathsFound) {
     const err = new Error(
-      `Failed to stat any files emitted by tsc (received ${filesTouched.length})`
+      `Failed to stat any files emitted by tsc (received ${filesTouched.length})`,
     );
     Sentry.captureException(err);
   }
@@ -200,6 +200,6 @@ async function runTscInner(
       // but allow the rest of the system to observe the success.
       ctx.fs.invalidate();
       return "success";
-    }
+    },
   );
 }

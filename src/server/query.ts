@@ -62,8 +62,8 @@ export interface QueryInitializer<TableInfo extends GenericTableInfo>
       q: IndexRangeBuilder<
         DocumentByInfo<TableInfo>,
         NamedIndex<TableInfo, IndexName>
-      >
-    ) => IndexRange
+      >,
+    ) => IndexRange,
   ): Query<TableInfo>;
 
   /**
@@ -91,8 +91,8 @@ export interface QueryInitializer<TableInfo extends GenericTableInfo>
       q: SearchFilterBuilder<
         DocumentByInfo<TableInfo>,
         NamedSearchIndex<TableInfo, IndexName>
-      >
-    ) => SearchFilter
+      >,
+    ) => SearchFilter,
   ): OrderedQuery<TableInfo>;
 
   /**
@@ -163,7 +163,7 @@ export interface OrderedQuery<TableInfo extends GenericTableInfo>
    * @returns - A new {@link OrderedQuery} with the given filter predicate applied.
    */
   filter(
-    predicate: (q: FilterBuilder<TableInfo>) => ExpressionOrValue<boolean>
+    predicate: (q: FilterBuilder<TableInfo>) => ExpressionOrValue<boolean>,
   ): this;
 
   /**
@@ -192,7 +192,7 @@ export interface OrderedQuery<TableInfo extends GenericTableInfo>
    * cursor to continue paginating.
    */
   paginate(
-    paginationOpts: PaginationOptions
+    paginationOpts: PaginationOptions,
   ): Promise<PaginationResult<DocumentByInfo<TableInfo>>>;
 
   /**

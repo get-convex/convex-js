@@ -17,7 +17,7 @@ export function performSyscall(op: string, arg: Record<string, any>): any {
   if (typeof Convex === "undefined" || Convex.syscall === undefined) {
     throw new Error(
       "The Convex database and auth objects are being used outside of a Convex backend. " +
-        "Did you mean to use `useQuery` or `useMutation` to call a Convex function?"
+        "Did you mean to use `useQuery` or `useMutation` to call a Convex function?",
     );
   }
   const resultStr = Convex.syscall(op, JSON.stringify(arg));
@@ -26,12 +26,12 @@ export function performSyscall(op: string, arg: Record<string, any>): any {
 
 export async function performAsyncSyscall(
   op: string,
-  arg: Record<string, any>
+  arg: Record<string, any>,
 ): Promise<any> {
   if (typeof Convex === "undefined" || Convex.asyncSyscall === undefined) {
     throw new Error(
       "The Convex database and auth objects are being used outside of a Convex backend. " +
-        "Did you mean to use `useQuery` or `useMutation` to call a Convex function?"
+        "Did you mean to use `useQuery` or `useMutation` to call a Convex function?",
     );
   }
   let resultStr;
@@ -66,7 +66,7 @@ export function performJsSyscall(op: string, arg: Record<string, any>): any {
   if (typeof Convex === "undefined" || Convex.jsSyscall === undefined) {
     throw new Error(
       "The Convex database and auth objects are being used outside of a Convex backend. " +
-        "Did you mean to use `useQuery` or `useMutation` to call a Convex function?"
+        "Did you mean to use `useQuery` or `useMutation` to call a Convex function?",
     );
   }
   return Convex.jsSyscall(op, arg);

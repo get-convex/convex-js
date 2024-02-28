@@ -16,7 +16,7 @@ test("nodeFs filesystem operations behave as expected", async () => {
     try {
       nodeFs.mkdir(dirPath);
       throw new Error(
-        "Expected `mkdir` to fail because the containing directory doesn't exist yet."
+        "Expected `mkdir` to fail because the containing directory doesn't exist yet.",
       );
     } catch (e: any) {
       expect(e.code).toEqual("ENOENT");

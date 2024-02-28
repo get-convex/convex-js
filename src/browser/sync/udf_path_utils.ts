@@ -28,7 +28,7 @@ export type QueryToken = string;
 
 export function serializePathAndArgs(
   udfPath: string,
-  args: Record<string, Value>
+  args: Record<string, Value>,
 ): QueryToken {
   return JSON.stringify({
     udfPath: canonicalizeUdfPath(udfPath),

@@ -27,7 +27,7 @@ export class RemoteQuerySet {
       this.version.identity !== start.identity
     ) {
       throw new Error(
-        `Invalid start version: ${start.ts.toString()}:${start.querySet}`
+        `Invalid start version: ${start.ts.toString()}:${start.querySet}`,
       );
     }
     for (const modification of transition.modifications) {
@@ -39,7 +39,7 @@ export class RemoteQuerySet {
               logToConsole("info", "query", queryPath, line);
             }
           }
-          const value = jsonToConvex(modification.value ?? null, true);
+          const value = jsonToConvex(modification.value ?? null);
           this.remoteQuerySet.set(modification.queryId, {
             success: true,
             value,

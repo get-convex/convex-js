@@ -12,7 +12,7 @@ const tarball = getOnlyTarball(convexDir);
 
 const tmpDir = path.join(
   convexDir,
-  "tmpPackage" + ("" + Math.random()).slice(2, 8)
+  "tmpPackage" + ("" + Math.random()).slice(2, 8),
 );
 console.log("creating temp folder", tmpDir);
 fs.rmSync(tmpDir, { force: true, recursive: true });
@@ -23,7 +23,7 @@ const tmpPackage = path.join(tmpDir, "package");
 
 console.log("modifying package.json");
 let packageJson = JSON.parse(
-  fs.readFileSync(path.join(tmpPackage, "package.json"))
+  fs.readFileSync(path.join(tmpPackage, "package.json")),
 );
 pointToPublic(packageJson.exports);
 pointToPublic(packageJson.typesVersions);
@@ -35,7 +35,7 @@ delete packageJson.bin["//"];
 
 fs.writeFileSync(
   path.join(tmpPackage, "package.json"),
-  JSON.stringify(packageJson, null, 2) + "\n"
+  JSON.stringify(packageJson, null, 2) + "\n",
 );
 
 console.log("modifying stub directories");
@@ -44,7 +44,7 @@ for (const [dirname, contents] of Object.entries(stubs)) {
   pointToPublic(contents);
   fs.writeFileSync(
     path.join(tmpPackage, dirname, "package.json"),
-    JSON.stringify(contents, null, 2) + "\n"
+    JSON.stringify(contents, null, 2) + "\n",
   );
 }
 
@@ -69,7 +69,7 @@ function getOnlyTarball(dirname) {
   if (tarballs.length < 1) throw new Error("No tarball found.");
   if (tarballs.length > 1) {
     throw new Error(
-      "Multiple tarballs found, please `rm *.tgz` and run again. `--pack-destination` is not allowed."
+      "Multiple tarballs found, please `rm *.tgz` and run again. `--pack-destination` is not allowed.",
     );
   }
   return path.join(dirname, tarballs[0]);
@@ -98,9 +98,9 @@ function getStubDirectories(dirname) {
         JSON.parse(
           fs.readFileSync(path.join(dirname, d, "package.json"), {
             encoding: "utf-8",
-          })
+          }),
         ),
-      ])
+      ]),
   );
 }
 
@@ -122,28 +122,7 @@ function rewriteDtsToRemoveInternal(dirname) {
     `/** @internal */
     record<K extends string, ValueValidator extends Validator<any, any, any>>(keys: Validator<K, false, any>, values: ValueValidator): RecordValidator<K, ValueValidator>;`,
     `/* internal record
-    record<K extends string, ValueValidator extends Validator<any, any, any>>(keys: Validator<K, false, any>, values: ValueValidator): RecordValidator<K, ValueValidator>; */`
-  );
-  // Parameters aren't removed by tsc --removeInternal
-  replaceType(
-    dirname,
-    "values/value.d.ts",
-    `export declare function jsonToConvex(value: JSONValue, 
-/** @internal */
-allowMapsAndSets?: boolean): Value;`,
-    `export declare function jsonToConvex(value: JSONValue, 
-/* internal allowMapsAndSets */
-): Value;`
-  );
-  replaceType(
-    dirname,
-    "values/value.d.ts",
-    `export declare function convexToJson(value: Value, 
-/** @internal */
-allowMapsAndSets?: boolean): JSONValue;`,
-    `export declare function convexToJson(value: Value, 
-/* internal allowMapsAndSets */
-): JSONValue;`
+    record<K extends string, ValueValidator extends Validator<any, any, any>>(keys: Validator<K, false, any>, values: ValueValidator): RecordValidator<K, ValueValidator>; */`,
   );
   auditForInternal(path.join(dirname, "dist", "cjs-types"));
   auditForInternal(path.join(dirname, "dist", "esm-types"));
@@ -180,10 +159,10 @@ function auditForInternal(dir) {
         console.log(
           "found @internal type in",
           file,
-          `\n\`\`\`\n${match}\`\`\``
+          `\n\`\`\`\n${match}\`\`\``,
         );
         throw new Error(
-          "Found @internal type in published types! Until we switch to api-extractor you need to add a pattern for this in scripts/postpack.mjs in rewriteDtsToRemoveInternal()."
+          "Found @internal type in published types! Until we switch to api-extractor you need to add a pattern for this in scripts/postpack.mjs in rewriteDtsToRemoveInternal().",
         );
       }
     }

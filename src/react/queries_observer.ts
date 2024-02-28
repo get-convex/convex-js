@@ -15,7 +15,7 @@ type QueryInfo = {
 export type CreateWatch = (
   query: FunctionReference<"query">,
   args: Record<string, Value>,
-  journal?: QueryJournal
+  journal?: QueryJournal,
 ) => Watch<Value>;
 
 /**
@@ -38,7 +38,7 @@ export class QueriesObserver {
     newQueries: Record<
       Identifier,
       { query: FunctionReference<"query">; args: Record<string, Value> }
-    >
+    >,
   ) {
     // Add the new queries before unsubscribing from the old ones so that
     // the deduping in the `ConvexReactClient` can help if there are duplicates.
@@ -83,7 +83,7 @@ export class QueriesObserver {
     queries: Record<
       Identifier,
       { query: FunctionReference<"query">; args: Record<string, Value> }
-    >
+    >,
   ): Record<Identifier, Value | undefined | Error> {
     const result: Record<Identifier, Value | Error | undefined> = {};
     for (const identifier of Object.keys(queries)) {
@@ -134,11 +134,11 @@ export class QueriesObserver {
     identifier: Identifier,
     query: FunctionReference<"query">,
     args: Record<string, Value>,
-    journal?: QueryJournal
+    journal?: QueryJournal,
   ) {
     if (this.queries[identifier] !== undefined) {
       throw new Error(
-        `Tried to add a new query with identifier ${identifier} when it already exists.`
+        `Tried to add a new query with identifier ${identifier} when it already exists.`,
       );
     }
     const watch = this.createWatch(query, args, journal);

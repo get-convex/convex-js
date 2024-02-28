@@ -34,7 +34,7 @@ export async function runPush(ctx: Context, options: PushOptions) {
   if (!options.codegen) {
     logMessage(
       ctx,
-      chalk.gray("Skipping codegen. Remove --codegen=disable to enable.")
+      chalk.gray("Skipping codegen. Remove --codegen=disable to enable."),
     );
     // Codegen includes typechecking, so if we're skipping it, run the type
     // check manually on the query and mutation functions
@@ -70,7 +70,7 @@ export async function runPush(ctx: Context, options: PushOptions) {
     origin,
     options.adminKey,
     functionsDir(configPath, localConfig.projectConfig),
-    options.dryRun
+    options.dryRun,
   );
 
   const timeConfigPullStarts = performance.now();
@@ -79,7 +79,7 @@ export async function runPush(ctx: Context, options: PushOptions) {
     undefined,
     undefined,
     origin,
-    options.adminKey
+    options.adminKey,
   );
 
   const diff = diffConfig(remoteConfig, localConfig);
@@ -96,8 +96,8 @@ export async function runPush(ctx: Context, options: PushOptions) {
             options.dryRun
               ? "Command would skip function push"
               : "Function push skipped"
-          }: ${msg}.`
-        )
+          }: ${msg}.`,
+        ),
       );
     }
     return;
@@ -109,8 +109,8 @@ export async function runPush(ctx: Context, options: PushOptions) {
       chalk.bold(
         `Remote config ${
           options.dryRun ? "would" : "will"
-        } be overwritten with the following changes:`
-      )
+        } be overwritten with the following changes:`,
+      ),
     );
     logMessage(ctx, diff);
   }
@@ -136,6 +136,6 @@ export async function runPush(ctx: Context, options: PushOptions) {
     options.url,
     timing,
     schemaId,
-    bundledModuleInfos
+    bundledModuleInfos,
   );
 }

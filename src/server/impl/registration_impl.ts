@@ -35,12 +35,12 @@ import {
 } from "./storage_impl.js";
 
 async function invokeMutation<
-  F extends (ctx: GenericMutationCtx<GenericDataModel>, ...args: any) => any
+  F extends (ctx: GenericMutationCtx<GenericDataModel>, ...args: any) => any,
 >(func: F, argsStr: string) {
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since queries are only running in V8.
   const requestId = "";
-  const args = jsonToConvex(JSON.parse(argsStr), false);
+  const args = jsonToConvex(JSON.parse(argsStr));
   const mutationCtx = {
     db: setupWriter(),
     auth: setupAuth(requestId),
@@ -55,7 +55,7 @@ async function invokeMutation<
 function validateReturnValue(v: any) {
   if (v instanceof QueryInitializerImpl || v instanceof QueryImpl) {
     throw new Error(
-      "Return value is a Query. Results must be retrieved with `.collect()`, `.take(n), `.unique()`, or `.first()`."
+      "Return value is a Query. Results must be retrieved with `.collect()`, `.take(n), `.unique()`, or `.first()`.",
     );
   }
 }
@@ -63,7 +63,7 @@ function validateReturnValue(v: any) {
 async function invokeFunction<
   Ctx,
   Args extends any[],
-  F extends (ctx: Ctx, ...args: Args) => any
+  F extends (ctx: Ctx, ...args: Args) => any,
 >(func: F, ctx: Ctx, args: Args) {
   let result;
   try {
@@ -83,7 +83,7 @@ function serializeConvexErrorData(thrown: unknown) {
   ) {
     const error = thrown as ConvexError<any>;
     error.data = JSON.stringify(
-      convexToJson(error.data === undefined ? null : error.data)
+      convexToJson(error.data === undefined ? null : error.data),
     );
     (error as any).ConvexErrorSymbol = Symbol.for("ConvexError");
     return error;
@@ -147,7 +147,7 @@ function exportArgs(functionDefinition: FunctionDefinition) {
  * @public
  */
 export const mutationGeneric: MutationBuilder<any, "public"> = (
-  functionDefinition: FunctionDefinition
+  functionDefinition: FunctionDefinition,
 ) => {
   const func = (
     typeof functionDefinition === "function"
@@ -182,7 +182,7 @@ export const mutationGeneric: MutationBuilder<any, "public"> = (
  * @public
  */
 export const internalMutationGeneric: MutationBuilder<any, "internal"> = (
-  functionDefinition: FunctionDefinition
+  functionDefinition: FunctionDefinition,
 ) => {
   const func = (
     typeof functionDefinition === "function"
@@ -204,12 +204,12 @@ export const internalMutationGeneric: MutationBuilder<any, "internal"> = (
 };
 
 async function invokeQuery<
-  F extends (ctx: GenericQueryCtx<GenericDataModel>, ...args: any) => any
->(func: F, argsStr: string, allowMapsAndSetsInReturnValue: boolean) {
+  F extends (ctx: GenericQueryCtx<GenericDataModel>, ...args: any) => any,
+>(func: F, argsStr: string) {
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since queries are only running in V8.
   const requestId = "";
-  const args = jsonToConvex(JSON.parse(argsStr), false);
+  const args = jsonToConvex(JSON.parse(argsStr));
   const queryCtx = {
     db: setupReader(),
     auth: setupAuth(requestId),
@@ -217,12 +217,7 @@ async function invokeQuery<
   };
   const result = await invokeFunction(func, queryCtx, args as any);
   validateReturnValue(result);
-  return JSON.stringify(
-    convexToJson(
-      result === undefined ? null : result,
-      allowMapsAndSetsInReturnValue
-    )
-  );
+  return JSON.stringify(convexToJson(result === undefined ? null : result));
 }
 
 /**
@@ -239,7 +234,7 @@ async function invokeQuery<
  * @public
  */
 export const queryGeneric: QueryBuilder<any, "public"> = (
-  functionDefinition: FunctionDefinition
+  functionDefinition: FunctionDefinition,
 ) => {
   const func = (
     typeof functionDefinition === "function"
@@ -255,8 +250,7 @@ export const queryGeneric: QueryBuilder<any, "public"> = (
   func.isRegistered = true;
   func.isQuery = true;
   func.isPublic = true;
-  func.invokeQuery = (argsStr, allowMapsAndSetsInReturnValue) =>
-    invokeQuery(func, argsStr, allowMapsAndSetsInReturnValue);
+  func.invokeQuery = (argsStr) => invokeQuery(func, argsStr);
   func.exportArgs = exportArgs(functionDefinition);
   return func;
 };
@@ -275,7 +269,7 @@ export const queryGeneric: QueryBuilder<any, "public"> = (
  * @public
  */
 export const internalQueryGeneric: QueryBuilder<any, "internal"> = (
-  functionDefinition: FunctionDefinition
+  functionDefinition: FunctionDefinition,
 ) => {
   const func = (
     typeof functionDefinition === "function"
@@ -291,15 +285,15 @@ export const internalQueryGeneric: QueryBuilder<any, "internal"> = (
   func.isRegistered = true;
   func.isQuery = true;
   func.isInternal = true;
-  func.invokeQuery = (argsStr) => invokeQuery(func as any, argsStr, false);
+  func.invokeQuery = (argsStr) => invokeQuery(func as any, argsStr);
   func.exportArgs = exportArgs(functionDefinition);
   return func;
 };
 
 async function invokeAction<
-  F extends (ctx: GenericActionCtx<GenericDataModel>, ...args: any) => any
+  F extends (ctx: GenericActionCtx<GenericDataModel>, ...args: any) => any,
 >(func: F, requestId: string, argsStr: string) {
-  const args = jsonToConvex(JSON.parse(argsStr), false);
+  const args = jsonToConvex(JSON.parse(argsStr));
   const calls = setupActionCalls(requestId);
   const ctx = {
     ...calls,
@@ -324,7 +318,7 @@ async function invokeAction<
  * @public
  */
 export const actionGeneric: ActionBuilder<any, "public"> = (
-  functionDefinition: FunctionDefinition
+  functionDefinition: FunctionDefinition,
 ) => {
   const func = (
     typeof functionDefinition === "function"
@@ -358,7 +352,7 @@ export const actionGeneric: ActionBuilder<any, "public"> = (
  * @public
  */
 export const internalActionGeneric: ActionBuilder<any, "internal"> = (
-  functionDefinition: FunctionDefinition
+  functionDefinition: FunctionDefinition,
 ) => {
   const func = (
     typeof functionDefinition === "function"
@@ -381,7 +375,7 @@ export const internalActionGeneric: ActionBuilder<any, "internal"> = (
 };
 
 async function invokeHttpAction<
-  F extends (ctx: GenericActionCtx<GenericDataModel>, request: Request) => any
+  F extends (ctx: GenericActionCtx<GenericDataModel>, request: Request) => any,
 >(func: F, request: Request) {
   // TODO(presley): Change the function signature and propagate the requestId from Rust.
   // Ok, to mock it out for now, since http endpoints are only running in V8.
@@ -409,8 +403,8 @@ async function invokeHttpAction<
 export const httpActionGeneric = (
   func: (
     ctx: GenericActionCtx<GenericDataModel>,
-    request: Request
-  ) => Promise<Response>
+    request: Request,
+  ) => Promise<Response>,
 ): PublicHttpAction => {
   const q = func as unknown as PublicHttpAction;
   // Helpful runtime check that functions are only be registered once

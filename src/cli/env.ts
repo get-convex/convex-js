@@ -1,32 +1,54 @@
-import { Command } from "commander";
-import { logFailure, logMessage, oneoffContext } from "../bundler/context.js";
+import { Command } from "@commander-js/extra-typings";
+import chalk from "chalk";
 import {
-  deploymentSelectionFromOptions,
+  Context,
+  logFailure,
+  logFinishedStep,
+  logMessage,
+  logOutput,
+  oneoffContext,
+} from "../bundler/context.js";
+import {
   DeploymentSelectionOptions,
+  deploymentSelectionFromOptions,
   fetchDeploymentCredentialsWithinCurrentProject,
 } from "./lib/api.js";
+import { actionDescription } from "./lib/command.js";
+import { runQuery } from "./lib/run.js";
 import {
-  DeploymentCommand,
   deploymentClient,
   ensureHasConvexDependency,
+  logAndHandleAxiosError,
 } from "./lib/utils.js";
 import { version } from "./version.js";
-import chalk from "chalk";
-import { runQuery } from "./lib/run.js";
 
 const envSet = new Command("set")
   .arguments("<name> <value>")
+  .summary("Set a variable")
+  .description(
+    "Set a variable: `npx convex env set NAME value`\n" +
+      "If the variable already exists, its value is updated.",
+  )
   .configureHelp({ showGlobalOptions: true })
+  .allowExcessArguments(false)
   .action(async (name, value, _options, cmd) => {
     const options = cmd.optsWithGlobals();
-    await ensureHasConvexDependency(oneoffContext, "env set");
-    await callUpdateEnvironmentVariables(options, [{ name, value }]);
-    logMessage(oneoffContext, chalk.green(`Successfully set ${name}=${value}`));
+    const ctx = oneoffContext;
+    await ensureHasConvexDependency(ctx, "env set");
+    await callUpdateEnvironmentVariables(ctx, options, [{ name, value }]);
+    const formatted = /\s/.test(value) ? `"${value}"` : value;
+    logFinishedStep(
+      ctx,
+      `Successfully set ${chalk.bold(name)} to ${chalk.bold(formatted)}`,
+    );
   });
 
 const envGet = new Command("get")
   .arguments("<name>")
+  .summary("Print a variable's value")
+  .description("Print a variable's value: `npx convex env get NAME`")
   .configureHelp({ showGlobalOptions: true })
+  .allowExcessArguments(false)
   .action(async (envVarName, _options, cmd) => {
     const ctx = oneoffContext;
     await ensureHasConvexDependency(ctx, "env get");
@@ -34,45 +56,48 @@ const envGet = new Command("get")
     const deploymentSelection = deploymentSelectionFromOptions(options);
     const { adminKey, url } =
       await fetchDeploymentCredentialsWithinCurrentProject(
-        oneoffContext,
-        deploymentSelection
+        ctx,
+        deploymentSelection,
       );
 
-    const envVar = await runQuery(
-      oneoffContext,
+    const envVar = (await runQuery(
+      ctx,
       url,
       adminKey,
       "_system/cli/queryEnvironmentVariables:get",
-      { name: envVarName }
-    );
+      { name: envVarName },
+    )) as EnvVar | null;
     if (envVar === null) {
-      logFailure(
-        oneoffContext,
-        `Environment variable "${envVarName}" not found.`
-      );
+      logFailure(ctx, `Environment variable "${envVarName}" not found.`);
       return;
     }
-    type EnvVar = {
-      name: string;
-      value: string;
-    };
-    const { name, value } = envVar as EnvVar;
-    logMessage(oneoffContext, `${name}=${value}`);
+    const { value } = envVar;
+    logOutput(ctx, `${value}`);
   });
 
 const envRemove = new Command("remove")
   .alias("rm")
   .arguments("<name>")
+  .summary("Unset a variable")
+  .description(
+    "Unset a variable: `npx convex env remove NAME`\n" +
+      "If the variable doesn't exist, the command doesn't do anything and succeeds.",
+  )
   .configureHelp({ showGlobalOptions: true })
+  .allowExcessArguments(false)
   .action(async (name, _options, cmd) => {
+    const ctx = oneoffContext;
     const options = cmd.optsWithGlobals();
-    await ensureHasConvexDependency(oneoffContext, "env remove");
-    await callUpdateEnvironmentVariables(options, [{ name }]);
-    logMessage(oneoffContext, chalk.green(`Successfully unset ${name}`));
+    await ensureHasConvexDependency(ctx, "env remove");
+    await callUpdateEnvironmentVariables(ctx, options, [{ name }]);
+    logFinishedStep(ctx, `Successfully unset ${chalk.bold(name)}`);
   });
 
 const envList = new Command("list")
+  .summary("List all variables")
+  .description("List all variables: `npx convex env list`")
   .configureHelp({ showGlobalOptions: true })
+  .allowExcessArguments(false)
   .action(async (_options, cmd) => {
     const ctx = oneoffContext;
     await ensureHasConvexDependency(ctx, "env list");
@@ -80,23 +105,23 @@ const envList = new Command("list")
     const deploymentSelection = deploymentSelectionFromOptions(options);
     const { adminKey, url } =
       await fetchDeploymentCredentialsWithinCurrentProject(
-        oneoffContext,
-        deploymentSelection
+        ctx,
+        deploymentSelection,
       );
 
-    type EnvVar = {
-      name: string;
-      value: string;
-    };
     const envs = (await runQuery(
-      oneoffContext,
+      ctx,
       url,
       adminKey,
       "_system/cli/queryEnvironmentVariables",
-      {}
+      {},
     )) as EnvVar[];
+    if (envs.length === 0) {
+      logMessage(ctx, "No environment variables set.");
+      return;
+    }
     for (const { name, value } of envs) {
-      logMessage(oneoffContext, `${name}=${value}`);
+      logOutput(ctx, `${name}=${value}`);
     }
   });
 
@@ -105,42 +130,55 @@ type EnvVarChange = {
   value?: string;
 };
 
+type EnvVar = {
+  name: string;
+  value: string;
+};
+
 async function callUpdateEnvironmentVariables(
+  ctx: Context,
   options: DeploymentSelectionOptions,
-  changes: EnvVarChange[]
+  changes: EnvVarChange[],
 ) {
   const deploymentSelection = deploymentSelectionFromOptions(options);
   const { adminKey, url } =
     await fetchDeploymentCredentialsWithinCurrentProject(
-      oneoffContext,
-      deploymentSelection
+      ctx,
+      deploymentSelection,
     );
   const client = deploymentClient(url);
   const headers = {
     Authorization: `Convex ${adminKey}`,
     "Convex-Client": `npm-cli-${version}`,
   };
-  await client.post(
-    "/api/update_environment_variables",
-    { changes },
-    {
-      headers,
-    }
-  );
+  try {
+    await client.post(
+      "/api/update_environment_variables",
+      { changes },
+      {
+        headers,
+      },
+    );
+  } catch (e) {
+    return await logAndHandleAxiosError(ctx, e);
+  }
 }
 
-export const env = new DeploymentCommand("env")
+export const env = new Command("env")
   .summary("Set and view environment variables")
   .description(
     "Set and view environment variables on your deployment\n\n" +
-      "  Set a variable: `npx convex env set name value`\n" +
-      "  Unset a variable: `npx convex env remove name`\n" +
+      "  Set a variable: `npx convex env set NAME value`\n" +
+      "  Unset a variable: `npx convex env remove NAME`\n" +
       "  List all variables: `npx convex env list`\n" +
-      "  Print a variable's value: `npx convex env get name`\n\n" +
-      "By default, this sets and views variables on your dev deployment."
+      "  Print a variable's value: `npx convex env get NAME`\n\n" +
+      "By default, this sets and views variables on your dev deployment.",
   )
-  .addDeploymentSelectionOptions("Set and view environment variables on")
   .addCommand(envSet)
   .addCommand(envGet)
   .addCommand(envRemove)
-  .addCommand(envList);
+  .addCommand(envList)
+  .addHelpCommand(false)
+  .addDeploymentSelectionOptions(
+    actionDescription("Set and view environment variables on"),
+  );

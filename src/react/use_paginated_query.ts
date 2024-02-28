@@ -160,14 +160,14 @@ const completeSplitQuery =
 export function usePaginatedQuery<Query extends PaginatedQueryReference>(
   query: Query,
   args: PaginatedQueryArgs<Query> | "skip",
-  options: { initialNumItems: number }
+  options: { initialNumItems: number },
 ): UsePaginatedQueryReturnType<Query> {
   if (
     typeof options?.initialNumItems !== "number" ||
     options.initialNumItems < 0
   ) {
     throw new Error(
-      `\`options.initialNumItems\` must be a positive number. Received \`${options?.initialNumItems}\`.`
+      `\`options.initialNumItems\` must be a positive number. Received \`${options?.initialNumItems}\`.`,
     );
   }
   const skip = args === "skip";
@@ -232,7 +232,7 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
 
   const [results, maybeLastResult]: [
     Value[],
-    undefined | PaginationResult<Value>
+    undefined | PaginationResult<Value>,
   ] = useMemo(() => {
     let currResult = undefined;
 
@@ -254,7 +254,7 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
           // existing cursors.
           console.warn(
             "usePaginatedQuery hit error, resetting pagination state: " +
-              currResult.message
+              currResult.message,
           );
           setState(createInitialState);
           return [[], undefined];
@@ -280,7 +280,11 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
         // If a single page has more than double the expected number of items,
         // or if the server requests a split, split the page into two.
         setState(
-          splitQuery(pageKey, currResult.splitCursor, currResult.continueCursor)
+          splitQuery(
+            pageKey,
+            currResult.splitCursor,
+            currResult.continueCursor,
+          ),
         );
       }
       if (currResult.pageStatus === "SplitRequired") {
@@ -523,14 +527,14 @@ export type UsePaginatedQueryReturnType<Query extends PaginatedQueryReference> =
  * @public
  */
 export function optimisticallyUpdateValueInPaginatedQuery<
-  Query extends PaginatedQueryReference
+  Query extends PaginatedQueryReference,
 >(
   localStore: OptimisticLocalStore,
   query: Query,
   args: PaginatedQueryArgs<Query>,
   updateValue: (
-    currentValue: PaginatedQueryItem<Query>
-  ) => PaginatedQueryItem<Query>
+    currentValue: PaginatedQueryItem<Query>,
+  ) => PaginatedQueryItem<Query>,
 ): void {
   const expectedArgs = JSON.stringify(convexToJson(args as Value));
 

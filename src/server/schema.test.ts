@@ -190,8 +190,8 @@ describe("DataModelFromSchemaDefinition", () => {
           }),
           v.object({
             number: v.number(),
-          })
-        )
+          }),
+        ),
       ),
     });
     type DataModel = DataModelFromSchemaDefinition<typeof schema>;
@@ -305,7 +305,7 @@ describe("DataModelFromSchemaDefinition", () => {
       table: defineTable({
         property: v.record(
           v.union(v.literal("foo"), v.literal("bla")),
-          v.optional(v.string())
+          v.optional(v.string()),
         ),
       }),
     });
@@ -381,7 +381,7 @@ describe("DataModelFromSchemaDefinition", () => {
           property: v.string(),
         }),
       },
-      { strictTableNameTypes: false }
+      { strictTableNameTypes: false },
     );
 
     type DataModel = DataModelFromSchemaDefinition<typeof schema>;
@@ -675,8 +675,8 @@ describe("JsonTypesFromSchema", () => {
     const table = defineTable(
       v.union(
         v.object({ a: v.array(v.number()), b: v.optional(v.string()) }),
-        v.object({ c: v.any(), d: v.bytes() })
-      )
+        v.object({ c: v.any(), d: v.bytes() }),
+      ),
     ).export();
     expect(table.documentType).toEqual({
       type: "union",

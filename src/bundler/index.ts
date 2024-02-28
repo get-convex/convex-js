@@ -21,7 +21,7 @@ export const actionsDir = "actions";
 // dirPath itself).
 export function* walkDir(
   fs: Filesystem,
-  dirPath: string
+  dirPath: string,
 ): Generator<{ isDir: boolean; path: string }, void, void> {
   for (const dirEntry of fs.listDir(dirPath).sort()) {
     const childPath = path.join(dirPath, dirEntry.name);
@@ -59,7 +59,7 @@ async function doEsbuild(
   generateSourceMaps: boolean,
   platform: esbuild.Platform,
   chunksFolder: string,
-  externalPackages: Map<string, ExternalPackage>
+  externalPackages: Map<string, ExternalPackage>,
 ): Promise<EsBuildResult> {
   const external = createExternalPlugin(ctx, externalPackages);
   try {
@@ -86,7 +86,7 @@ async function doEsbuild(
 
     for (const [relPath, input] of Object.entries(result.metafile!.inputs)) {
       // TODO: esbuild outputs paths prefixed with "(disabled)"" when bundling our internal
-      // udf-system package. The files do actually exist locally, though.
+      // udf-runtime package. The files do actually exist locally, though.
       if (
         relPath.indexOf("(disabled):") !== -1 ||
         relPath.startsWith("wasm-binary:") ||
@@ -99,7 +99,7 @@ async function doEsbuild(
       if (st.size !== input.bytes) {
         logWarning(
           ctx,
-          `Bundled file ${absPath} changed right after esbuild invocation`
+          `Bundled file ${absPath} changed right after esbuild invocation`,
         );
         // Consider this a transient error so we'll try again and hopefully
         // no files change right after esbuild next time.
@@ -126,7 +126,7 @@ export async function bundle(
   generateSourceMaps: boolean,
   platform: esbuild.Platform,
   chunksFolder = "_deps",
-  externalPackagesAllowList: string[] = []
+  externalPackagesAllowList: string[] = [],
 ): Promise<{
   modules: Bundle[];
   externalDependencies: Map<string, string>;
@@ -134,7 +134,7 @@ export async function bundle(
 }> {
   const availableExternalPackages = await computeExternalPackages(
     ctx,
-    externalPackagesAllowList
+    externalPackagesAllowList,
   );
   const result = await doEsbuild(
     ctx,
@@ -143,7 +143,7 @@ export async function bundle(
     generateSourceMaps,
     platform,
     chunksFolder,
-    availableExternalPackages
+    availableExternalPackages,
   );
   if (result.errors.length) {
     for (const error of result.errors) {
@@ -179,7 +179,7 @@ export async function bundle(
     externalDependencies: await externalPackageVersions(
       ctx,
       availableExternalPackages,
-      result.externalModuleNames
+      result.externalModuleNames,
     ),
     bundledModuleNames: result.bundledModuleNames,
   };
@@ -192,7 +192,7 @@ export async function bundle(
 async function externalPackageVersions(
   ctx: Context,
   availableExternalPackages: Map<string, ExternalPackage>,
-  referencedPackages: Set<string>
+  referencedPackages: Set<string>,
 ): Promise<Map<string, string>> {
   const versions = new Map<string, string>();
   const referencedPackagesQueue = Array.from(referencedPackages.keys());
@@ -228,7 +228,7 @@ export async function bundleSchema(ctx: Context, dir: string) {
     dir,
     [path.resolve(dir, "schema.ts")],
     true,
-    "browser"
+    "browser",
   );
   return result.modules;
 }
@@ -239,7 +239,7 @@ export async function bundleAuthConfig(ctx: Context, dir: string) {
   if (ctx.fs.exists(authConfigPath) && ctx.fs.exists(authConfigTsPath)) {
     logFailure(
       ctx,
-      `Found both ${authConfigPath} and ${authConfigTsPath}, choose one.`
+      `Found both ${authConfigPath} and ${authConfigTsPath}, choose one.`,
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -256,7 +256,7 @@ export async function bundleAuthConfig(ctx: Context, dir: string) {
 export async function entryPoints(
   ctx: Context,
   dir: string,
-  verbose: boolean
+  verbose: boolean,
 ): Promise<string[]> {
   const entryPoints = [];
 
@@ -276,7 +276,7 @@ export async function entryPoints(
     if (relPath.startsWith("_deps" + path.sep)) {
       logFailure(
         ctx,
-        `The path "${fpath}" is within the "_deps" directory, which is reserved for dependencies. Please move your code to another directory.`
+        `The path "${fpath}" is within the "_deps" directory, which is reserved for dependencies. Please move your code to another directory.`,
       );
       return await ctx.crash(1, "invalid filesystem data");
     } else if (relPath.startsWith("_generated" + path.sep)) {
@@ -320,8 +320,8 @@ export async function entryPoints(
     }
     log(
       chalk.yellow(
-        `Skipping ${fpath} because it has no export or import to make it a valid TypeScript module`
-      )
+        `Skipping ${fpath} because it has no export or import to make it a valid TypeScript module`,
+      ),
     );
   });
 
@@ -334,7 +334,7 @@ export const useNodeDirectiveRegex = /^\s*("|')use node("|');?\s*$/;
 function hasUseNodeDirective(
   fs: Filesystem,
   fpath: string,
-  verbose: boolean
+  verbose: boolean,
 ): boolean {
   // Do a quick check for the exact string. If it doesn't exist, don't
   // bother parsing.
@@ -372,7 +372,7 @@ function hasUseNodeDirective(
     if (verbose) {
       // Log that we failed to parse in verbose node if we need this for debugging.
       console.warn(
-        `Failed to parse ${fpath}. Use node is set to ${lineMatches} based on regex. Parse error: ${error.toString()}.`
+        `Failed to parse ${fpath}. Use node is set to ${lineMatches} based on regex. Parse error: ${error.toString()}.`,
       );
     }
 
@@ -383,7 +383,7 @@ function hasUseNodeDirective(
 export function mustBeIsolate(relPath: string): boolean {
   // Check if the path without extension matches any of the static paths.
   return ["http", "crons", "schema", "auth.config"].includes(
-    relPath.replace(/\.[^/.]+$/, "")
+    relPath.replace(/\.[^/.]+$/, ""),
   );
 }
 
@@ -391,7 +391,7 @@ async function determineEnvironment(
   ctx: Context,
   dir: string,
   fpath: string,
-  verbose: boolean
+  verbose: boolean,
 ): Promise<ModuleEnvironment> {
   const relPath = path.relative(dir, fpath);
 
@@ -408,7 +408,7 @@ async function determineEnvironment(
   if (relPath.startsWith(actionsPrefix)) {
     logFailure(
       ctx,
-      `${relPath} is in /actions subfolder but has no "use node"; directive. You can now define actions in any folder and indicate they should run in node by adding "use node" directive. /actions is a deprecated way to choose Node.js environment, and we require "use node" for all files within that folder to avoid unexpected errors during the migration. See https://docs.convex.dev/functions/actions for more details`
+      `${relPath} is in /actions subfolder but has no "use node"; directive. You can now define actions in any folder and indicate they should run in node by adding "use node" directive. /actions is a deprecated way to choose Node.js environment, and we require "use node" for all files within that folder to avoid unexpected errors during the migration. See https://docs.convex.dev/functions/actions for more details`,
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -419,7 +419,7 @@ async function determineEnvironment(
 export async function entryPointsByEnvironment(
   ctx: Context,
   dir: string,
-  verbose: boolean
+  verbose: boolean,
 ) {
   const isolate = [];
   const node = [];
@@ -428,7 +428,7 @@ export async function entryPointsByEnvironment(
       ctx,
       dir,
       entryPoint,
-      verbose
+      verbose,
     );
     if (environment === "node") {
       node.push(entryPoint);

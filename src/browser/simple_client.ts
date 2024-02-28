@@ -117,7 +117,7 @@ export class ConvexClient {
       this._client = new BaseConvexClient(
         address,
         (updatedQueries) => this._transition(updatedQueries),
-        baseOptions
+        baseOptions,
       );
     }
     this.listeners = new Set();
@@ -159,7 +159,7 @@ export class ConvexClient {
     query: Query,
     args: FunctionArgs<Query>,
     callback: (result: FunctionReturnType<Query>) => unknown,
-    onError?: (e: Error) => unknown
+    onError?: (e: Error) => unknown,
   ): Unsubscribe<Query["_returnType"]> {
     if (this.disabled) {
       const disabledUnsubscribe = (() => {}) as Unsubscribe<
@@ -179,7 +179,7 @@ export class ConvexClient {
     // BaseConvexClient takes care of deduplicating queries subscriptions...
     const { queryToken, unsubscribe } = this.client.subscribe(
       getFunctionName(query),
-      args
+      args,
     );
 
     // ...but we still need to bookkeep callbacks to actually call them.
@@ -203,7 +203,7 @@ export class ConvexClient {
     ) {
       this.callNewListenersWithCurrentValuesTimer = setTimeout(
         () => this.callNewListenersWithCurrentValues(),
-        0
+        0,
       );
     }
 
@@ -257,14 +257,14 @@ export class ConvexClient {
    */
   setAuth(
     fetchToken: AuthTokenFetcher,
-    onChange?: (isAuthenticated: boolean) => void
+    onChange?: (isAuthenticated: boolean) => void,
   ) {
     this.client.setAuth(
       fetchToken,
       onChange ??
         (() => {
           // Do nothing
-        })
+        }),
     );
   }
 
@@ -303,7 +303,7 @@ export class ConvexClient {
           if (onError) {
             onError(
               error,
-              "Second argument to onUpdate onError is reserved for later use"
+              "Second argument to onUpdate onError is reserved for later use",
             );
           } else {
             // Make some noise without unsubscribing or failing to call other callbacks.
@@ -313,7 +313,7 @@ export class ConvexClient {
         }
         callback(
           newValue,
-          "Second argument to onUpdate callback is reserved for later use"
+          "Second argument to onUpdate callback is reserved for later use",
         );
       }
     }
@@ -330,7 +330,7 @@ export class ConvexClient {
    */
   async mutation<Mutation extends FunctionReference<"mutation">>(
     mutation: Mutation,
-    args: FunctionArgs<Mutation>
+    args: FunctionArgs<Mutation>,
   ): Promise<Awaited<FunctionReturnType<Mutation>>> {
     if (this.disabled) throw new Error("ConvexClient is disabled");
     return await this.client.mutation(getFunctionName(mutation), args);
@@ -346,7 +346,7 @@ export class ConvexClient {
    */
   async action<Action extends FunctionReference<"action">>(
     action: Action,
-    args: FunctionArgs<Action>
+    args: FunctionArgs<Action>,
   ): Promise<Awaited<FunctionReturnType<Action>>> {
     if (this.disabled) throw new Error("ConvexClient is disabled");
     return await this.client.action(getFunctionName(action), args);
@@ -362,7 +362,7 @@ export class ConvexClient {
    */
   async query<Query extends FunctionReference<"query">>(
     query: Query,
-    args: Query["_args"]
+    args: Query["_args"],
   ): Promise<Awaited<Query["_returnType"]>> {
     if (this.disabled) throw new Error("ConvexClient is disabled");
     const value = this.client.localQueryResult(getFunctionName(query), args) as
@@ -381,7 +381,7 @@ export class ConvexClient {
         (e: Error) => {
           unsubscribe();
           reject(e);
-        }
+        },
       );
     });
   }

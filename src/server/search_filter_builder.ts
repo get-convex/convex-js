@@ -21,7 +21,7 @@ import {
  */
 export interface SearchFilterBuilder<
   Document extends GenericDocument,
-  SearchIndexConfig extends GenericSearchIndexConfig
+  SearchIndexConfig extends GenericSearchIndexConfig,
 > {
   /**
    * Search for the terms in `query` within `doc[fieldName]`.
@@ -41,7 +41,7 @@ export interface SearchFilterBuilder<
    */
   search(
     fieldName: SearchIndexConfig["searchField"],
-    query: string
+    query: string,
   ): SearchFilterFinalizer<Document, SearchIndexConfig>;
 }
 
@@ -54,7 +54,7 @@ export interface SearchFilterBuilder<
  */
 export interface SearchFilterFinalizer<
   Document extends GenericDocument,
-  SearchIndexConfig extends GenericSearchIndexConfig
+  SearchIndexConfig extends GenericSearchIndexConfig,
 > extends SearchFilter {
   /**
    * Restrict this query to documents where `doc[fieldName] === value`.
@@ -65,7 +65,7 @@ export interface SearchFilterFinalizer<
    */
   eq<FieldName extends SearchIndexConfig["filterFields"]>(
     fieldName: FieldName,
-    value: FieldTypeFromFieldPath<Document, FieldName>
+    value: FieldTypeFromFieldPath<Document, FieldName>,
   ): SearchFilterFinalizer<Document, SearchIndexConfig>;
 }
 

@@ -23,13 +23,13 @@ const cjsBrowserIndexNode = path.join(
   distDir,
   "cjs",
   "browser",
-  "index-node.js"
+  "index-node.js",
 );
 const esmBrowserIndexNode = path.join(
   distDir,
   "esm",
   "browser",
-  "index-node.js"
+  "index-node.js",
 );
 
 let output = fs.readFileSync(cjsBrowserIndex, { encoding: "utf-8" });

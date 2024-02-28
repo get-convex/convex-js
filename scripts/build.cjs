@@ -37,7 +37,7 @@ const [tempDir] = process.argv
 if (process.argv.includes("esm")) {
   const opts = {
     entryPoints: allSourceFiles.filter(
-      (f) => !f.includes("simple_client-node")
+      (f) => !f.includes("simple_client-node"),
     ),
     bundle: false,
     sourcemap: true,
@@ -71,7 +71,7 @@ if (process.argv.includes("esm")) {
 if (process.argv.includes("cjs")) {
   const opts = {
     entryPoints: allSourceFiles.filter(
-      (f) => !f.includes("simple_client-node")
+      (f) => !f.includes("simple_client-node"),
     ),
     format: "cjs",
     bundle: false,

@@ -89,7 +89,7 @@ test.each([
       usePaginatedQuery(makeFunctionReference<"query">("myQuery"), {}, options),
     {
       wrapper,
-    }
+    },
   );
   expect(lastError).not.toBeUndefined();
   expect(lastError!.toString()).toEqual(expectedError);
@@ -107,7 +107,7 @@ test("Returns nothing when args are 'skip'", () => {
       usePaginatedQuery(makeFunctionReference<"query">("myQuery"), "skip", {
         initialNumItems: 10,
       }),
-    { wrapper }
+    { wrapper },
   );
 
   expect(watchQuerySpy.mock.calls).toEqual([]);
@@ -130,9 +130,9 @@ test("Initially returns LoadingFirstPage", () => {
       usePaginatedQuery(
         makeFunctionReference<"query">("myQuery"),
         {},
-        { initialNumItems: 10 }
+        { initialNumItems: 10 },
       ),
-    { wrapper }
+    { wrapper },
   );
 
   expect(watchQuerySpy.mock.calls[1]).toEqual([
@@ -160,7 +160,7 @@ test("Updates to a new query if query name or args change", () => {
   let args: [
     query: FunctionReference<"query">,
     args: Record<string, Value>,
-    options: { initialNumItems: number }
+    options: { initialNumItems: number },
   ] = [makeFunctionReference("myQuery"), {}, { initialNumItems: 10 }];
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <ConvexProvider client={convexClient}>{children}</ConvexProvider>
@@ -240,7 +240,7 @@ describe("usePaginatedQuery pages", () => {
   const query: FunctionReference<"query"> = makeFunctionReference("myQuery");
   const mockPage = (
     opts: PaginationOptions,
-    retval: PaginationResult<unknown>
+    retval: PaginationResult<unknown>,
   ) => {
     act(() => {
       // Set a query result with an optimistic update.
@@ -256,10 +256,10 @@ describe("usePaginatedQuery pages", () => {
               {
                 paginationOpts: { ...opts, id: 1 },
               },
-              retval
+              retval,
             );
           },
-        }
+        },
       );
     });
   };
@@ -272,7 +272,7 @@ describe("usePaginatedQuery pages", () => {
   test("loadMore", () => {
     const { result } = renderHook(
       () => usePaginatedQuery(query, {}, { initialNumItems: 1 }),
-      { wrapper }
+      { wrapper },
     );
     mockPage(
       {
@@ -283,7 +283,7 @@ describe("usePaginatedQuery pages", () => {
         page: ["item1"],
         continueCursor: "abc",
         isDone: false,
-      }
+      },
     );
     mockPage(
       {
@@ -294,7 +294,7 @@ describe("usePaginatedQuery pages", () => {
         page: ["item2"],
         continueCursor: "def",
         isDone: true,
-      }
+      },
     );
     expect(result.current.status).toStrictEqual("CanLoadMore");
     expect(result.current.results).toStrictEqual(["item1"]);
@@ -308,7 +308,7 @@ describe("usePaginatedQuery pages", () => {
   test("single page updating", () => {
     const { result } = renderHook(
       () => usePaginatedQuery(query, {}, { initialNumItems: 1 }),
-      { wrapper }
+      { wrapper },
     );
     mockPage(
       {
@@ -319,7 +319,7 @@ describe("usePaginatedQuery pages", () => {
         page: ["item1"],
         continueCursor: "abc",
         isDone: true,
-      }
+      },
     );
     expect(result.current.status).toStrictEqual("Exhausted");
     expect(result.current.results).toStrictEqual(["item1"]);
@@ -332,7 +332,7 @@ describe("usePaginatedQuery pages", () => {
         page: ["item2", "item3"],
         continueCursor: "def",
         isDone: true,
-      }
+      },
     );
     expect(result.current.status).toStrictEqual("Exhausted");
     expect(result.current.results).toStrictEqual(["item2", "item3"]);
@@ -341,7 +341,7 @@ describe("usePaginatedQuery pages", () => {
   test("page split", () => {
     const { result } = renderHook(
       () => usePaginatedQuery(query, {}, { initialNumItems: 1 }),
-      { wrapper }
+      { wrapper },
     );
     mockPage(
       {
@@ -353,7 +353,7 @@ describe("usePaginatedQuery pages", () => {
         continueCursor: "abc",
         splitCursor: "mid",
         isDone: true,
-      }
+      },
     );
     expect(result.current.status).toStrictEqual("Exhausted");
     expect(result.current.results).toStrictEqual([
@@ -372,7 +372,7 @@ describe("usePaginatedQuery pages", () => {
         page: ["item1S", "item2S"],
         continueCursor: "mid",
         isDone: false,
-      }
+      },
     );
     mockPage(
       {
@@ -384,7 +384,7 @@ describe("usePaginatedQuery pages", () => {
         page: ["item3S", "item4S"],
         continueCursor: "abc",
         isDone: true,
-      }
+      },
     );
     expect(result.current.status).toStrictEqual("Exhausted");
     expect(result.current.results).toStrictEqual([

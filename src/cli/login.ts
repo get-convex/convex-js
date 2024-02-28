@@ -1,4 +1,4 @@
-import { Command, Option } from "commander";
+import { Command, Option } from "@commander-js/extra-typings";
 import { logFinishedStep, oneoffContext } from "../bundler/context.js";
 import { checkAuthorization, performLogin } from "./lib/login.js";
 
@@ -6,15 +6,15 @@ export const login = new Command("login")
   .description("Login to Convex")
   .option(
     "--device-name <name>",
-    "Provide a name for the device being authorized"
+    "Provide a name for the device being authorized",
   )
   .option(
     "-f, --force",
-    "Proceed with login even if a valid access token already exists for this device"
+    "Proceed with login even if a valid access token already exists for this device",
   )
   .option(
     "--no-open",
-    "Don't automatically open the login link in the default browser"
+    "Don't automatically open the login link in the default browser",
   )
   // These options are hidden from the help/usage message, but allow overriding settings for testing.
   // Change the auth credentials with the auth provider
@@ -32,17 +32,17 @@ export const login = new Command("login")
     const ctx = oneoffContext;
     if (
       !options.force &&
-      (await checkAuthorization(ctx, options.acceptOptIns))
+      (await checkAuthorization(ctx, !!options.acceptOptIns))
     ) {
       logFinishedStep(
         ctx,
-        "This device has previously been authorized and is ready for use with Convex."
+        "This device has previously been authorized and is ready for use with Convex.",
       );
       return;
     }
     if (!!options.overrideAuthUsername !== !!options.overrideAuthPassword) {
       cmd.error(
-        "If overriding credentials, both username and password must be provided"
+        "If overriding credentials, both username and password must be provided",
       );
     }
 

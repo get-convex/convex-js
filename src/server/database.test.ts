@@ -36,7 +36,7 @@ test("DatabaseWriter has the right types for a simple data model", () => {
       body?: string;
       _id?: GenericId<"tableName">;
       _creationTime?: number;
-    }
+    },
   ];
   assert<Equals<PatchType, ExpectedPatchType>>();
 
@@ -47,7 +47,7 @@ test("DatabaseWriter has the right types for a simple data model", () => {
       body: string;
       _id?: GenericId<"tableName">;
       _creationTime?: number;
-    }
+    },
   ];
   assert<Equals<ReplaceType, ExpectedReplaceType>>();
 });
@@ -73,7 +73,7 @@ test("DatabaseWriter has the right types for a union", () => {
   type InsertType = Parameters<DB["insert"]>;
   type Expected = [
     "tableName",
-    { type: "text"; body: string } | { type: "giphy" }
+    { type: "text"; body: string } | { type: "giphy" },
   ];
   assert<Equals<InsertType, Expected>>();
 
@@ -87,7 +87,11 @@ test("DatabaseWriter has the right types for a union", () => {
           _id?: GenericId<"tableName">;
           _creationTime?: number;
         }
-      | { type?: "giphy"; _id?: GenericId<"tableName">; _creationTime?: number }
+      | {
+          type?: "giphy";
+          _id?: GenericId<"tableName">;
+          _creationTime?: number;
+        },
   ];
   assert<Equals<PatchType, ExpectedPatchType>>();
 
@@ -101,7 +105,7 @@ test("DatabaseWriter has the right types for a union", () => {
           _id?: GenericId<"tableName">;
           _creationTime?: number;
         }
-      | { type: "giphy"; _id?: GenericId<"tableName">; _creationTime?: number }
+      | { type: "giphy"; _id?: GenericId<"tableName">; _creationTime?: number },
   ];
   assert<Equals<ReplaceType, ExpectedReplaceType>>();
 });
@@ -120,7 +124,7 @@ test("DatabaseWriter has the right types with loose data model", () => {
   type InsertType = Parameters<DB["insert"]>;
   type ExpectedInsertType = [
     table: "tableName",
-    value: { body: string; [propertyName: string]: any }
+    value: { body: string; [propertyName: string]: any },
   ];
   assert<Equals<InsertType, ExpectedInsertType>>();
 
@@ -132,7 +136,7 @@ test("DatabaseWriter has the right types with loose data model", () => {
       _id?: GenericId<"tableName">;
       _creationTime?: number;
       [propertyName: string]: any;
-    }
+    },
   ];
   assert<Equals<PatchType, ExpectedPatchType>>();
 
@@ -144,7 +148,7 @@ test("DatabaseWriter has the right types with loose data model", () => {
       _id?: GenericId<"tableName">;
       _creationTime?: number;
       [propertyName: string]: any;
-    }
+    },
   ];
   assert<Equals<ReplaceType, ExpectedReplaceType>>();
 });

@@ -4,12 +4,12 @@ import { readmeCodegen } from "./readme.js";
 
 import prettier from "prettier";
 
-test("templates parse", () => {
-  prettier.format(tsconfigCodegen(), {
+test("templates parse", async () => {
+  await prettier.format(tsconfigCodegen(), {
     parser: "json",
     pluginSearchDirs: false,
   });
-  prettier.format(readmeCodegen(), {
+  await prettier.format(readmeCodegen(), {
     parser: "markdown",
     pluginSearchDirs: false,
   });

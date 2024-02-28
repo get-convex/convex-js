@@ -105,7 +105,7 @@ export function slowBase64ToBigInt(encoded: string): bigint {
   const integerBytes = Base64.toByteArray(encoded);
   if (integerBytes.byteLength !== 8) {
     throw new Error(
-      `Received ${integerBytes.byteLength} bytes, expected 8 for $integer`
+      `Received ${integerBytes.byteLength} bytes, expected 8 for $integer`,
     );
   }
   let value = ZERO;
@@ -123,7 +123,7 @@ export function slowBase64ToBigInt(encoded: string): bigint {
 export function modernBigIntToBase64(value: bigint): string {
   if (value < MIN_INT64 || MAX_INT64 < value) {
     throw new Error(
-      `BigInt ${value} does not fit into a 64-bit signed integer.`
+      `BigInt ${value} does not fit into a 64-bit signed integer.`,
     );
   }
   const buffer = new ArrayBuffer(8);
@@ -135,7 +135,7 @@ export function modernBase64ToBigInt(encoded: string): bigint {
   const integerBytes = Base64.toByteArray(encoded);
   if (integerBytes.byteLength !== 8) {
     throw new Error(
-      `Received ${integerBytes.byteLength} bytes, expected 8 for $integer`
+      `Received ${integerBytes.byteLength} bytes, expected 8 for $integer`,
     );
   }
   const intBytesView = new DataView(integerBytes.buffer);
@@ -158,7 +158,7 @@ function validateObjectField(k: string) {
   }
   if (k.length > MAX_IDENTIFIER_LEN) {
     throw new Error(
-      `Field name ${k} exceeds maximum field name length ${MAX_IDENTIFIER_LEN}.`
+      `Field name ${k} exceeds maximum field name length ${MAX_IDENTIFIER_LEN}.`,
     );
   }
   if (k.startsWith("$")) {
@@ -169,16 +169,25 @@ function validateObjectField(k: string) {
     // Non-control ASCII characters
     if (charCode < 32 || charCode >= 127) {
       throw new Error(
-        `Field name ${k} has invalid character '${k[i]}': Field names can only contain non-control ASCII characters`
+        `Field name ${k} has invalid character '${k[i]}': Field names can only contain non-control ASCII characters`,
       );
     }
   }
 }
 
-function jsonToConvexInternal(
-  value: JSONValue,
-  allowMapsAndSets: boolean
-): Value {
+/**
+ * Parse a Convex value from its JSON representation.
+ *
+ * This function will deserialize serialized Int64s to `BigInt`s, Bytes to `ArrayBuffer`s etc.
+ *
+ * To learn more about Convex values, see [Types](https://docs.convex.dev/using/types).
+ *
+ * @param value - The JSON representation of a Convex value previously created with {@link convexToJson}.
+ * @returns The JavaScript representation of the Convex value.
+ *
+ * @public
+ */
+export function jsonToConvex(value: JSONValue): Value {
   if (value === null) {
     return value;
   }
@@ -192,7 +201,7 @@ function jsonToConvexInternal(
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((value) => jsonToConvexInternal(value, allowMapsAndSets));
+    return value.map((value) => jsonToConvex(value));
   }
   if (typeof value !== "object") {
     throw new Error(`Unexpected type of ${value as any}`);
@@ -219,7 +228,7 @@ function jsonToConvexInternal(
       const floatBytes = Base64.toByteArray(value.$float);
       if (floatBytes.byteLength !== 8) {
         throw new Error(
-          `Received ${floatBytes.byteLength} bytes, expected 8 for $float`
+          `Received ${floatBytes.byteLength} bytes, expected 8 for $float`,
         );
       }
       const floatBytesView = new DataView(floatBytes.buffer);
@@ -230,69 +239,22 @@ function jsonToConvexInternal(
       return float;
     }
     if (key === "$set") {
-      if (!Array.isArray(value.$set)) {
-        throw new Error(`Malformed $set field on ${value as any}`);
-      }
-      if (!allowMapsAndSets) {
-        throw new Error(
-          `Received a Set which is no longer supported as a Convex type, with values: ${value.$set.join(
-            ", "
-          )}.`
-        );
-      }
-      return new Set(
-        value.$set.map((value) => jsonToConvexInternal(value, allowMapsAndSets))
-      ) as any;
+      throw new Error(
+        `Received a Set which is no longer supported as a Convex type.`,
+      );
     }
     if (key === "$map") {
-      if (!Array.isArray(value.$map)) {
-        throw new Error(`Malformed $map field on ${value as any}`);
-      }
-      if (!allowMapsAndSets) {
-        throw new Error(
-          `Received a Map which is no longer supported as a Convex type, with entries: ${value.$map.join(
-            ", "
-          )}.`
-        );
-      }
-      const map = new Map();
-      for (const pair of value.$map) {
-        if (!Array.isArray(pair) || pair.length !== 2) {
-          throw new Error(`Malformed pair in $map ${value as any}`);
-        }
-        const k = jsonToConvexInternal(pair[0], allowMapsAndSets);
-        const v = jsonToConvexInternal(pair[1], allowMapsAndSets);
-        map.set(k, v);
-      }
-      return map as any;
+      throw new Error(
+        `Received a Map which is no longer supported as a Convex type.`,
+      );
     }
   }
   const out: { [key: string]: Value } = {};
   for (const [k, v] of Object.entries(value)) {
     validateObjectField(k);
-    out[k] = jsonToConvexInternal(v, allowMapsAndSets);
+    out[k] = jsonToConvex(v);
   }
   return out;
-}
-
-/**
- * Parse a Convex value from its JSON representation.
- *
- * This function will deserialize serialized Int64s to `BigInt`s, Bytes to `ArrayBuffer`s etc.
- *
- * To learn more about Convex values, see [Types](https://docs.convex.dev/using/types).
- *
- * @param value - The JSON representation of a Convex value previously created with {@link convexToJson}.
- * @returns The JavaScript representation of the Convex value.
- *
- * @public
- */
-export function jsonToConvex(
-  value: JSONValue,
-  /** @internal */
-  allowMapsAndSets = false
-): Value {
-  return jsonToConvexInternal(value, allowMapsAndSets);
 }
 
 export function stringifyValueForError(value: any) {
@@ -318,17 +280,15 @@ function convexToJsonInternal(
   originalValue: Value,
   context: string,
   includeTopLevelUndefined: boolean,
-  // Used to support old versions that allowed Maps and Sets
-  allowMapsAndSets: boolean
 ): JSONValue {
   if (value === undefined) {
     const contextText =
       context &&
       ` (present at path ${context} in original object ${stringifyValueForError(
-        originalValue
+        originalValue,
       )})`;
     throw new Error(
-      `undefined is not a valid Convex value${contextText}. To learn about Convex's supported types, see https://docs.convex.dev/using/types.`
+      `undefined is not a valid Convex value${contextText}. To learn about Convex's supported types, see https://docs.convex.dev/using/types.`,
     );
   }
   if (value === null) {
@@ -337,7 +297,7 @@ function convexToJsonInternal(
   if (typeof value === "bigint") {
     if (value < MIN_INT64 || MAX_INT64 < value) {
       throw new Error(
-        `BigInt ${value} does not fit into a 64-bit signed integer.`
+        `BigInt ${value} does not fit into a 64-bit signed integer.`,
       );
     }
     return { $integer: bigIntToBase64(value) };
@@ -362,75 +322,25 @@ function convexToJsonInternal(
   }
   if (Array.isArray(value)) {
     return value.map((value, i) =>
-      convexToJsonInternal(
-        value,
-        originalValue,
-        context + `[${i}]`,
-        false,
-        allowMapsAndSets
-      )
+      convexToJsonInternal(value, originalValue, context + `[${i}]`, false),
     );
   }
   if (value instanceof Set) {
-    if (!allowMapsAndSets) {
-      throw new Error(
-        errorMessageForUnsupportedType(
-          context,
-          "Set",
-          [...value],
-          originalValue
-        )
-      );
-    }
-    return {
-      $set: [...value].map((value, i) =>
-        convexToJsonInternal(
-          value,
-          originalValue,
-          context + `.keys()[${i}]`,
-          false,
-          allowMapsAndSets
-        )
-      ),
-    };
+    throw new Error(
+      errorMessageForUnsupportedType(context, "Set", [...value], originalValue),
+    );
   }
   if (value instanceof Map) {
-    if (!allowMapsAndSets) {
-      throw new Error(
-        errorMessageForUnsupportedType(
-          context,
-          "Map",
-          [...value],
-          originalValue
-        )
-      );
-    }
-    return {
-      $map: [...value].map(([k, v], i) => {
-        const jsonKey = convexToJsonInternal(
-          k,
-          originalValue,
-          context + `.keys()[${i}]`,
-          false,
-          allowMapsAndSets
-        );
-        const jsonValue = convexToJsonInternal(
-          v,
-          originalValue,
-          context + `.values()[${i}]`,
-          false,
-          allowMapsAndSets
-        );
-        return [jsonKey, jsonValue];
-      }),
-    };
+    throw new Error(
+      errorMessageForUnsupportedType(context, "Map", [...value], originalValue),
+    );
   }
 
   if (!isSimpleObject(value)) {
     const theType = value?.constructor?.name;
     const typeName = theType ? `${theType} ` : "";
     throw new Error(
-      errorMessageForUnsupportedType(context, typeName, value, originalValue)
+      errorMessageForUnsupportedType(context, typeName, value, originalValue),
     );
   }
 
@@ -440,19 +350,13 @@ function convexToJsonInternal(
   for (const [k, v] of entries) {
     if (v !== undefined) {
       validateObjectField(k);
-      out[k] = convexToJsonInternal(
-        v,
-        originalValue,
-        context + `.${k}`,
-        false,
-        allowMapsAndSets
-      );
+      out[k] = convexToJsonInternal(v, originalValue, context + `.${k}`, false);
     } else if (includeTopLevelUndefined) {
       validateObjectField(k);
       out[k] = convexOrUndefinedToJsonInternal(
         v,
         originalValue,
-        context + `.${k}`
+        context + `.${k}`,
       );
     }
   }
@@ -463,17 +367,17 @@ function errorMessageForUnsupportedType(
   context: string,
   typeName: string,
   value: any,
-  originalValue: any
+  originalValue: any,
 ) {
   if (context) {
     return `${typeName}${stringifyValueForError(
-      value
+      value,
     )} is not a supported Convex type (present at path ${context} in original object ${stringifyValueForError(
-      originalValue
+      originalValue,
     )}). To learn about Convex's supported types, see https://docs.convex.dev/using/types.`;
   } else {
     return `${typeName}${stringifyValueForError(
-      value
+      value,
     )} is not a supported Convex type.`;
   }
 }
@@ -483,7 +387,7 @@ function errorMessageForUnsupportedType(
 function convexOrUndefinedToJsonInternal(
   value: Value | undefined,
   originalValue: Value | undefined,
-  context: string
+  context: string,
 ): JSONValue {
   if (value === undefined) {
     return { $undefined: null };
@@ -492,11 +396,11 @@ function convexOrUndefinedToJsonInternal(
       // This should not happen.
       throw new Error(
         `Programming error. Current value is ${stringifyValueForError(
-          value
-        )} but original value is undefined`
+          value,
+        )} but original value is undefined`,
       );
     }
-    return convexToJsonInternal(value, originalValue, context, false, false);
+    return convexToJsonInternal(value, originalValue, context, false);
   }
 }
 
@@ -512,12 +416,8 @@ function convexOrUndefinedToJsonInternal(
  *
  * @public
  */
-export function convexToJson(
-  value: Value,
-  /** @internal */
-  allowMapsAndSets = false
-): JSONValue {
-  return convexToJsonInternal(value, value, "", false, allowMapsAndSets);
+export function convexToJson(value: Value): JSONValue {
+  return convexToJsonInternal(value, value, "", false);
 }
 
 // Convert a Convex value or `undefined` into its JSON representation.
@@ -534,5 +434,5 @@ export function convexOrUndefinedToJson(value: Value | undefined): JSONValue {
  * @returns The JSON representation of `value`.
  */
 export function patchValueToJson(value: Value): JSONValue {
-  return convexToJsonInternal(value, value, "", true, false);
+  return convexToJsonInternal(value, value, "", true);
 }

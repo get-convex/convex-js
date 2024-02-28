@@ -51,7 +51,7 @@ export function setupStorageWriter(requestId: string): StorageWriter {
 }
 
 export function setupStorageActionWriter(
-  requestId: string
+  requestId: string,
 ): StorageActionWriter {
   const writer = setupStorageWriter(requestId);
   return {

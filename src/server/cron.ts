@@ -227,7 +227,7 @@ function validatedCronString(s: string) {
 function validatedCronIdentifier(s: string) {
   if (!s.match(/^[ -~]*$/)) {
     throw new Error(
-      `Invalid cron identifier ${s}: use ASCII letters that are not control characters`
+      `Invalid cron identifier ${s}: use ASCII letters that are not control characters`,
     );
   }
   return s;
@@ -253,7 +253,7 @@ export class Crons {
     cronIdentifier: string,
     schedule: Schedule,
     functionReference: SchedulableFunctionReference,
-    args?: Record<string, Value>
+    args?: Record<string, Value>,
   ) {
     const cronArgs = parseArgs(args);
     validatedCronIdentifier(cronIdentifier);
@@ -305,7 +305,7 @@ export class Crons {
       cronIdentifier,
       { ...schedule, type: "interval" },
       functionReference,
-      ...args
+      ...args,
     );
   }
 
@@ -340,7 +340,7 @@ export class Crons {
       cronIdentifier,
       { minuteUTC, type: "hourly" },
       functionReference,
-      ...args
+      ...args,
     );
   }
 
@@ -376,7 +376,7 @@ export class Crons {
       cronIdentifier,
       { hourUTC, minuteUTC, type: "daily" },
       functionReference,
-      ...args
+      ...args,
     );
   }
 
@@ -412,7 +412,7 @@ export class Crons {
       cronIdentifier,
       { dayOfWeek, hourUTC, minuteUTC, type: "weekly" },
       functionReference,
-      ...args
+      ...args,
     );
   }
 
@@ -453,7 +453,7 @@ export class Crons {
       cronIdentifier,
       { day, hourUTC, minuteUTC, type: "monthly" },
       functionReference,
-      ...args
+      ...args,
     );
   }
 
@@ -488,7 +488,7 @@ export class Crons {
       cronIdentifier,
       { cron: c, type: "cron" },
       functionReference,
-      ...args
+      ...args,
     );
   }
 

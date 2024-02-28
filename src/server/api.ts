@@ -51,7 +51,7 @@ export type FunctionReference<
   Type extends FunctionType,
   Visibility extends FunctionVisibility = "public",
   Args extends DefaultFunctionArgs = any,
-  ReturnType = any
+  ReturnType = any,
 > = {
   _type: Type;
   _visibility: Visibility;
@@ -77,7 +77,7 @@ const functionName = Symbol.for("functionName");
  * @public
  */
 export function getFunctionName(
-  functionReference: AnyFunctionReference
+  functionReference: AnyFunctionReference,
 ): string {
   // Both a legacy thing and also a convenience for interactive use:
   // the types won't check but a string is always allowed at runtime.
@@ -107,7 +107,7 @@ export function getFunctionName(
 export function makeFunctionReference<
   type extends FunctionType,
   args extends DefaultFunctionArgs = any,
-  ret = any
+  ret = any,
 >(name: string): FunctionReference<type, "public", args, ret> {
   return { [functionName]: name } as unknown as FunctionReference<
     type,
@@ -137,7 +137,7 @@ function createApi(pathParts: string[] = []): AnyApi {
         if (pathParts.length < 2) {
           const found = ["api", ...pathParts].join(".");
           throw new Error(
-            `API path is expected to be of the form \`api.moduleName.functionName\`. Found: \`${found}\``
+            `API path is expected to be of the form \`api.moduleName.functionName\`. Found: \`${found}\``,
           );
         }
         const path = pathParts.slice(0, -1).join("/");
@@ -166,18 +166,28 @@ export type FunctionReferenceFromExport<Export> =
   Export extends RegisteredQuery<infer Visibility, infer Args, infer Output>
     ? FunctionReference<"query", Visibility, Args, ConvertReturnType<Output>>
     : Export extends RegisteredMutation<
-        infer Visibility,
-        infer Args,
-        infer Output
-      >
-    ? FunctionReference<"mutation", Visibility, Args, ConvertReturnType<Output>>
-    : Export extends RegisteredAction<
-        infer Visibility,
-        infer Args,
-        infer Output
-      >
-    ? FunctionReference<"action", Visibility, Args, ConvertReturnType<Output>>
-    : never;
+          infer Visibility,
+          infer Args,
+          infer Output
+        >
+      ? FunctionReference<
+          "mutation",
+          Visibility,
+          Args,
+          ConvertReturnType<Output>
+        >
+      : Export extends RegisteredAction<
+            infer Visibility,
+            infer Args,
+            infer Output
+          >
+        ? FunctionReference<
+            "action",
+            Visibility,
+            Args,
+            ConvertReturnType<Output>
+          >
+        : never;
 
 /**
  * Given a module, convert all the Convex functions into
@@ -201,7 +211,7 @@ type FunctionReferencesInModule<Module extends Record<string, any>> = {
  */
 type ApiForModule<
   ModulePath extends string,
-  Module extends object
+  Module extends object,
 > = ModulePath extends `${infer First}/${infer Second}`
   ? {
       [_ in First]: ApiForModule<Second, Module>;
@@ -246,10 +256,10 @@ export type FilterApi<API, Predicate> = Expand<{
   [mod in keyof API as API[mod] extends Predicate
     ? mod
     : API[mod] extends FunctionReference<any, any, any, any>
-    ? never
-    : FilterApi<API[mod], Predicate> extends Record<string, never>
-    ? never
-    : mod]: API[mod] extends Predicate
+      ? never
+      : FilterApi<API[mod], Predicate> extends Record<string, never>
+        ? never
+        : mod]: API[mod] extends Predicate
     ? API[mod]
     : FilterApi<API[mod], Predicate>;
 }>;
@@ -271,42 +281,42 @@ export function filterApi<API, Predicate>(api: API): FilterApi<API, Predicate> {
 // These just* API filter helpers require no type parameters so are useable from JavaScript.
 /** @public */
 export function justInternal<API>(
-  api: API
+  api: API,
 ): FilterApi<API, FunctionReference<any, "internal", any, any>> {
   return api as any;
 }
 
 /** @public */
 export function justPublic<API>(
-  api: API
+  api: API,
 ): FilterApi<API, FunctionReference<any, "public", any, any>> {
   return api as any;
 }
 
 /** @public */
 export function justQueries<API>(
-  api: API
+  api: API,
 ): FilterApi<API, FunctionReference<"query", any, any, any>> {
   return api as any;
 }
 
 /** @public */
 export function justMutations<API>(
-  api: API
+  api: API,
 ): FilterApi<API, FunctionReference<"mutation", any, any, any>> {
   return api as any;
 }
 
 /** @public */
 export function justActions<API>(
-  api: API
+  api: API,
 ): FilterApi<API, FunctionReference<"action", any, any, any>> {
   return api as any;
 }
 
 /** @public */
 export function justPaginatedQueries<API>(
-  api: API
+  api: API,
 ): FilterApi<
   API,
   FunctionReference<
@@ -321,7 +331,7 @@ export function justPaginatedQueries<API>(
 
 /** @public */
 export function justSchedulable<API>(
-  api: API
+  api: API,
 ): FilterApi<API, FunctionReference<"mutation" | "action", any, any, any>> {
   return api as any;
 }
@@ -425,7 +435,7 @@ export type OptionalRestArgs<FuncRef extends AnyFunctionReference> =
  */
 export type ArgsAndOptions<
   FuncRef extends AnyFunctionReference,
-  Options
+  Options,
 > = FuncRef["_args"] extends EmptyObject
   ? [args?: EmptyObject, options?: Options]
   : [args: FuncRef["_args"], options?: Options];

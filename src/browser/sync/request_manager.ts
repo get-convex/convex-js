@@ -39,7 +39,7 @@ export class RequestManager {
 
   request(
     message: MutationRequest | ActionRequest,
-    sent: boolean
+    sent: boolean,
   ): Promise<FunctionResult> {
     const result = new Promise<FunctionResult>((resolve) => {
       const status = sent ? "Requested" : "NotSent";
@@ -102,7 +102,7 @@ export class RequestManager {
         status.onResult({
           success: true,
           logLines: response.logLines,
-          value: jsonToConvex(response.result, true),
+          value: jsonToConvex(response.result),
         });
     } else {
       const errorMessage = response.result as string;

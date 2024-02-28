@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command } from "@commander-js/extra-typings";
 import { logFinishedStep, oneoffContext } from "../bundler/context.js";
 import { rootDirectory } from "./lib/utils.js";
 
@@ -12,6 +12,6 @@ export const logout = new Command("logout")
 
     logFinishedStep(
       ctx,
-      "You have been logged out of Convex.\n  Run `npx convex dev` to log in."
+      "You have been logged out of Convex.\n  Run `npx convex dev` to log in.",
     );
   });

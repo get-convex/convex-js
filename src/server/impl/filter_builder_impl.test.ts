@@ -4,7 +4,7 @@ import { filterBuilderImpl } from "./filter_builder_impl.js";
 test("Serialize expression with literals", () => {
   const predicate = filterBuilderImpl.and(
     filterBuilderImpl.eq(filterBuilderImpl.field("test"), 3),
-    true as any
+    true as any,
   );
   const expected = {
     $and: [{ $eq: [{ $field: "test" }, { $literal: 3 }] }, { $literal: true }],

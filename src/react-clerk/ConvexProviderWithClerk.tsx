@@ -26,7 +26,7 @@ type UseAuth = () => {
  * authenticated with Clerk.
  *
  * It must be wrapped by a configured `ClerkProvider`, from
- * `@clerk/clerk-react`, `@clerk/clerk-expo`, `@clerk/clerk-next` or
+ * `@clerk/clerk-react`, `@clerk/clerk-expo`, `@clerk/nextjs` or
  * another React-based Clerk client library and have the corresponding
  * `useAuth` hook passed in.
  *
@@ -70,7 +70,7 @@ function useUseAuthFromClerk(useAuth: UseAuth) {
           },
           // Clerk is not memoizing its getToken function at all
           // eslint-disable-next-line react-hooks/exhaustive-deps
-          []
+          [],
         );
         return useMemo(
           () => ({
@@ -78,9 +78,9 @@ function useUseAuthFromClerk(useAuth: UseAuth) {
             isAuthenticated: isSignedIn ?? false,
             fetchAccessToken,
           }),
-          [isLoaded, isSignedIn, fetchAccessToken]
+          [isLoaded, isSignedIn, fetchAccessToken],
         );
       },
-    [useAuth]
+    [useAuth],
   );
 }

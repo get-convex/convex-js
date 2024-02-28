@@ -130,7 +130,7 @@ export class WebSocketManager {
     onOpen: (reconnectMetadata: ReconnectMetadata) => void,
     onMessage: (message: ServerMessage) => OnMessageResponse,
     webSocketConstructor: typeof WebSocket,
-    verbose: boolean
+    verbose: boolean,
   ) {
     this.webSocketConstructor = webSocketConstructor;
     this.socket = { state: "disconnected" };
@@ -162,7 +162,7 @@ export class WebSocketManager {
       this.socket.state !== "paused"
     ) {
       throw new Error(
-        "Didn't start connection from disconnected state: " + this.socket.state
+        "Didn't start connection from disconnected state: " + this.socket.state,
       );
     }
 
@@ -256,7 +256,7 @@ export class WebSocketManager {
         this.socket.ws.send(request);
       } catch (error: any) {
         console.log(
-          `Failed to send message on WebSocket, reconnecting: ${error}`
+          `Failed to send message on WebSocket, reconnecting: ${error}`,
         );
         this.closeAndReconnect("FailedToSendMessage");
       }
@@ -267,7 +267,7 @@ export class WebSocketManager {
   }
 
   private resetServerInactivityTimeout() {
-    if (this.socket.state !== "stopped") {
+    if (this.socket.state === "stopped") {
       // Don't reset any timers if we were trying to stop.
       return;
     }
@@ -303,7 +303,8 @@ export class WebSocketManager {
       case "connecting":
       case "ready": {
         this.lastCloseReason = closeReason;
-        this.close();
+        // Close the old socket asynchronously, we'll open a new socket in reconnect.
+        void this.close();
         this.scheduleReconnect();
         return;
       }
@@ -318,27 +319,46 @@ export class WebSocketManager {
   /**
    * Close the WebSocket, being careful to clear the onclose handler to avoid re-entrant
    * calls. Use this instead of directly calling `ws.close()`
+   *
+   * It is the callers responsibility to update the state after this method is called so that the
+   * closed socket is not accessible or used again after this method is called
    */
-  private close() {
+  private close(): Promise<void> {
     switch (this.socket.state) {
       case "disconnected":
       case "stopped":
       case "paused":
         // Nothing to do if we don't have a WebSocket.
-        return;
-      case "connecting":
+        return Promise.resolve();
+      case "connecting": {
+        const ws = this.socket.ws;
+        return new Promise((r) => {
+          ws.onclose = () => {
+            this._logVerbose("Closed after connecting");
+            r();
+          };
+          ws.onopen = () => {
+            this._logVerbose("Opened after connecting");
+            ws.close();
+          };
+        });
+      }
       case "ready": {
-        this.socket.ws.onclose = () => {
-          // Set onclose to no-op so we don't re-entrantly call the onclose handler
-        };
         this._logVerbose("ws.close called");
-        this.socket.ws.close();
-        return;
+        const ws = this.socket.ws;
+        const result: Promise<void> = new Promise((r) => {
+          ws.onclose = () => {
+            r();
+          };
+        });
+        ws.close();
+        return result;
       }
       default: {
         // Enforce that the switch-case is exhaustive.
         // eslint-disable-next-line  @typescript-eslint/no-unused-vars
         const _: never = this.socket;
+        return Promise.resolve();
       }
     }
   }
@@ -356,47 +376,38 @@ export class WebSocketManager {
       case "paused":
       case "disconnected":
       case "connecting":
-      case "ready":
-        this.close();
-        if (
-          this.socket.state === "ready" ||
-          this.socket.state === "connecting"
-        ) {
-          const ws = this.socket.ws;
-          this.socket = { state: "stopped" };
-          return new Promise((r) => {
-            ws.onclose = (_event: CloseEvent) => r();
-          });
-        }
+      case "ready": {
+        const result = this.close();
         this.socket = { state: "stopped" };
-        return Promise.resolve();
+        return result;
+      }
       default: {
         // Enforce that the switch-case is exhaustive.
         const _: never = this.socket;
         throw new Error(
-          `Invalid websocket state: ${(this.socket as any).state}`
+          `Invalid websocket state: ${(this.socket as any).state}`,
         );
       }
     }
   }
 
-  pause(): void {
+  pause(): Promise<void> {
     switch (this.socket.state) {
       case "stopped":
         // If we're stopping we ignore pause
-        return;
+        return Promise.resolve();
+      case "connecting":
       case "paused":
       case "disconnected":
-      case "connecting":
-      case "ready":
-        this.close();
-        this.socket = {
-          state: "paused",
-        };
-        return;
+      case "ready": {
+        const result = this.close();
+        this.socket = { state: "paused" };
+        return result;
+      }
       default: {
         // Enforce that the switch-case is exhaustive.
         const _: never = this.socket;
+        return Promise.resolve();
       }
     }
   }

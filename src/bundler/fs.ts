@@ -30,20 +30,20 @@ function warnCrossFilesystem(dstPath: string) {
   if (!warned) {
     console.warn(
       chalk.yellow(
-        `Temporary directory '${tmpDirRoot}' and project directory '${dstDir}' are on different filesystems.`
-      )
+        `Temporary directory '${tmpDirRoot}' and project directory '${dstDir}' are on different filesystems.`,
+      ),
     );
     console.warn(
       chalk.gray(
         `  If you're running into errors with other tools watching the project directory, override the temporary directory location with the ${chalk.bold(
-          tmpDirOverrideVar
-        )} environment variable.`
-      )
+          tmpDirOverrideVar,
+        )} environment variable.`,
+      ),
     );
     console.warn(
       chalk.gray(
-        `  Be sure to pick a temporary directory that's on the same filesystem as your project.`
-      )
+        `  Be sure to pick a temporary directory that's on the same filesystem as your project.`,
+      ),
     );
     warned = true;
   }
@@ -60,7 +60,7 @@ export interface Filesystem {
   // https://nodejs.org/api/stream.html#readablesymbolasynciterator
   createReadStream(
     path: string,
-    options: { highWaterMark?: number }
+    options: { highWaterMark?: number },
   ): ReadStream;
   access(path: string): void;
 
@@ -81,7 +81,7 @@ export interface TempDir {
 
 export async function mkdtemp(
   prefix: string,
-  callback: (tmpDir: TempDir) => Promise<void>
+  callback: (tmpDir: TempDir) => Promise<void>,
 ): Promise<void> {
   const tmpPath = stdFs.mkdtempSync(path.join(tmpDirRoot, prefix));
   try {
@@ -117,7 +117,7 @@ class NodeFs implements Filesystem {
   }
   createReadStream(
     path: string,
-    options: { highWaterMark?: number }
+    options: { highWaterMark?: number },
   ): ReadStream {
     return stdFs.createReadStream(path, options);
   }
@@ -233,7 +233,7 @@ export class RecordingFs implements Filesystem {
           console.log(
             "Invalidating due to directory children mismatch",
             observedNames,
-            existingNames
+            existingNames,
           );
         }
         this.invalidated = true;
@@ -283,7 +283,7 @@ export class RecordingFs implements Filesystem {
   }
   createReadStream(
     path: string,
-    options: { highWaterMark?: number }
+    options: { highWaterMark?: number },
   ): ReadStream {
     try {
       const st = nodeFs.stat(path);
@@ -421,7 +421,7 @@ export class RecordingFs implements Filesystem {
             absPath,
             observed,
             existing,
-            stMatch.reason
+            stMatch.reason,
           );
         }
         this.invalidated = true;
@@ -449,7 +449,7 @@ export class Observations {
 
   constructor(
     directories: Map<string, Set<string>>,
-    files: Map<string, Stats | null>
+    files: Map<string, Stats | null>,
   ) {
     this.directories = directories;
     this.files = files;
@@ -527,7 +527,7 @@ function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
 
 export function stMatches(
   a: Stats | null,
-  b: Stats | null
+  b: Stats | null,
 ): { matches: true } | { matches: false; reason: string } {
   if (a === null && b === null) {
     return { matches: true };

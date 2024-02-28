@@ -23,7 +23,7 @@ describe("createMutation", () => {
     createMutation(anyApi.myMutation.default, client).withOptimisticUpdate(
       () => {
         // no update
-      }
+      },
     );
   });
 
@@ -31,7 +31,7 @@ describe("createMutation", () => {
     const client = new ConvexReactClient(address);
     const mutation = createMutation(
       anyApi.myMutation.default,
-      client
+      client,
     ).withOptimisticUpdate(() => {
       // no update
     });
@@ -61,7 +61,7 @@ describe("createMutation", () => {
     };
     const myMutation = createMutation(anyApi.myMutation.default, client);
     expect(() => myMutation(fakeSyntheticEvent)).toThrow(
-      "Convex function called with SyntheticEvent object."
+      "Convex function called with SyntheticEvent object.",
     );
   });
 });
@@ -77,7 +77,7 @@ describe("useQuery", () => {
         optimisticUpdate: (localStore) => {
           localStore.setQuery(anyApi.myQuery.default, {}, "queryResult");
         },
-      }
+      },
     );
     return client;
   }
@@ -102,7 +102,7 @@ describe("useQuery", () => {
       () => useQuery(anyApi.myQuery.default, "skip"),
       {
         wrapper,
-      }
+      },
     );
     expect(result.current).toStrictEqual(undefined);
   });
@@ -155,7 +155,7 @@ describe("async query fetch", () => {
         optimisticUpdate: (localStore) => {
           localStore.setQuery(anyApi.myQuery.default, {}, "queryResult");
         },
-      }
+      },
     );
   }
 

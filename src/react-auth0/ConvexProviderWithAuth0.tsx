@@ -51,10 +51,10 @@ function useAuthFromAuth0() {
         return null;
       }
     },
-    [getAccessTokenSilently]
+    [getAccessTokenSilently],
   );
   return useMemo(
     () => ({ isLoading, isAuthenticated, fetchAccessToken }),
-    [isLoading, isAuthenticated, fetchAccessToken]
+    [isLoading, isAuthenticated, fetchAccessToken],
   );
 }

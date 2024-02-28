@@ -90,8 +90,8 @@ describe("JustPaginatedQueries", () => {
             _ctx,
             _args: {
               paginationOpts: PaginationOptions;
-            }
-          ) => null as unknown as PaginationResult<string>
+            },
+          ) => null as unknown as PaginationResult<string>,
         ),
         paginatedWithArg: query(
           (
@@ -99,16 +99,16 @@ describe("JustPaginatedQueries", () => {
             _args: {
               property: string;
               paginationOpts: PaginationOptions;
-            }
-          ) => null as unknown as PaginationResult<string>
+            },
+          ) => null as unknown as PaginationResult<string>,
         ),
         missingArg: query(
-          (_ctx) => null as unknown as PaginationResult<string>
+          (_ctx) => null as unknown as PaginationResult<string>,
         ),
         emptyArg: query(() => null as unknown as PaginationResult<string>),
         wrongReturn: query(
           (_ctx, _args: { paginationOpts: PaginationOptions }) =>
-            null as unknown as string
+            null as unknown as string,
         ),
       },
     } as const;
@@ -288,7 +288,7 @@ describe("justType filters", () => {
     const myModule = {
       query: queryGeneric((_, _args: { arg: number }) => "query result"),
       internalQuery: internalQueryGeneric(
-        (_, _args: { arg: number }) => "query result"
+        (_, _args: { arg: number }) => "query result",
       ),
       mutation: mutationGeneric((_) => "query result"),
       internalMutation: internalMutationGeneric((_) => "query result"),

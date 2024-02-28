@@ -7,7 +7,7 @@ import {
 import { version } from "../version.js";
 import { nextBackoff } from "../dev.js";
 import chalk from "chalk";
-import { deploymentClient } from "./utils.js";
+import { deploymentFetch } from "./utils.js";
 
 const MAX_UDF_STREAM_FAILURE_COUNT = 5;
 
@@ -19,8 +19,9 @@ export async function watchLogs(
   adminKey: string,
   dest: LogDestination,
   options?: {
+    success: boolean;
     history?: number | boolean;
-  }
+  },
 ) {
   const authHeader = createAuthHeader(adminKey);
   let numFailures = 0;
@@ -32,7 +33,7 @@ export async function watchLogs(
       const { entries, newCursor } = await pollUdfLog(
         cursorMs,
         url,
-        authHeader
+        authHeader,
       );
       cursorMs = newCursor;
       numFailures = 0;
@@ -48,10 +49,10 @@ export async function watchLogs(
             options?.history === true
               ? entries
               : entries.slice(entries.length - options?.history);
-          processLogs(ctx, entriesSlice, dest);
+          processLogs(ctx, entriesSlice, dest, options?.success);
         }
       } else {
-        processLogs(ctx, entries, dest);
+        processLogs(ctx, entries, dest, options?.success === true);
       }
     } catch (e) {
       numFailures += 1;
@@ -64,7 +65,7 @@ export async function watchLogs(
       if (numFailures > MAX_UDF_STREAM_FAILURE_COUNT) {
         logWarning(
           ctx,
-          `Convex [WARN] Failed to fetch logs. Waiting ${backoff}ms before next retry.`
+          `Convex [WARN] Failed to fetch logs. Waiting ${backoff}ms before next retry.`,
         );
       }
       await new Promise((resolve) => {
@@ -94,19 +95,16 @@ type UdfExecutionResponse = {
 async function pollUdfLog(
   cursor: number,
   url: string,
-  authHeader: string
+  authHeader: string,
 ): Promise<{ entries: UdfExecutionResponse[]; newCursor: number }> {
-  const client = deploymentClient(url);
-  const response = await client.get(
-    `/api/stream_udf_execution?cursor=${cursor}`,
-    {
-      headers: {
-        Authorization: authHeader,
-        "Convex-Client": `npm-cli-${version}`,
-      },
-    }
-  );
-  return response.data;
+  const fetch = deploymentFetch(url);
+  const response = await fetch(`/api/stream_udf_execution?cursor=${cursor}`, {
+    headers: {
+      Authorization: authHeader,
+      "Convex-Client": `npm-cli-${version}`,
+    },
+  });
+  return await response.json();
 }
 
 const prefixForSource = (udfType: UdfType): string => {
@@ -116,7 +114,8 @@ const prefixForSource = (udfType: UdfType): string => {
 function processLogs(
   ctx: Context,
   rawLogs: UdfExecutionResponse[],
-  dest: LogDestination
+  dest: LogDestination,
+  shouldShowSuccessLogs: boolean,
 ) {
   for (let i = 0; i < rawLogs.length; i++) {
     const log = rawLogs[i];
@@ -132,9 +131,10 @@ function processLogs(
           udfType,
           id,
           log.logLines[j],
-          dest
+          dest,
         );
       }
+
       if (log.error) {
         logToTerminal(
           ctx,
@@ -143,11 +143,41 @@ function processLogs(
           udfType,
           id,
           log.error!,
-          dest
+          dest,
+        );
+      } else if (shouldShowSuccessLogs) {
+        logFunctionExecution(
+          ctx,
+          log.timestamp,
+          log.udfType,
+          id,
+          log.executionTime,
+          dest,
         );
       }
     }
   }
+}
+
+function logFunctionExecution(
+  ctx: Context,
+  timestamp: number,
+  udfType: UdfType,
+  udfPath: string,
+  executionTime: number,
+  dest: LogDestination,
+) {
+  logToDestination(
+    ctx,
+    dest,
+    chalk.green(
+      `${prefixLog(
+        timestamp,
+        udfType,
+        udfPath,
+      )} Function executed in ${Math.ceil(executionTime * 1000)} ms`,
+    ),
+  );
 }
 
 function logToTerminal(
@@ -157,17 +187,16 @@ function logToTerminal(
   udfType: UdfType,
   udfPath: string,
   message: string,
-  dest: LogDestination
+  dest: LogDestination,
 ) {
   const prefix = prefixForSource(udfType);
-  const localizedTimestamp = new Date(timestamp * 1000).toLocaleString();
   if (type === "info") {
     const match = message.match(/^\[.*?\] /);
     if (match === null) {
       logToDestination(
         ctx,
         dest,
-        chalk.red(`[CONVEX ${prefix}(${udfPath})] Could not parse console.log`)
+        chalk.red(`[CONVEX ${prefix}(${udfPath})] Could not parse console.log`),
       );
       return;
     }
@@ -177,18 +206,14 @@ function logToTerminal(
     logToDestination(
       ctx,
       dest,
-      chalk.cyan(
-        `${localizedTimestamp} [CONVEX ${prefix}(${udfPath})] [${level}]`
-      ),
-      args
+      chalk.cyan(`${prefixLog(timestamp, udfType, udfPath)} [${level}]`),
+      args,
     );
   } else {
     logToDestination(
       ctx,
       dest,
-      chalk.red(
-        `${localizedTimestamp} [CONVEX ${prefix}(${udfPath})] ${message}`
-      )
+      chalk.red(`$${prefixLog(timestamp, udfType, udfPath)} ${message}`),
     );
   }
 }
@@ -202,4 +227,11 @@ function logToDestination(ctx: Context, dest: LogDestination, ...logged: any) {
       logMessage(ctx, ...logged);
       break;
   }
+}
+
+function prefixLog(timestamp: number, udfType: UdfType, udfPath: string) {
+  const prefix = prefixForSource(udfType);
+  const localizedTimestamp = new Date(timestamp * 1000).toLocaleString();
+
+  return `${localizedTimestamp} [CONVEX ${prefix}(${udfPath})]`;
 }

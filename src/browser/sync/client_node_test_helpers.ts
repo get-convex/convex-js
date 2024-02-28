@@ -20,7 +20,7 @@ export type InMemoryWebSocketTest = (args: {
 // Run a test with a real node WebSocket instance connected
 export async function withInMemoryWebSocket(
   cb: InMemoryWebSocketTest,
-  debug = false
+  debug = false,
 ) {
   let wss = new ws.WebSocketServer({ port: 0 });
 
@@ -40,7 +40,7 @@ export async function withInMemoryWebSocket(
         messages.push(
           new Promise((r) => {
             received = r;
-          })
+          }),
         );
       });
     });

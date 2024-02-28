@@ -33,9 +33,9 @@ export async function init(
   ctx: Context,
   deploymentType: DeploymentType = "prod",
   config: {
-    team: string | null;
-    project: string | null;
-  }
+    team?: string | undefined;
+    project?: string | undefined;
+  },
 ) {
   const configPath = await configFilepath(ctx);
 
@@ -70,7 +70,7 @@ export async function init(
     } = await createProjectProvisioningDevOrProd(
       ctx,
       { teamSlug: selectedTeam, projectName },
-      deploymentType
+      deploymentType,
     ));
   } catch (err) {
     logFailure(ctx, "Unable to create project.");
@@ -83,10 +83,10 @@ export async function init(
   logFinishedStep(
     ctx,
     `Created project ${chalk.bold(
-      projectSlug
+      projectSlug,
     )}${teamMessage}, manage it at ${chalk.bold(
-      projectDashboardUrl(teamSlug, projectSlug)
-    )}`
+      projectDashboardUrl(teamSlug, projectSlug),
+    )}`,
   );
 
   if (projectsRemaining <= 2) {
@@ -95,8 +95,8 @@ export async function init(
       chalk.yellow.bold(
         `Your account now has ${projectsRemaining} project${
           projectsRemaining === 1 ? "" : "s"
-        } remaining.`
-      )
+        } remaining.`,
+      ),
     );
   }
 
@@ -111,13 +111,13 @@ export async function init(
       team: teamSlug,
       project: projectSlug,
       deploymentName,
-    }
+    },
   );
 
   const projectConfig = await upgradeOldAuthInfoToAuthConfig(
     ctx,
     existingProjectConfig,
-    functionsPath
+    functionsPath,
   );
   await writeProjectConfig(ctx, projectConfig);
 
@@ -142,7 +142,7 @@ export async function init(
     functionsPath,
     deploymentType,
     url,
-    wroteToGitIgnore
+    wroteToGitIgnore,
   );
 
   return { deploymentName, adminKey, url };
@@ -153,7 +153,7 @@ export async function finalizeConfiguration(
   functionsPath: string,
   deploymentType: DeploymentType,
   url: string,
-  wroteToGitIgnore: boolean
+  wroteToGitIgnore: boolean,
 ) {
   const envVarWrite = await writeConvexUrlToEnvFile(ctx, url);
   if (envVarWrite !== null) {
@@ -161,12 +161,12 @@ export async function finalizeConfiguration(
       ctx,
       `Provisioned a ${deploymentType} deployment and saved its:\n` +
         `    name as CONVEX_DEPLOYMENT to .env.local\n` +
-        `    URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`
+        `    URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`,
     );
   } else {
     logFinishedStep(
       ctx,
-      `Provisioned ${deploymentType} deployment and saved its name as CONVEX_DEPLOYMENT to .env.local`
+      `Provisioned ${deploymentType} deployment and saved its name as CONVEX_DEPLOYMENT to .env.local`,
     );
   }
   if (wroteToGitIgnore) {
@@ -176,6 +176,6 @@ export async function finalizeConfiguration(
   logMessage(
     ctx,
     `\nWrite your Convex functions in ${chalk.bold(functionsPath)}\n` +
-      "Give us feedback at https://convex.dev/community or support@convex.dev\n"
+      "Give us feedback at https://convex.dev/community or support@convex.dev\n",
   );
 }

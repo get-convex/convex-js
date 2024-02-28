@@ -3,7 +3,7 @@ import util from "util";
 import ws from "ws";
 import { ConvexHttpClient } from "../../browser/http_client-node.js";
 import { BaseConvexClient } from "../../browser/index.js";
-import { makeFunctionReference } from "../../server/index.js";
+import { PaginationResult, makeFunctionReference } from "../../server/index.js";
 import { Value, convexToJson } from "../../values/value.js";
 import {
   Context,
@@ -23,7 +23,7 @@ export async function runFunctionAndLog(
   args: Value,
   callbacks?: {
     onSuccess?: () => void;
-  }
+  },
 ) {
   const client = new ConvexHttpClient(deploymentUrl);
   client.setAdminAuth(adminKey);
@@ -45,12 +45,46 @@ export async function runFunctionAndLog(
   }
 }
 
+export async function runPaginatedQuery(
+  ctx: Context,
+  deploymentUrl: string,
+  adminKey: string,
+  functionName: string,
+  args: Record<string, Value>,
+  limit?: number,
+) {
+  const results = [];
+  let cursor = null;
+  let isDone = false;
+  while (!isDone && (limit === undefined || results.length < limit)) {
+    const paginationResult = (await runQuery(
+      ctx,
+      deploymentUrl,
+      adminKey,
+      functionName,
+      {
+        ...args,
+        // The pagination is limited on the backend, so the 10000
+        // means "give me as many as possible".
+        paginationOpts: {
+          cursor,
+          numItems: limit === undefined ? 10000 : limit - results.length,
+        },
+      },
+    )) as unknown as PaginationResult<Record<string, Value>>;
+    isDone = paginationResult.isDone;
+    cursor = paginationResult.continueCursor;
+    results.push(...paginationResult.page);
+  }
+  return results;
+}
+
 export async function runQuery(
   ctx: Context,
   deploymentUrl: string,
   adminKey: string,
   functionName: string,
-  args: Value
+  args: Record<string, Value>,
 ): Promise<Value> {
   const client = new ConvexHttpClient(deploymentUrl);
   client.setAdminAuth(adminKey);
@@ -58,7 +92,7 @@ export async function runQuery(
   try {
     return await client.query(
       makeFunctionReference<"query">(functionName),
-      args
+      args,
     );
   } catch (err) {
     logFailure(ctx, `Failed to run query "${functionName}":`);
@@ -83,7 +117,7 @@ export async function subscribeAndLog(
   deploymentUrl: string,
   adminKey: string,
   functionName: string,
-  args: Record<string, Value>
+  args: Record<string, Value>,
 ) {
   return subscribe(
     ctx,
@@ -96,7 +130,7 @@ export async function subscribeAndLog(
       onStart() {
         logFinishedStep(
           ctx,
-          `Watching query ${functionName} on ${deploymentUrl}...`
+          `Watching query ${functionName} on ${deploymentUrl}...`,
         );
       },
       onChange(result) {
@@ -105,7 +139,7 @@ export async function subscribeAndLog(
       onStop() {
         logMessage(ctx, `Closing connection to ${deploymentUrl}...`);
       },
-    }
+    },
   );
 }
 
@@ -120,7 +154,7 @@ export async function subscribe(
     onStart?: () => void;
     onChange?: (result: Value) => void;
     onStop?: () => void;
-  }
+  },
 ) {
   const client = new BaseConvexClient(
     deploymentUrl,
@@ -133,7 +167,7 @@ export async function subscribe(
       // pretend that a Node.js 'ws' library WebSocket is a browser WebSocket
       webSocketConstructor: ws as unknown as typeof WebSocket,
       unsavedChangesWarning: false,
-    }
+    },
   );
   client.setAdminAuth(adminKey);
   const { unsubscribe } = client.subscribe(functionName, args);
@@ -143,10 +177,13 @@ export async function subscribe(
   let done = false;
   const [donePromise, onDone] = waitUntilCalled();
   const stopWatching = () => {
+    if (done) {
+      return;
+    }
+    done = true;
     unsubscribe();
     void client.close();
     process.off("SIGINT", sigintListener);
-    done = true;
     onDone();
     callbacks?.onStop?.();
   };

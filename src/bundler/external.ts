@@ -14,7 +14,7 @@ import { findParentConfigs } from "../cli/lib/utils.js";
 async function resolveNodeModule(
   ctx: Context,
   moduleDir: string,
-  resolveDir: string
+  resolveDir: string,
 ): Promise<string | null> {
   let nodeModulesPath: string | undefined;
 
@@ -58,7 +58,7 @@ export type ExternalPackage = {
 // Inspired by https://www.npmjs.com/package/esbuild-node-externals.
 export function createExternalPlugin(
   ctx: Context,
-  externalPackages: Map<string, ExternalPackage>
+  externalPackages: Map<string, ExternalPackage>,
 ): {
   plugin: Plugin;
   externalModuleNames: Set<string>;
@@ -83,7 +83,7 @@ export function createExternalPlugin(
             const resolved = await resolveNodeModule(
               ctx,
               module.dirName,
-              args.resolveDir
+              args.resolveDir,
             );
             if (resolved && externalPackage.path === resolved) {
               // Mark as external.
@@ -105,7 +105,7 @@ export function createExternalPlugin(
 // Returns the versions of the packages referenced by the package.json.
 export async function computeExternalPackages(
   ctx: Context,
-  externalPackagesAllowList: string[]
+  externalPackagesAllowList: string[],
 ): Promise<Map<string, ExternalPackage>> {
   if (externalPackagesAllowList.length === 0) {
     // No external packages in the allow list.
@@ -121,7 +121,7 @@ export async function computeExternalPackages(
   } catch (error: any) {
     logFailure(
       ctx,
-      `Couldn't parse "${packageJsonPath}". Make sure it's a valid JSON. Error: ${error}`
+      `Couldn't parse "${packageJsonPath}". Make sure it's a valid JSON. Error: ${error}`,
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -133,7 +133,7 @@ export async function computeExternalPackages(
     "optionalDependencies",
   ]) {
     for (const [packageName, packageJsonVersion] of Object.entries(
-      packageJson[key] ?? {}
+      packageJson[key] ?? {},
     )) {
       if (externalPackages.has(packageName)) {
         // Package version and path already found.
@@ -143,7 +143,7 @@ export async function computeExternalPackages(
       if (typeof packageJsonVersion !== "string") {
         logFailure(
           ctx,
-          `Invalid "${packageJsonPath}". "${key}.${packageName}" version has type ${typeof packageJsonVersion}.`
+          `Invalid "${packageJsonPath}". "${key}.${packageName}" version has type ${typeof packageJsonVersion}.`,
         );
         return await ctx.crash(1, "invalid filesystem data");
       }
@@ -152,7 +152,7 @@ export async function computeExternalPackages(
         !shouldMarkExternal(
           packageName,
           packageJsonVersion,
-          externalPackagesAllowList
+          externalPackagesAllowList,
         )
       ) {
         // Package should be bundled.
@@ -163,7 +163,7 @@ export async function computeExternalPackages(
       const packagePath = path.join(
         path.dirname(packageJsonPath),
         "node_modules",
-        getModule(packageName).dirName
+        getModule(packageName).dirName,
       );
       if (ctx.fs.exists(packagePath)) {
         externalPackages.set(packageName, {
@@ -179,7 +179,7 @@ export async function computeExternalPackages(
 export function shouldMarkExternal(
   packageName: string,
   packageJsonVersion: string,
-  externalPackagesAllowList: string[]
+  externalPackagesAllowList: string[],
 ): boolean {
   // Always bundle convex.
   if (packageName === "convex") {
@@ -215,7 +215,7 @@ export function shouldMarkExternal(
 export async function findExactVersionAndDependencies(
   ctx: Context,
   moduleName: string,
-  modulePath: string
+  modulePath: string,
 ): Promise<{
   version: string;
   peerAndOptionalDependencies: Set<string>;
@@ -229,7 +229,7 @@ export async function findExactVersionAndDependencies(
     logFailure(
       ctx,
       `Missing "${modulePackageJsonPath}", which is required for
-      installing external package "${moduleName}" configured in convex.json.`
+      installing external package "${moduleName}" configured in convex.json.`,
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -237,7 +237,7 @@ export async function findExactVersionAndDependencies(
     logFailure(
       ctx,
       `"${modulePackageJsonPath}" misses a 'version' field. which is required for
-      installing external package "${moduleName}" configured in convex.json.`
+      installing external package "${moduleName}" configured in convex.json.`,
     );
     return await ctx.crash(1, "invalid filesystem data");
   }
@@ -245,12 +245,12 @@ export async function findExactVersionAndDependencies(
   const peerAndOptionalDependencies = new Set<string>();
   for (const key of ["peerDependencies", "optionalDependencies"]) {
     for (const [packageName, packageJsonVersion] of Object.entries(
-      modulePackageJson[key] ?? {}
+      modulePackageJson[key] ?? {},
     )) {
       if (typeof packageJsonVersion !== "string") {
         logFailure(
           ctx,
-          `Invalid "${modulePackageJsonPath}". "${key}.${packageName}" version has type ${typeof packageJsonVersion}.`
+          `Invalid "${modulePackageJsonPath}". "${key}.${packageName}" version has type ${typeof packageJsonVersion}.`,
         );
         return await ctx.crash(1, "invalid filesystem data");
       }

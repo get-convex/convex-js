@@ -79,7 +79,7 @@ export class AuthenticationManager {
   private readonly syncState: LocalSyncState;
   // Passed down by BaseClient, sends a message to the server
   private readonly authenticate: (token: string) => void;
-  private readonly pauseSocket: () => void;
+  private readonly pauseSocket: () => Promise<void>;
   private readonly resumeSocket: () => void;
   // Passed down by BaseClient, sends a message to the server
   private readonly clearAuth: () => void;
@@ -95,11 +95,11 @@ export class AuthenticationManager {
       verbose,
     }: {
       authenticate: (token: string) => void;
-      pauseSocket: () => void;
+      pauseSocket: () => Promise<void>;
       resumeSocket: () => void;
       clearAuth: () => void;
       verbose: boolean;
-    }
+    },
   ) {
     this.syncState = syncState;
     this.authenticate = authenticate;
@@ -111,7 +111,7 @@ export class AuthenticationManager {
 
   async setConfig(
     fetchToken: AuthTokenFetcher,
-    onChange: (isAuthenticated: boolean) => void
+    onChange: (isAuthenticated: boolean) => void,
   ) {
     this.resetAuthState();
     const token = await this.fetchTokenAndGuardAgainstRace(fetchToken, {
@@ -140,7 +140,7 @@ export class AuthenticationManager {
   onTransition(serverMessage: Transition) {
     if (
       !this.syncState.isCurrentOrNewerAuthVersion(
-        serverMessage.endVersion.identity
+        serverMessage.endVersion.identity,
       )
     ) {
       // This is a stale transition - client has moved on to
@@ -201,7 +201,7 @@ export class AuthenticationManager {
       this.authState.state === "waitingForServerConfirmationOfFreshToken"
     ) {
       console.error(
-        `Failed to authenticate: "${serverMessage.error}", check your server auth config`
+        `Failed to authenticate: "${serverMessage.error}", check your server auth config`,
       );
       if (this.syncState.hasAuth()) {
         this.syncState.clearAuth();
@@ -217,7 +217,7 @@ export class AuthenticationManager {
       this.authState.config.fetchToken,
       {
         forceRefreshToken: true,
-      }
+      },
     );
     if (token.isFromOutdatedConfig) {
       await this.resumeSocket();
@@ -256,7 +256,7 @@ export class AuthenticationManager {
       this.authState.config.fetchToken,
       {
         forceRefreshToken: true,
-      }
+      },
     );
     if (token.isFromOutdatedConfig) {
       return;
@@ -303,7 +303,7 @@ export class AuthenticationManager {
     const { iat, exp } = decodedToken as { iat?: number; exp?: number };
     if (!iat || !exp) {
       console.error(
-        "Auth token does not have required fields, cannot refetch the token"
+        "Auth token does not have required fields, cannot refetch the token",
       );
       return;
     }
@@ -315,7 +315,7 @@ export class AuthenticationManager {
     const delay = (exp - iat - leewaySeconds) * 1000;
     if (delay <= 0) {
       console.error(
-        "Auth token does not live long enough, cannot refetch the token"
+        "Auth token does not live long enough, cannot refetch the token",
       );
       return;
     }
@@ -328,7 +328,7 @@ export class AuthenticationManager {
       config: this.authState.config,
     });
     this._logVerbose(
-      `scheduled preemptive auth token refetching in ${delay}ms`
+      `scheduled preemptive auth token refetching in ${delay}ms`,
     );
   }
 
@@ -338,7 +338,7 @@ export class AuthenticationManager {
     fetchToken: AuthTokenFetcher,
     fetchArgs: {
       forceRefreshToken: boolean;
-    }
+    },
   ) {
     const originalConfigVersion = ++this.configVersion;
     const token = await fetchToken(fetchArgs);
@@ -356,7 +356,7 @@ export class AuthenticationManager {
   }
 
   private setAndReportAuthFailed(
-    onAuthChange: (authenticated: boolean) => void
+    onAuthChange: (authenticated: boolean) => void,
   ) {
     onAuthChange(false);
     this.resetAuthState();
@@ -388,7 +388,7 @@ export class AuthenticationManager {
   private _logVerbose(message: string) {
     if (this.verbose) {
       console.debug(
-        `${new Date().toISOString()} ${message} [v${this.configVersion}]`
+        `${new Date().toISOString()} ${message} [v${this.configVersion}]`,
       );
     }
   }

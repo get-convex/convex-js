@@ -103,7 +103,7 @@ type ValueFromUnion<T, Key, Default> = T extends T
  */
 export type FieldTypeFromFieldPath<
   Document extends GenericDocument,
-  FieldPath extends string
+  FieldPath extends string,
 > = FieldPath extends `${infer First}.${infer Second}`
   ? ValueFromUnion<
       Document,
@@ -169,7 +169,7 @@ export type IndexNames<TableInfo extends GenericTableInfo> =
  */
 export type NamedIndex<
   TableInfo extends GenericTableInfo,
-  IndexName extends IndexNames<TableInfo>
+  IndexName extends IndexNames<TableInfo>,
 > = Indexes<TableInfo>[IndexName];
 
 /**
@@ -194,7 +194,7 @@ export type SearchIndexNames<TableInfo extends GenericTableInfo> =
  */
 export type NamedSearchIndex<
   TableInfo extends GenericTableInfo,
-  IndexName extends SearchIndexNames<TableInfo>
+  IndexName extends SearchIndexNames<TableInfo>,
 > = SearchIndexes<TableInfo>[IndexName];
 
 /**
@@ -219,7 +219,7 @@ export type VectorIndexNames<TableInfo extends GenericTableInfo> =
  */
 export type NamedVectorIndex<
   TableInfo extends GenericTableInfo,
-  IndexName extends VectorIndexNames<TableInfo>
+  IndexName extends VectorIndexNames<TableInfo>,
 > = VectorIndexes<TableInfo>[IndexName];
 
 // Data Model Types ////////////////////////////////////////////////////////////
@@ -267,7 +267,7 @@ export type TableNamesInDataModel<DataModel extends GenericDataModel> =
  */
 export type NamedTableInfo<
   DataModel extends GenericDataModel,
-  TableName extends keyof DataModel
+  TableName extends keyof DataModel,
 > = DataModel[TableName];
 
 /**
@@ -276,5 +276,5 @@ export type NamedTableInfo<
  */
 export type DocumentByName<
   DataModel extends GenericDataModel,
-  TableName extends TableNamesInDataModel<DataModel>
+  TableName extends TableNamesInDataModel<DataModel>,
 > = DataModel[TableName]["document"];

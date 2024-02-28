@@ -26,12 +26,14 @@ import {
 import { init } from "./lib/init.js";
 import { reinit } from "./lib/reinit.js";
 import {
+  ErrorData,
   functionsDir,
-  getConfiguredDeployment,
+  getConfiguredDeploymentName,
   hasProject,
   hasProjects,
   hasTeam,
-  logAndHandleAxiosError,
+  logAndHandleFetchError,
+  ThrowingFetchError,
 } from "./lib/utils.js";
 import { writeConvexUrlToEnvFile } from "./lib/envvars.js";
 
@@ -47,11 +49,11 @@ type DeploymentCredentials = {
 export async function initOrReinitForDeprecatedCommands(
   ctx: Context,
   cmdOptions: {
-    team: string | null;
-    project: string | null;
+    team?: string | undefined;
+    project?: string | undefined;
     url?: string | undefined;
     adminKey?: string | undefined;
-  }
+  },
 ) {
   const { url } = await deploymentCredentialsOrConfigure(ctx, null, {
     ...cmdOptions,
@@ -64,8 +66,8 @@ export async function initOrReinitForDeprecatedCommands(
     logMessage(
       ctx,
       chalk.green(
-        `Saved the dev deployment URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`
-      )
+        `Saved the dev deployment URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`,
+      ),
     );
   }
 }
@@ -75,11 +77,11 @@ export async function deploymentCredentialsOrConfigure(
   chosenConfiguration: "new" | "existing" | "ask" | null,
   cmdOptions: {
     prod: boolean;
-    team: string | null;
-    project: string | null;
+    team?: string | undefined;
+    project?: string | undefined;
     url?: string | undefined;
     adminKey?: string | undefined;
-  }
+  },
 ): Promise<DeploymentCredentials & { deploymentName?: DeploymentName }> {
   const { url, adminKey } = cmdOptions;
   if (url !== undefined && adminKey !== undefined) {
@@ -88,8 +90,8 @@ export async function deploymentCredentialsOrConfigure(
       logMessage(
         ctx,
         chalk.yellowBright(
-          `Removed the CONVEX_DEPLOYMENT environment variable from .env.local`
-        )
+          `Removed the CONVEX_DEPLOYMENT environment variable from .env.local`,
+        ),
       );
     }
     const envVarWrite = await writeConvexUrlToEnvFile(ctx, url);
@@ -97,8 +99,8 @@ export async function deploymentCredentialsOrConfigure(
       logMessage(
         ctx,
         chalk.green(
-          `Saved the given --url as ${envVarWrite.envVar} to ${envVarWrite.envFile}`
-        )
+          `Saved the given --url as ${envVarWrite.envVar} to ${envVarWrite.envFile}`,
+        ),
       );
     }
     return { url, adminKey };
@@ -122,7 +124,7 @@ export async function deploymentCredentialsOrConfigure(
     const choice = await askToReconfigure(
       ctx,
       projectConfig,
-      configuredDeployment.error
+      configuredDeployment.error,
     );
     return initOrReinit(ctx, choice, deploymentType, cmdOptions);
   }
@@ -131,7 +133,7 @@ export async function deploymentCredentialsOrConfigure(
     await fetchDeploymentCredentialsForName(
       ctx,
       deploymentName,
-      deploymentType
+      deploymentType,
     );
   // Configured deployment and user has access
   if (!("error" in adminKeyAndUrlForConfiguredDeployment)) {
@@ -140,7 +142,7 @@ export async function deploymentCredentialsOrConfigure(
   await checkForDeploymentTypeError(
     ctx,
     adminKeyAndUrlForConfiguredDeployment.error,
-    deploymentType
+    deploymentType,
   );
 
   // Configured deployment and user doesn't has access to it
@@ -151,31 +153,35 @@ export async function deploymentCredentialsOrConfigure(
 async function checkForDeploymentTypeError(
   ctx: Context,
   error: unknown,
-  deploymentType: DeploymentType
+  deploymentType: DeploymentType,
 ) {
-  if ((error as any).response?.data?.code === "DeploymentTypeMismatch") {
+  let data: ErrorData | null = null;
+  if (error instanceof ThrowingFetchError) {
+    data = error.serverErrorData || null;
+  }
+  if (data && "code" in data && data.code === "DeploymentTypeMismatch") {
     if (deploymentType === "prod") {
       logFailure(
         ctx,
-        "Use `npx convex deploy` to push changes to your production deployment"
+        "Use `npx convex deploy` to push changes to your production deployment",
       );
     } else {
       logFailure(
         ctx,
         "CONVEX_DEPLOYMENT is a production deployment, but --prod flag was not specified. " +
-          "Use `npx convex dev --prod` to develop against this production deployment."
+          "Use `npx convex dev --prod` to develop against this production deployment.",
       );
     }
-    logError(ctx, chalk.red((error as any).response.data.message));
+    logError(ctx, chalk.red(data.message));
     await ctx.crash(1, "invalid filesystem data", error);
   }
 }
 
 async function getConfiguredDeploymentOrUpgrade(
   ctx: Context,
-  deploymentType: DeploymentType
+  deploymentType: DeploymentType,
 ) {
-  const deploymentName = await getConfiguredDeployment(ctx);
+  const deploymentName = await getConfiguredDeploymentName(ctx);
   if (deploymentName !== null) {
     return { deploymentName };
   }
@@ -186,7 +192,7 @@ async function initOrReinit(
   ctx: Context,
   choice: "new" | "existing",
   deploymentType: DeploymentType,
-  cmdOptions: { team: string | null; project: string | null }
+  cmdOptions: { team?: string | undefined; project?: string | undefined },
 ): Promise<DeploymentCredentials> {
   switch (choice) {
     case "new":
@@ -202,7 +208,7 @@ async function initOrReinit(
 
 async function upgradeOldConfigToDeploymentVar(
   ctx: Context,
-  deploymentType: DeploymentType
+  deploymentType: DeploymentType,
 ): Promise<{ deploymentName: string } | { error: unknown } | null> {
   const { configPath, projectConfig } = await readProjectConfig(ctx);
   const { team, project } = projectConfig;
@@ -216,7 +222,7 @@ async function upgradeOldConfigToDeploymentVar(
       await fetchDeploymentCredentialsProvisioningDevOrProdMaybeThrows(
         ctx,
         { teamSlug: team, projectSlug: project },
-        deploymentType
+        deploymentType,
       );
     devDeploymentName = deploymentName!;
   } catch (error) {
@@ -231,13 +237,13 @@ async function upgradeOldConfigToDeploymentVar(
   logMessage(
     ctx,
     chalk.green(
-      `Saved the ${deploymentType} deployment name as CONVEX_DEPLOYMENT to .env.local`
-    )
+      `Saved the ${deploymentType} deployment name as CONVEX_DEPLOYMENT to .env.local`,
+    ),
   );
   const projectConfigWithoutAuthInfo = await upgradeOldAuthInfoToAuthConfig(
     ctx,
     projectConfig,
-    functionsDir(configPath, projectConfig)
+    functionsDir(configPath, projectConfig),
   );
   await writeProjectConfig(ctx, projectConfigWithoutAuthInfo, {
     deleteIfAllDefault: true,
@@ -255,13 +261,13 @@ async function askToConfigure(ctx: Context): Promise<"new" | "existing"> {
 async function askToReconfigure(
   ctx: Context,
   projectConfig: ProjectConfig,
-  error: unknown
+  error: unknown,
 ): Promise<"new" | "existing"> {
   const team = await enforceDeprecatedConfigField(ctx, projectConfig, "team");
   const project = await enforceDeprecatedConfigField(
     ctx,
     projectConfig,
-    "project"
+    "project",
   );
   const [isExistingTeam, existingProject, hasAnyProjects] = await Promise.all([
     await hasTeam(ctx, team),
@@ -272,22 +278,22 @@ async function askToReconfigure(
   // The config is good so there must be something else going on,
   // fatal with the original error
   if (isExistingTeam && existingProject) {
-    return await logAndHandleAxiosError(ctx, error);
+    return await logAndHandleFetchError(ctx, error);
   }
 
   if (isExistingTeam) {
     logFailure(
       ctx,
       `Project ${chalk.bold(project)} does not exist in your team ${chalk.bold(
-        team
-      )}, as configured in ${chalk.bold("convex.json")}`
+        team,
+      )}, as configured in ${chalk.bold("convex.json")}`,
     );
   } else {
     logFailure(
       ctx,
       `You don't have access to team ${chalk.bold(
-        team
-      )}, as configured in ${chalk.bold("convex.json")}`
+        team,
+      )}, as configured in ${chalk.bold("convex.json")}`,
     );
   }
   if (!hasAnyProjects) {
@@ -302,7 +308,7 @@ async function askToReconfigure(
     if (!confirmed) {
       logFailure(
         ctx,
-        "Run `npx convex dev` in a directory with a valid convex.json."
+        "Run `npx convex dev` in a directory with a valid convex.json.",
       );
       return await ctx.crash(1, "invalid filesystem data");
     }
@@ -314,13 +320,13 @@ async function askToReconfigure(
 
 async function askToReconfigureNew(
   ctx: Context,
-  configuredDeploymentName: DeploymentName
+  configuredDeploymentName: DeploymentName,
 ): Promise<"new" | "existing"> {
   logFailure(
     ctx,
     `You don't have access to the project with deployment ${chalk.bold(
-      configuredDeploymentName
-    )}, as configured in ${chalk.bold("CONVEX_DEPLOYMENT")}`
+      configuredDeploymentName,
+    )}, as configured in ${chalk.bold("CONVEX_DEPLOYMENT")}`,
   );
 
   const hasAnyProjects = await hasProjects(ctx);
@@ -337,7 +343,7 @@ async function askToReconfigureNew(
     if (!confirmed) {
       logFailure(
         ctx,
-        "Run `npx convex dev` in a directory with a valid CONVEX_DEPLOYMENT set"
+        "Run `npx convex dev` in a directory with a valid CONVEX_DEPLOYMENT set",
       );
       return await ctx.crash(1, "invalid filesystem data");
     }

@@ -17,7 +17,7 @@ import { Expand } from "../type_utils.js";
 export class Validator<
   TypeScriptType,
   IsOptional extends boolean = false,
-  FieldPaths extends string = never
+  FieldPaths extends string = never,
 > {
   readonly type!: TypeScriptType;
   readonly isOptional!: IsOptional;
@@ -80,7 +80,7 @@ export type ValidatorJSON =
  */
 export const v = {
   id<TableName extends string>(
-    tableName: TableName
+    tableName: TableName,
   ): Validator<GenericId<TableName>> {
     return new Validator({ type: "id", tableName }, false);
   },
@@ -115,7 +115,7 @@ export const v = {
     return new Validator({ type: "bytes" }, false);
   },
   literal<T extends string | number | bigint | boolean>(
-    literal: T
+    literal: T,
   ): Validator<T> {
     const value = convexToJson(literal);
     return new Validator({ type: "literal", value }, false);
@@ -131,17 +131,17 @@ export const v = {
           Object.entries(schema).map(([k, v]) => [
             k,
             { fieldType: v.json, optional: v.optional },
-          ])
+          ]),
         ),
       },
-      false
+      false,
     );
   },
 
   /** @internal */
   record<K extends string, ValueValidator extends Validator<any, any, any>>(
     keys: Validator<K, false, any>,
-    values: ValueValidator
+    values: ValueValidator,
   ): RecordValidator<K, ValueValidator> {
     return new Validator(
       {
@@ -149,7 +149,7 @@ export const v = {
         keys: keys.json,
         values: { fieldType: values.json, optional: values.optional },
       },
-      false
+      false,
     );
   },
 
@@ -157,8 +157,8 @@ export const v = {
     T extends [
       Validator<any, false, any>,
       Validator<any, false, any>,
-      ...Validator<any, false, any>[]
-    ]
+      ...Validator<any, false, any>[],
+    ],
   >(
     ...schemaTypes: T
   ): Validator<T[number]["type"], false, T[number]["fieldPaths"]> {
@@ -167,14 +167,14 @@ export const v = {
         type: "union",
         value: schemaTypes.map((t) => t.json),
       },
-      false
+      false,
     );
   },
   any(): Validator<any, false, string> {
     return new Validator({ type: "any" }, false);
   },
   optional<T extends Validator<any, false, any>>(
-    inner: T
+    inner: T,
   ): Validator<T["type"] | undefined, true, T["fieldPaths"]> {
     return new Validator(inner.json, true) as Validator<
       T["type"],
@@ -230,7 +230,7 @@ export type ObjectValidator<Validators extends PropertyValidators> = Validator<
 >;
 
 type OptionalKeys<
-  PropertyValidators extends Record<string, Validator<any, any, any>>
+  PropertyValidators extends Record<string, Validator<any, any, any>>,
 > = {
   [Property in keyof PropertyValidators]: PropertyValidators[Property]["isOptional"] extends true
     ? Property
@@ -238,7 +238,7 @@ type OptionalKeys<
 }[keyof PropertyValidators];
 
 type RequiredKeys<
-  PropertyValidators extends Record<string, Validator<any, any, any>>
+  PropertyValidators extends Record<string, Validator<any, any, any>>,
 > = Exclude<keyof PropertyValidators, OptionalKeys<PropertyValidators>>;
 
 /**
@@ -254,7 +254,7 @@ type RequiredKeys<
  */
 export type RecordValidator<
   K extends string,
-  ValueValidator extends Validator<any, any, any>
+  ValueValidator extends Validator<any, any, any>,
 > = Validator<
   ValueValidator["isOptional"] extends true
     ? { [key in K]?: ValueValidator["type"] }
@@ -269,7 +269,7 @@ export type RecordValidator<
  */
 type JoinFieldPaths<
   Start extends string,
-  End extends string
+  End extends string,
 > = `${Start}.${End}`;
 
 /**

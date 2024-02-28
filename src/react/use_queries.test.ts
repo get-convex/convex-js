@@ -24,7 +24,7 @@ test("Adding a new query", () => {
     },
   };
   const { result, rerender } = renderHook(() =>
-    useQueriesHelper(queries, createWatch)
+    useQueriesHelper(queries, createWatch),
   );
 
   // Initially the query is loading (undefined).
@@ -82,7 +82,7 @@ test("Swapping queries and unsubscribing", () => {
     },
   };
   const { rerender, unmount } = renderHook(() =>
-    useQueriesHelper(queries, createWatch)
+    useQueriesHelper(queries, createWatch),
   );
 
   // One watch was created and we're listening to it.

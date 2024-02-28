@@ -24,7 +24,7 @@ type ConvexUrlWriteConfig = {
 
 export async function writeConvexUrlToEnvFile(
   ctx: Context,
-  value: string
+  value: string,
 ): Promise<ConvexUrlWriteConfig> {
   const writeConfig = await envVarWriteConfig(ctx, value);
 
@@ -43,7 +43,7 @@ export function changedEnvVarFile(
   envVarName: string,
   envVarValue: string,
   commentAfterValue?: string,
-  commentOnPreviousLine?: string
+  commentOnPreviousLine?: string,
 ): string | null {
   const varAssignment = `${envVarName}=${envVarValue}${
     commentAfterValue === undefined ? "" : ` # ${commentAfterValue}`
@@ -61,7 +61,7 @@ export function changedEnvVarFile(
   if (existing !== undefined) {
     return existingFileContent.replace(
       getEnvVarRegex(envVarName),
-      `${varAssignment}`
+      `${varAssignment}`,
     );
   } else {
     const doubleLineBreak = existingFileContent.endsWith("\n") ? "\n" : "\n\n";
@@ -142,7 +142,7 @@ export async function suggestedEnvVarName(ctx: Context): Promise<{
 
 async function envVarWriteConfig(
   ctx: Context,
-  value: string | null
+  value: string | null,
 ): Promise<ConvexUrlWriteConfig> {
   const { detectedFramework, envVar } = await suggestedEnvVarName(ctx);
 
@@ -160,8 +160,8 @@ async function envVarWriteConfig(
     logWarning(
       ctx,
       chalk.yellow(
-        `Found multiple CONVEX_URL environment variables in ${envFile} so cannot update automatically.`
-      )
+        `Found multiple CONVEX_URL environment variables in ${envFile} so cannot update automatically.`,
+      ),
     );
     return null;
   }
@@ -181,7 +181,7 @@ async function envVarWriteConfig(
 
 function suggestedDevEnvFile(
   ctx: Context,
-  framework?: Framework
+  framework?: Framework,
 ): {
   existing: boolean;
   envFile: string;
@@ -221,8 +221,8 @@ export function buildEnvironment(): string | boolean {
   return process.env.VERCEL
     ? "Vercel"
     : process.env.NETLIFY
-    ? "Netlify"
-    : false;
+      ? "Netlify"
+      : false;
 }
 
 export function gitBranchFromEnvironment(): string | null {

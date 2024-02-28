@@ -44,7 +44,7 @@ export class SearchFilterBuilderImpl
   private consume() {
     if (this.isConsumed) {
       throw new Error(
-        "SearchFilterBuilder has already been used! Chain your method calls like `q => q.search(...).eq(...)`."
+        "SearchFilterBuilder has already been used! Chain your method calls like `q => q.search(...).eq(...)`.",
       );
     }
     this.isConsumed = true;
@@ -52,7 +52,7 @@ export class SearchFilterBuilderImpl
 
   search(
     fieldName: string,
-    query: string
+    query: string,
   ): SearchFilterFinalizer<GenericDocument, GenericSearchIndexConfig> {
     validateArg(fieldName, 1, "search", "fieldName");
     validateArg(query, 2, "search", "query");
@@ -62,12 +62,12 @@ export class SearchFilterBuilderImpl
         type: "Search",
         fieldPath: fieldName,
         value: query,
-      })
+      }),
     );
   }
   eq<FieldName extends string>(
     fieldName: FieldName,
-    value: FieldTypeFromFieldPath<GenericDocument, FieldName>
+    value: FieldTypeFromFieldPath<GenericDocument, FieldName>,
   ): SearchFilterFinalizer<GenericDocument, GenericSearchIndexConfig> {
     validateArg(fieldName, 1, "eq", "fieldName");
     // when `undefined` is passed explicitly, it is allowed.
@@ -80,7 +80,7 @@ export class SearchFilterBuilderImpl
         type: "Eq",
         fieldPath: fieldName,
         value: convexOrUndefinedToJson(value),
-      })
+      }),
     );
   }
 

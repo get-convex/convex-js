@@ -1,4 +1,4 @@
-import { Command, Option } from "commander";
+import { Command, Option } from "@commander-js/extra-typings";
 import {
   DeploymentSelection,
   deploymentSelectionFromOptions,
@@ -25,38 +25,38 @@ export const networkTest = new Command("network-test")
   .description("Run a network test to Convex's servers")
   .addOption(
     new Option(
-      "--timeout",
-      "Timeout in seconds for the network test (default: 10)."
-    )
+      "--timeout <timeout>",
+      "Timeout in seconds for the network test (default: 10).",
+    ),
   )
   .addOption(
     new Option(
       "--ip-family <ipFamily>",
-      "IP family to use (ipv4, ipv6, or auto)"
-    )
+      "IP family to use (ipv4, ipv6, or auto)",
+    ),
   )
   .addOption(
     new Option(
       "--prod",
-      "Perform the network test on this project's production deployment. Defaults to your dev deployment without this flag."
-    ).conflicts(["--preview-name", "--deployment-name", "--url"])
+      "Perform the network test on this project's production deployment. Defaults to your dev deployment without this flag.",
+    ).conflicts(["--preview-name", "--deployment-name", "--url"]),
   )
   .addOption(
     new Option(
       "--preview-name <previewName>",
-      "Perform the network test on the preview deployment with the given name. Defaults to your dev deployment without this flag."
-    ).conflicts(["--prod", "--deployment-name", "--url"])
+      "Perform the network test on the preview deployment with the given name. Defaults to your dev deployment without this flag.",
+    ).conflicts(["--prod", "--deployment-name", "--url"]),
   )
   .addOption(
     new Option(
       "--deployment-name <deploymentName>",
-      "Perform the network test on the specified deployment. Defaults to your dev deployment without this flag."
-    ).conflicts(["--prod", "--preview-name", "--url"])
+      "Perform the network test on the specified deployment. Defaults to your dev deployment without this flag.",
+    ).conflicts(["--prod", "--preview-name", "--url"]),
   )
   .addOption(
     new Option("--url <url>")
       .conflicts(["--prod", "--preview-name", "--deployment-name"])
-      .hideHelp()
+      .hideHelp(),
   )
   .addOption(new Option("--admin-key <adminKey>").hideHelp())
 
@@ -70,7 +70,7 @@ export const networkTest = new Command("network-test")
       ctx,
       "Network test",
       timeoutSeconds * 1000,
-      runNetworkTest(ctx, options)
+      runNetworkTest(ctx, options),
     );
   });
 
@@ -83,7 +83,7 @@ async function runNetworkTest(
     url?: string | undefined;
     adminKey?: string | undefined;
     ipFamily?: string;
-  }
+  },
 ) {
   showSpinner(ctx, "Performing network test...");
   const deploymentSelection = deploymentSelectionFromOptions(options);
@@ -110,7 +110,7 @@ async function runNetworkTest(
 
 async function loadUrl(
   ctx: Context,
-  deploymentSelection: DeploymentSelection
+  deploymentSelection: DeploymentSelection,
 ): Promise<string> {
   // Try to fetch the URL following the usual paths, but special case the
   // `--url` argument in case the developer doesn't have network connectivity.
@@ -123,7 +123,7 @@ async function loadUrl(
   } else {
     const credentials = await fetchDeploymentCredentialsProvisionProd(
       ctx,
-      deploymentSelection
+      deploymentSelection,
     );
     url = credentials.url;
   }
@@ -149,7 +149,7 @@ async function checkDns(ctx: Context, url: string) {
       ctx,
       `${chalk.green(`✔`)} OK: DNS lookup => ${result.address}:${
         ipFamilyNames[result.family as keyof typeof ipFamilyNames]
-      } (${formatDuration(result.duration)})`
+      } (${formatDuration(result.duration)})`,
     );
   } catch (e: any) {
     logFailure(ctx, chalk.red(`FAIL: DNS lookup (${e})`));
@@ -179,7 +179,7 @@ async function checkTcpHostPort(
   ctx: Context,
   host: string,
   port: number,
-  ipFamilyOpt: string
+  ipFamilyOpt: string,
 ) {
   const ipFamily = ipFamilyNumbers[ipFamilyOpt as keyof typeof ipFamilyNumbers];
   const tcpString =
@@ -194,15 +194,15 @@ async function checkTcpHostPort(
           noDelay: true,
           family: ipFamily,
         },
-        () => resolve(performance.now() - start)
+        () => resolve(performance.now() - start),
       );
       socket.on("error", (e) => reject(e));
     });
     logMessage(
       ctx,
       `${chalk.green(`✔`)} OK: ${tcpString} connect (${formatDuration(
-        duration
-      )})`
+        duration,
+      )})`,
     );
   } catch (e: any) {
     logFailure(ctx, chalk.red(`FAIL: ${tcpString} connect (${e})`));
@@ -226,7 +226,7 @@ async function checkHttpOnce(
   name: string,
   url: string,
   expectedStatus: number,
-  allowRedirects: boolean
+  allowRedirects: boolean,
 ) {
   try {
     const start = performance.now();
@@ -248,7 +248,7 @@ async function checkHttpOnce(
     const duration = performance.now() - start;
     logMessage(
       ctx,
-      `${chalk.green(`✔`)} OK: ${name} check (${formatDuration(duration)})`
+      `${chalk.green(`✔`)} OK: ${name} check (${formatDuration(duration)})`,
     );
   } catch (e: any) {
     logFailure(ctx, chalk.red(`FAIL: ${name} check (${e})`));
@@ -262,7 +262,7 @@ async function checkEcho(ctx: Context, url: string, size: number) {
     const client = deploymentClient(url, (err) => {
       logFailure(
         ctx,
-        chalk.red(`FAIL: echo ${formatSize(size)} (${err}), retrying...`)
+        chalk.red(`FAIL: echo ${formatSize(size)} (${err}), retrying...`),
       );
     });
     const echoUrl = new URL(`/echo`, url);
@@ -285,8 +285,8 @@ async function checkEcho(ctx: Context, url: string, size: number) {
     logMessage(
       ctx,
       `${chalk.green(`✔`)} OK: echo ${formatSize(size)} (${formatDuration(
-        duration
-      )}, ${formatSize(bytesPerSecond)}/s)`
+        duration,
+      )}, ${formatSize(bytesPerSecond)}/s)`,
     );
   } catch (e: any) {
     logFailure(ctx, chalk.red(`FAIL: echo ${formatSize(size)} (${e})`));
@@ -298,7 +298,7 @@ export async function withTimeout<T>(
   ctx: Context,
   name: string,
   timeoutMs: number,
-  f: Promise<T>
+  f: Promise<T>,
 ) {
   let timer: NodeJS.Timeout | null = null;
   try {
@@ -319,7 +319,9 @@ export async function withTimeout<T>(
     } else {
       logFailure(
         ctx,
-        chalk.red(`FAIL: ${name} timed out after ${formatDuration(timeoutMs)}.`)
+        chalk.red(
+          `FAIL: ${name} timed out after ${formatDuration(timeoutMs)}.`,
+        ),
       );
       return await ctx.crash(1, "transient");
     }

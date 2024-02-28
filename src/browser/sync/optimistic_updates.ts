@@ -47,7 +47,7 @@ export interface OptimisticLocalStore {
    *   - `value` The query result or `undefined` if the query is loading.
    */
   getAllQueries<Query extends FunctionReference<"query">>(
-    query: Query
+    query: Query,
   ): {
     args: FunctionArgs<Query>;
     value: undefined | FunctionReturnType<Query>;
@@ -69,7 +69,7 @@ export interface OptimisticLocalStore {
   setQuery<Query extends FunctionReference<"query">>(
     query: Query,
     args: FunctionArgs<Query>,
-    value: undefined | FunctionReturnType<Query>
+    value: undefined | FunctionReturnType<Query>,
   ): void;
 }
 /**
@@ -89,5 +89,5 @@ export interface OptimisticLocalStore {
  */
 export type OptimisticUpdate<Args extends Record<string, Value>> = (
   localQueryStore: OptimisticLocalStore,
-  args: Args
+  args: Args,
 ) => void;

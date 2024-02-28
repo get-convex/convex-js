@@ -18,12 +18,12 @@ import { validateArg } from "./validate.js";
 import { Value, convexOrUndefinedToJson } from "../../values/value.js";
 
 export function setupActionVectorSearch(
-  requestId: string
+  requestId: string,
 ): VectorSearch<GenericDataModel, string, string> {
   return async (
     tableName: string,
     indexName: string,
-    query: VectorSearchQuery<GenericTableInfo, string>
+    query: VectorSearchQuery<GenericTableInfo, string>,
   ) => {
     validateArg(tableName, 1, "vectorSearch", "tableName");
     validateArg(indexName, 2, "vectorSearch", "indexName");
@@ -39,7 +39,7 @@ export function setupActionVectorSearch(
     return await new VectorQueryImpl(
       requestId,
       tableName + "." + indexName,
-      query
+      query,
     ).collect();
   };
 }
@@ -53,7 +53,7 @@ export class VectorQueryImpl {
   constructor(
     requestId: string,
     indexName: string,
-    query: VectorSearchQuery<GenericTableInfo, string>
+    query: VectorSearchQuery<GenericTableInfo, string>,
   ) {
     this.requestId = requestId;
     const filters = query.filter
@@ -111,7 +111,7 @@ export class ExpressionImpl extends FilterExpression<any> {
 }
 
 export function serializeExpression(
-  expr: ExpressionOrValue<Value | undefined>
+  expr: ExpressionOrValue<Value | undefined>,
 ): JSONValue {
   if (expr instanceof ExpressionImpl) {
     return expr.serialize();
@@ -130,7 +130,7 @@ export const filterBuilderImpl: VectorFilterBuilder<
 
   eq<FieldName extends GenericVectorIndexConfig["filterFields"]>(
     fieldName: FieldName,
-    value: FieldTypeFromFieldPath<GenericDocument, FieldName>
+    value: FieldTypeFromFieldPath<GenericDocument, FieldName>,
   ): FilterExpression<boolean> {
     if (typeof fieldName !== "string") {
       throw new Error("The first argument to `q.eq` must be a field name.");

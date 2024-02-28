@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { Command, Option } from "commander";
+import { Command, Option } from "@commander-js/extra-typings";
 import path from "path";
 import { performance } from "perf_hooks";
 import {
@@ -34,56 +34,63 @@ export const dev = new Command("dev")
       "  1. Configures a new or existing project (if needed)\n" +
       "  2. Updates generated types and pushes code to the configured dev deployment\n" +
       "  3. Runs the provided function (if `--run` is used)\n" +
-      "  4. Watches for file changes, and repeats step 2\n"
+      "  4. Watches for file changes, and repeats step 2\n",
   )
   .option("-v, --verbose", "Show full listing of changes")
   .addOption(
     new Option(
       "--typecheck <mode>",
-      `Check TypeScript files with \`tsc --noEmit\`.`
+      `Check TypeScript files with \`tsc --noEmit\`.`,
     )
-      .choices(["enable", "try", "disable"])
-      .default("try")
+      .choices(["enable", "try", "disable"] as const)
+      .default("try" as const),
   )
   .addOption(
     new Option("--codegen <mode>", "Regenerate code in `convex/_generated/`")
-      .choices(["enable", "disable"])
-      .default("enable")
+      .choices(["enable", "disable"] as const)
+      .default("enable" as const),
   )
   .addOption(
     new Option(
       "--configure [choice]",
-      "Ignore existing configuration and configure new or existing project"
-    ).choices(["new", "existing"])
+      "Ignore existing configuration and configure new or existing project",
+    ).choices(["new", "existing"] as const),
   )
   .option("--team <team_slug>", "The team you'd like to use for this project")
   .option(
     "--project <project_slug>",
-    "The name of the project you'd like to configure"
+    "The name of the project you'd like to configure",
   )
-  .option("--once", "Execute only the first 3 steps, stop on any failure")
+  .option(
+    "--once",
+    "Execute only the first 3 steps, stop on any failure",
+    false,
+  )
   .option(
     "--until-success",
-    "Execute only the first 3 steps, on failure watch for local and remote changes and retry steps 2 and 3"
+    "Execute only the first 3 steps, on failure watch for local and remote changes and retry steps 2 and 3",
+    false,
   )
   .option(
     "--run <functionName>",
     "The identifier of the function to run in step 3, " +
-      "like `init` or `dir/file:myFunction`"
+      "like `init` or `dir/file:myFunction`",
   )
   .addOption(
     new Option(
       "--prod",
-      "Develop live against this project's production deployment."
-    ).hideHelp()
+      "Develop live against this project's production deployment.",
+    )
+      .default(false)
+      .hideHelp(),
   )
   .addOption(
     new Option(
       "--tail-logs",
-      "Tail this project's Convex logs in this terminal."
-    )
+      "Tail this project's Convex logs in this terminal.",
+    ),
   )
-  .addOption(new Option("--trace-events").hideHelp())
+  .addOption(new Option("--trace-events").default(false).hideHelp())
   .addOption(new Option("--admin-key <adminKey>").hideHelp())
   .addOption(new Option("--url <url>").hideHelp())
   // Options for testing
@@ -106,7 +113,7 @@ export const dev = new Command("dev")
     const credentials = await deploymentCredentialsOrConfigure(
       ctx,
       configure,
-      cmdOptions
+      cmdOptions,
     );
 
     await usageStateWarning(ctx);
@@ -114,7 +121,7 @@ export const dev = new Command("dev")
     const promises = [];
     if (cmdOptions.tailLogs) {
       promises.push(
-        watchLogs(ctx, credentials.url, credentials.adminKey, "stderr")
+        watchLogs(ctx, credentials.url, credentials.adminKey, "stderr"),
       );
     }
     promises.push(
@@ -128,8 +135,8 @@ export const dev = new Command("dev")
           debug: false,
           codegen: cmdOptions.codegen === "enable",
         },
-        cmdOptions
-      )
+        cmdOptions,
+      ),
     );
     await Promise.race(promises);
   });
@@ -142,7 +149,7 @@ export async function watchAndPush(
     once: boolean;
     untilSuccess: boolean;
     traceEvents: boolean;
-  }
+  },
 ) {
   const watch: { watcher: Watcher | undefined } = { watcher: undefined };
   let numFailures = 0;
@@ -165,8 +172,8 @@ export async function watchAndPush(
       logFinishedStep(
         ctx,
         `${getCurrentTimeString()} Convex functions ready! (${formatDuration(
-          end - start
-        )})`
+          end - start,
+        )})`,
       );
       if (cmdOptions.run !== undefined && !ran) {
         await runFunctionInDev(ctx, options, cmdOptions.run);
@@ -190,9 +197,9 @@ export async function watchAndPush(
           ctx,
           chalk.yellow(
             `Failed due to network error, retrying in ${formatDuration(
-              delay
-            )}...`
-          )
+              delay,
+            )}...`,
+          ),
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
@@ -202,7 +209,7 @@ export async function watchAndPush(
       console.assert(
         e.errorType === "invalid filesystem data" ||
           e.errorType === "invalid filesystem or env vars" ||
-          e.errorType["invalid filesystem or db data"] !== undefined
+          e.errorType["invalid filesystem or db data"] !== undefined,
       );
       if (e.errorType === "invalid filesystem or env vars") {
         shouldRetryOnDeploymentEnvVarChange = true;
@@ -231,7 +238,7 @@ export async function watchAndPush(
     const envVarWatch = getDeplymentEnvVarWatch(
       ctx,
       options,
-      shouldRetryOnDeploymentEnvVarChange
+      shouldRetryOnDeploymentEnvVarChange,
     );
     await Promise.race([
       fileSystemWatch.watch(),
@@ -250,7 +257,7 @@ async function runFunctionInDev(
     url: string;
     adminKey: string;
   },
-  functionName: string
+  functionName: string,
 ) {
   await runFunctionAndLog(
     ctx,
@@ -262,7 +269,7 @@ async function runFunctionInDev(
       onSuccess: () => {
         logFinishedStep(ctx, `Finished running function "${functionName}"`);
       },
-    }
+    },
   );
 }
 
@@ -272,10 +279,10 @@ function getTableWatch(
     url: string;
     adminKey: string;
   },
-  tableName: string | null
+  tableName: string | null,
 ) {
   return getFunctionWatch(ctx, credentials, "_system/cli/queryTable", () =>
-    tableName !== null ? { tableName } : null
+    tableName !== null ? { tableName } : null,
   );
 }
 
@@ -285,13 +292,13 @@ function getDeplymentEnvVarWatch(
     url: string;
     adminKey: string;
   },
-  shouldRetryOnDeploymentEnvVarChange: boolean
+  shouldRetryOnDeploymentEnvVarChange: boolean,
 ) {
   return getFunctionWatch(
     ctx,
     credentials,
     "_system/cli/queryEnvironmentVariables",
-    () => (shouldRetryOnDeploymentEnvVarChange ? {} : null)
+    () => (shouldRetryOnDeploymentEnvVarChange ? {} : null),
   );
 }
 
@@ -302,7 +309,7 @@ function getFunctionWatch(
     adminKey: string;
   },
   functionName: string,
-  getArgs: () => Record<string, Value> | null
+  getArgs: () => Record<string, Value> | null,
 ) {
   const [stopPromise, stop] = waitUntilCalled();
   return {
@@ -327,7 +334,7 @@ function getFunctionWatch(
               stop();
             }
           },
-        }
+        },
       );
     },
     stop: () => {
@@ -339,7 +346,7 @@ function getFunctionWatch(
 function getFileSystemWatch(
   ctx: WatchContext,
   watch: { watcher: Watcher | undefined },
-  cmdOptions: { traceEvents: boolean }
+  cmdOptions: { traceEvents: boolean },
 ) {
   let hasStopped = false;
   return {
@@ -360,7 +367,7 @@ function getFileSystemWatch(
           500,
           async () => {
             await watch.watcher!.ready();
-          }
+          },
         );
         stopSpinner(ctx);
       }
@@ -380,7 +387,7 @@ function getFileSystemWatch(
               ctx,
               "Processing",
               event.name,
-              path.relative("", event.absPath)
+              path.relative("", event.absPath),
             );
           }
           const result = observations.overlaps(event);
@@ -409,11 +416,11 @@ function getFileSystemWatch(
         if (cmdOptions.traceEvents) {
           logMessage(
             ctx,
-            `Waiting for ${formatDuration(remaining)} to quiesce...`
+            `Waiting for ${formatDuration(remaining)} to quiesce...`,
           );
         }
         const remainingWait = new Promise<"timeout">((resolve) =>
-          setTimeout(() => resolve("timeout"), deadline - now)
+          setTimeout(() => resolve("timeout"), deadline - now),
         );
         const result = await Promise.race([
           remainingWait,
@@ -427,7 +434,7 @@ function getFileSystemWatch(
               if (cmdOptions.traceEvents) {
                 logMessage(
                   ctx,
-                  `Received an overlapping event at ${event.absPath}, delaying push.`
+                  `Received an overlapping event at ${event.absPath}, delaying push.`,
                 );
               }
               deadline = performance.now() + quiescenceDelay;

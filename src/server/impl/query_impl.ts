@@ -50,7 +50,7 @@ export class QueryInitializerImpl
 
   withIndex(
     indexName: string,
-    indexRange?: (q: IndexRangeBuilderImpl) => IndexRangeBuilderImpl
+    indexRange?: (q: IndexRangeBuilderImpl) => IndexRangeBuilderImpl,
   ): QueryImpl {
     validateArg(indexName, 1, "withIndex", "indexName");
     let rangeBuilder = IndexRangeBuilderImpl.new();
@@ -70,7 +70,7 @@ export class QueryInitializerImpl
 
   withSearchIndex(
     indexName: string,
-    searchFilter: (q: SearchFilterBuilderImpl) => SearchFilterBuilderImpl
+    searchFilter: (q: SearchFilterBuilderImpl) => SearchFilterBuilderImpl,
   ): QueryImpl {
     validateArg(indexName, 1, "withSearchIndex", "indexName");
     validateArg(searchFilter, 2, "withSearchIndex", "searchFilter");
@@ -105,14 +105,14 @@ export class QueryInitializerImpl
     const syscallJSON = await performAsyncSyscall("1.0/count", {
       table: this.tableName,
     });
-    const syscallResult = jsonToConvex(syscallJSON, false) as number;
+    const syscallResult = jsonToConvex(syscallJSON) as number;
     return syscallResult;
   }
 
   filter(
     predicate: (
-      q: FilterBuilder<GenericTableInfo>
-    ) => ExpressionOrValue<boolean>
+      q: FilterBuilder<GenericTableInfo>,
+    ) => ExpressionOrValue<boolean>,
   ) {
     return this.fullTableScan().filter(predicate);
   }
@@ -154,7 +154,7 @@ function throwClosedError(type: "closed" | "consumed"): never {
   throw new Error(
     type === "consumed"
       ? "This query is closed and can't emit any more values."
-      : "This query has been chained with another operator and can't be reused."
+      : "This query has been chained with another operator and can't be reused.",
   );
 }
 
@@ -172,7 +172,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
   private takeQuery(): SerializedQuery {
     if (this.state.type !== "preparing") {
       throw new Error(
-        "A query can only be chained once and can't be chained after iteration begins."
+        "A query can only be chained once and can't be chained after iteration begins.",
       );
     }
     const query = this.state.query;
@@ -206,7 +206,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
     const query = this.takeQuery();
     if (query.source.type === "Search") {
       throw new Error(
-        "Search queries must always be in relevance order. Can not set order manually."
+        "Search queries must always be in relevance order. Can not set order manually.",
       );
     }
     if (query.source.order !== null) {
@@ -218,8 +218,8 @@ export class QueryImpl implements Query<GenericTableInfo> {
 
   filter(
     predicate: (
-      q: FilterBuilder<GenericTableInfo>
-    ) => ExpressionOrValue<boolean>
+      q: FilterBuilder<GenericTableInfo>,
+    ) => ExpressionOrValue<boolean>,
   ): any {
     validateArg(predicate, 1, "filter", "predicate");
     const query = this.takeQuery();
@@ -256,7 +256,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
     if (done) {
       this.closeQuery();
     }
-    const convexValue = jsonToConvex(value, true);
+    const convexValue = jsonToConvex(value);
     return { value: convexValue, done };
   }
 
@@ -266,7 +266,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
   }
 
   async paginate(
-    paginationOpts: PaginationOptions
+    paginationOpts: PaginationOptions,
   ): Promise<PaginationResult<any>> {
     validateArg(paginationOpts, 1, "paginate", "options");
     if (
@@ -274,7 +274,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
       paginationOpts.numItems < 0
     ) {
       throw new Error(
-        `\`options.numItems\` must be a positive number. Received \`${paginationOpts?.numItems}\`.`
+        `\`options.numItems\` must be a positive number. Received \`${paginationOpts?.numItems}\`.`,
       );
     }
     const query = this.takeQuery();
@@ -293,7 +293,7 @@ export class QueryImpl implements Query<GenericTableInfo> {
         version,
       });
     return {
-      page: page.map((json: string) => jsonToConvex(json, true)),
+      page: page.map((json: string) => jsonToConvex(json)),
       isDone,
       continueCursor,
       splitCursor,

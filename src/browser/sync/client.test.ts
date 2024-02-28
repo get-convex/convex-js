@@ -22,7 +22,7 @@ test("localQueryResult reflects optimistic results", async () => {
       optimisticUpdate: (localQueryStore) => {
         localQueryStore.setQuery(anyApi.myUdf.default, {}, true);
       },
-    }
+    },
   );
   expect(client.localQueryResult("myUdf", {})).toBe(true);
 });
@@ -31,7 +31,7 @@ test("Client warns when old clientConfig format is used", async () => {
   expect(() => {
     new BaseConvexClient(
       { address: "http://127.0.0.1:8000" } as any,
-      () => null
+      () => null,
     );
   }).toThrow("no longer supported");
 });

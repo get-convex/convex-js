@@ -15,7 +15,7 @@ describe("convexToJson", () => {
     expect(
       convexToJson({
         property: "value",
-      })
+      }),
     ).toEqual({ property: "value" });
   });
 
@@ -29,7 +29,7 @@ describe("convexToJson", () => {
     expect(
       convexToJson({
         property: BigInt("5151996"),
-      })
+      }),
     ).toEqual({ property: { $integer: "/JxOAAAAAAA=" } });
   });
 
@@ -43,7 +43,7 @@ describe("convexToJson", () => {
     expect(() => {
       convexToJson({ hello: new Date(0) } as any);
     }).toThrow(
-      /Date.*is not a supported Convex type \(present at path .hello in original object/
+      /Date.*is not a supported Convex type \(present at path .hello in original object/,
     );
   });
 
@@ -51,7 +51,7 @@ describe("convexToJson", () => {
     expect(() => {
       convexToJson([undefined] as any);
     }).toThrow(
-      'undefined is not a valid Convex value (present at path [0] in original object ["undefined"]).'
+      'undefined is not a valid Convex value (present at path [0] in original object ["undefined"]).',
     );
   });
 
@@ -65,7 +65,7 @@ describe("convexToJson", () => {
     expect(
       convexToJson({
         property: undefined,
-      })
+      }),
     ).toEqual({});
   });
 
@@ -74,16 +74,14 @@ describe("convexToJson", () => {
     expect(() => {
       convexToJson({ bigint: BigInt("123"), bad: [undefined] } as any);
     }).toThrow(
-      'undefined is not a valid Convex value (present at path .bad[0] in original object {"bigint":"123n","bad":["undefined"]})'
+      'undefined is not a valid Convex value (present at path .bad[0] in original object {"bigint":"123n","bad":["undefined"]})',
     );
   });
 });
 
 describe("jsonToConvex", () => {
   test("deserializes object with BigInt value", () => {
-    expect(
-      jsonToConvex({ property: { $integer: "/JxOAAAAAAA=" } }, false)
-    ).toEqual({
+    expect(jsonToConvex({ property: { $integer: "/JxOAAAAAAA=" } })).toEqual({
       property: BigInt("5151996"),
     });
   });

@@ -23,7 +23,7 @@ test("Authenticate via valid static token", async () => {
     const client = testReactClient(address);
 
     const tokenFetcher = jest.fn(async () =>
-      jwtEncode({ iat: 1234500, exp: 1244500 }, "secret")
+      jwtEncode({ iat: 1234500, exp: 1244500 }, "secret"),
     );
     const onAuthChange = jest.fn();
     client.setAuth(tokenFetcher, onAuthChange);
@@ -66,7 +66,7 @@ test("Reauthenticate after token expiration with versioning", async () => {
 });
 
 async function testRauthenticationOnInvalidTokenSucceeds(
-  authErrorBaseVersion: number | undefined
+  authErrorBaseVersion: number | undefined,
 ) {
   await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
     const client = testReactClient(address);
@@ -181,7 +181,7 @@ test("Fail when tokens are always rejected with versioning", async () => {
 });
 
 async function testRauthenticationFails(
-  authErrorBaseVersion: number | undefined
+  authErrorBaseVersion: number | undefined,
 ) {
   await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
     const client = testReactClient(address);
@@ -236,7 +236,7 @@ async function testRauthenticationFails(
     expect(onAuthChange).toHaveBeenCalledTimes(1);
     expect(onAuthChange).toHaveBeenCalledWith(false);
     expect(consoleSpy).toHaveBeenCalledWith(
-      `Failed to authenticate: "${AUTH_ERROR_MESSAGE}", check your server auth config`
+      `Failed to authenticate: "${AUTH_ERROR_MESSAGE}", check your server auth config`,
     );
   });
 }
@@ -268,7 +268,7 @@ test("Client is protected against token rejection race", async () => {
     const client = testReactClient(address);
 
     const badTokenFetcher = jest.fn(async () =>
-      jwtEncode({ iat: 1234500, exp: 1244500 }, "wobalooba")
+      jwtEncode({ iat: 1234500, exp: 1244500 }, "wobalooba"),
     );
     const firstOnChange = jest.fn();
     client.setAuth(badTokenFetcher, firstOnChange);
@@ -280,7 +280,7 @@ test("Client is protected against token rejection race", async () => {
     const querySetVersion = client.sync["remoteQuerySet"]["version"];
 
     const goodTokenFetcher = jest.fn(async () =>
-      jwtEncode({ iat: 1234500, exp: 1244500 }, "secret")
+      jwtEncode({ iat: 1234500, exp: 1244500 }, "secret"),
     );
 
     const secondOnChange = jest.fn();

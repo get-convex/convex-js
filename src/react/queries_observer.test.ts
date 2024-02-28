@@ -8,7 +8,7 @@ let queriesObserver: QueriesObserver;
 let createWatch: jest.MockedFunction<
   (
     query: FunctionReference<"query">,
-    args: Record<string, Value>
+    args: Record<string, Value>,
   ) => FakeWatch<any>
 >;
 let listener: jest.MockedFunction<() => void>;

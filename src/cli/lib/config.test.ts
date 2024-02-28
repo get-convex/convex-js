@@ -60,6 +60,6 @@ test("parseProjectConfig", async () => {
       functions: "functions/",
       authInfo: [{}],
     },
-    "Expected `authInfo` in `convex.json` to be of type AuthInfo[]"
+    "Expected `authInfo` in `convex.json` to be of type AuthInfo[]",
   );
 });

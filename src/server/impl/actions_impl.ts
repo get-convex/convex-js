@@ -8,7 +8,7 @@ export function setupActionCalls(requestId: string) {
   return {
     runQuery: async (
       query: FunctionReference<"query", "public" | "internal">,
-      args?: Record<string, Value>
+      args?: Record<string, Value>,
     ): Promise<any> => {
       const name = getFunctionName(query);
       const queryArgs = parseArgs(args);
@@ -20,13 +20,13 @@ export function setupActionCalls(requestId: string) {
       };
       const result = await performAsyncSyscall(
         "1.0/actions/query",
-        syscallArgs
+        syscallArgs,
       );
-      return jsonToConvex(result, false);
+      return jsonToConvex(result);
     },
     runMutation: async (
       mutation: FunctionReference<"mutation", "public" | "internal">,
-      args?: Record<string, Value>
+      args?: Record<string, Value>,
     ): Promise<any> => {
       const name = getFunctionName(mutation);
       const mutationArgs = parseArgs(args);
@@ -38,13 +38,13 @@ export function setupActionCalls(requestId: string) {
       };
       const result = await performAsyncSyscall(
         "1.0/actions/mutation",
-        syscallArgs
+        syscallArgs,
       );
-      return jsonToConvex(result, false);
+      return jsonToConvex(result);
     },
     runAction: async (
       action: FunctionReference<"action", "public" | "internal">,
-      args?: Record<string, Value>
+      args?: Record<string, Value>,
     ): Promise<any> => {
       const name = getFunctionName(action);
       const actionArgs = parseArgs(args);
@@ -56,9 +56,9 @@ export function setupActionCalls(requestId: string) {
       };
       const result = await performAsyncSyscall(
         "1.0/actions/action",
-        syscallArgs
+        syscallArgs,
       );
-      return jsonToConvex(result, false);
+      return jsonToConvex(result);
     },
   };
 }

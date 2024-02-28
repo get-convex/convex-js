@@ -25,10 +25,10 @@ const options = {
 depcheck(root, options).then((unused) => {
   if (unused.dependencies.length) {
     console.log(
-      "Some package.json dependencies are only used in CLI (or not at all):"
+      "Some package.json dependencies are only used in CLI (or not at all):",
     );
     console.log(
-      "If a dependency is only used in the CLI, add it to devDependencies instead."
+      "If a dependency is only used in the CLI, add it to devDependencies instead.",
     );
     console.log(unused.dependencies);
     process.exit(1);

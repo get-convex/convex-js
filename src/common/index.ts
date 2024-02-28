@@ -5,7 +5,7 @@ import type { Value } from "../values/value.js";
  * `undefined` to `{}`.
  */
 export function parseArgs(
-  args: Record<string, Value> | undefined
+  args: Record<string, Value> | undefined,
 ): Record<string, Value> {
   if (args === undefined) {
     return {};
@@ -14,7 +14,7 @@ export function parseArgs(
     throw new Error(
       `The arguments to a Convex function must be an object. Received: ${
         args as any
-      }`
+      }`,
     );
   }
   return args;
@@ -25,19 +25,19 @@ export function validateDeploymentUrl(deploymentUrl: string) {
   // supported by React Native's JS environment
   if (typeof deploymentUrl === "undefined") {
     throw new Error(
-      `Client created with undefined deployment address. If you used an environment variable, check that it's set.`
+      `Client created with undefined deployment address. If you used an environment variable, check that it's set.`,
     );
   }
   if (typeof deploymentUrl !== "string") {
     throw new Error(
-      `Invalid deployment address: found ${deploymentUrl as any}".`
+      `Invalid deployment address: found ${deploymentUrl as any}".`,
     );
   }
   if (
     !(deploymentUrl.startsWith("http:") || deploymentUrl.startsWith("https:"))
   ) {
     throw new Error(
-      `Invalid deployment address: Must start with "https://" or "http://". Found "${deploymentUrl}".`
+      `Invalid deployment address: Must start with "https://" or "http://". Found "${deploymentUrl}".`,
     );
   }
 
@@ -51,7 +51,7 @@ export function validateDeploymentUrl(deploymentUrl: string) {
 
   if (!deploymentUrl.endsWith(".convex.cloud")) {
     throw new Error(
-      `Invalid deployment address: Must end with ".convex.cloud". Found "${deploymentUrl}".`
+      `Invalid deployment address: Must end with ".convex.cloud". Found "${deploymentUrl}".`,
     );
   }
 }
