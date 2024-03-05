@@ -1,4 +1,5 @@
 import { ConvexError } from "../../values/errors.js";
+import { jsonToConvex } from "../../values/value.js";
 
 declare const Convex: {
   syscall: (op: string, jsonArgs: string) => string;
@@ -45,7 +46,7 @@ export async function performAsyncSyscall(
     // This only happens if we're propagating ConvexErrors
     if (e.data !== undefined) {
       const rethrown = new ConvexError(e.message);
-      rethrown.data = e.data;
+      rethrown.data = jsonToConvex(e.data);
       throw rethrown;
     }
     throw new Error(e.message);

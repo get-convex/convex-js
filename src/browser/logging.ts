@@ -1,8 +1,7 @@
-// This is blue #9 from https://www.radix-ui.com/docs/colors/palette-composition/the-scales
-
-import { ConvexError, Value } from "../values";
+import { ConvexError, Value } from "../values/index.js";
 import { FunctionFailure } from "./sync/function_result";
 
+// This is blue #9 from https://www.radix-ui.com/docs/colors/palette-composition/the-scales
 // It must look good in both light and dark mode.
 const INFO_COLOR = "color:rgb(0, 145, 255)";
 
