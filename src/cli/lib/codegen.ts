@@ -27,11 +27,11 @@ import { readProjectConfig } from "./config.js";
  * This is a little sketchy because we are using the default prettier config
  * (not our user's one) but it's better than nothing.
  */
-function format(source: string, filetype: string): string {
+function format(source: string, filetype: string): Promise<string> {
   return prettier.format(source, { parser: filetype, pluginSearchDirs: false });
 }
 
-function writeFile(
+async function writeFile(
   ctx: Context,
   filename: string,
   source: string,
@@ -41,7 +41,7 @@ function writeFile(
   quiet: boolean,
   filetype = "typescript",
 ) {
-  const formattedSource = format(source, filetype);
+  const formattedSource = await format(source, filetype);
   const dest = path.join(dir.tmpPath, filename);
   if (debug) {
     logOutput(ctx, `# ${filename}`);
@@ -83,9 +83,9 @@ async function writeJsWithTypes(
       : name.endsWith(".js")
         ? [name, `${name.slice(0, -3)}.d.ts`]
         : [`${name}.js`, `${name}.d.ts`];
-  writeFile(ctx, dtsName, content.DTS, codegenDir, dryRun, debug, quiet);
+  await writeFile(ctx, dtsName, content.DTS, codegenDir, dryRun, debug, quiet);
   if (content.JS) {
-    writeFile(ctx, jsName, content.JS, codegenDir, dryRun, debug, quiet);
+    await writeFile(ctx, jsName, content.JS, codegenDir, dryRun, debug, quiet);
   }
 }
 
@@ -357,7 +357,7 @@ export async function doInitCodegen({
   overwrite?: boolean;
 }): Promise<void> {
   await mkdtemp("convex", async (tempFunctionsDir) => {
-    doReadmeCodegen(
+    await doReadmeCodegen(
       ctx,
       tempFunctionsDir,
       dryRun,
@@ -365,7 +365,7 @@ export async function doInitCodegen({
       quiet,
       overwrite ? undefined : functionsDirectoryPath,
     );
-    doTsconfigCodegen(
+    await doTsconfigCodegen(
       ctx,
       tempFunctionsDir,
       dryRun,
@@ -377,7 +377,7 @@ export async function doInitCodegen({
   });
 }
 
-function doReadmeCodegen(
+async function doReadmeCodegen(
   ctx: Context,
   tempFunctionsDir: TempDir,
   dryRun = false,
@@ -392,7 +392,7 @@ function doReadmeCodegen(
     logMessage(ctx, `not overwriting README.md`);
     return;
   }
-  writeFile(
+  await writeFile(
     ctx,
     "README.md",
     readmeCodegen(),
@@ -404,7 +404,7 @@ function doReadmeCodegen(
   );
 }
 
-function doTsconfigCodegen(
+async function doTsconfigCodegen(
   ctx: Context,
   tempFunctionsDir: TempDir,
   dryRun = false,
@@ -419,7 +419,7 @@ function doTsconfigCodegen(
     logMessage(ctx, `not overwriting tsconfig.json`);
     return;
   }
-  writeFile(
+  await writeFile(
     ctx,
     "tsconfig.json",
     tsconfigCodegen(),

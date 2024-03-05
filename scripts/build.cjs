@@ -144,7 +144,15 @@ if (process.argv.includes("standalone-cli")) {
       platform: "node",
       sourcemap: true,
       target: "node14",
-      external: ["esbuild", "fsevents"],
+      external: [
+        // contains a binary
+        "esbuild",
+        // contains a binary
+        "fsevents",
+        // prettier 3 is more difficult to bundle into a CJS bundle.
+        // TODO figure out how to do this (making import.meta work?)
+        "prettier",
+      ],
       outfile: tempDir + "/cli.bundle.cjs",
       logLevel: "warning",
     })
