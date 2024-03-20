@@ -64,6 +64,16 @@
         "import": "./dist/esm/react-clerk/index.js"
       }
     },
+    "./react-descope": {
+      "require": {
+        "types": "./dist/internal-cjs-types/react-descope/index.d.ts",
+        "require": "./dist/cjs/react-descope/index.js"
+      },
+      "import": {
+        "types": "./dist/internal-esm-types/react-descope/index.d.ts",
+        "import": "./dist/esm/react-descope/index.js"
+      }
+    },
     "./nextjs": {
       "require": {
         "types": "./dist/internal-cjs-types/nextjs/index.d.ts",
@@ -119,6 +129,9 @@
       "react-clerk": [
         "./dist/internal-cjs-types/react-clerk/index.d.ts"
       ],
+      "react-descope": [
+        "./dist/internal-cjs-types/react-descope/index.d.ts"
+      ],
       "nextjs": [
         "./dist/internal-cjs-types/nextjs/index.d.ts"
       ],
@@ -168,6 +181,7 @@
   "peerDependencies": {
     "@auth0/auth0-react": "^2.0.1",
     "@clerk/clerk-react": "^4.12.8",
+    "@descope/react-sdk": "^2.0.10",
     "react": "^17.0.2 || ^18.0.0",
     "react-dom": "^17.0.2 || ^18.0.0"
   },
@@ -183,6 +197,9 @@
     },
     "@clerk/clerk-react": {
       "optional": true
+    },
+    "@descope/react-sdk": {
+      "optional": true
     }
   },
   "@comment devDependencies": [
@@ -193,6 +210,7 @@
     "@auth0/auth0-react": "2.0.1",
     "@babel/parser": "^7.21.3",
     "@clerk/clerk-react": "4.18.0",
+    "@descope/react-sdk": "2.0.10",
     "@commander-js/extra-typings": "^11.1.0",
     "@jest/globals": "^28.1.0",
     "@microsoft/api-extractor": "~7.36.4",

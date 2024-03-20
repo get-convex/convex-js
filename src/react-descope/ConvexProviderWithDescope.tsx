@@ -14,9 +14,9 @@ type IConvexReactClient = {
 
 /**
  * A wrapper React component which provides a {@link react.ConvexReactClient}
- * authenticated with Auth0.
+ * authenticated with Descope.
  *
- * It must be wrapped by a configured `AuthProvider` from `@descope/reack-sdk`.
+ * It must be wrapped by a configured `AuthProvider` from `@descope/react-sdk`.
  *
  * See [Convex Descope](https://docs.convex.dev/auth/descope) on how to set up
  * Convex with Descope.
@@ -46,7 +46,7 @@ function useAuthFromDescope() {
       if (forceRefreshToken) {
         sdk.refresh();
       }
-      
+
       const token = getSessionToken();
       return token as string;
     } catch (error) {

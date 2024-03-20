@@ -48,7 +48,7 @@ export function useConvexAuth(): {
   if (authContext === undefined) {
     throw new Error(
       "Could not find `ConvexProviderWithAuth` (or `ConvexProviderWithClerk` " +
-        "or `ConvexProviderWithAuth0`) " +
+        "or `ConvexProviderWithAuth0`" + "or `ConvexProviderWithDescope`) " +
         "as an ancestor component. This component may be missing, or you " +
         "might have two instances of the `convex/react` module loaded in your " +
         "project.",
