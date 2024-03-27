@@ -32,6 +32,8 @@ This package includes several entry points for building apps on Convex:
   React component for authenticating users with Auth0.
 - [`convex/react-clerk`](https://docs.convex.dev/api/modules/react_clerk): A
   React component for authenticating users with Clerk.
+- [`convex/react-descope`](https://docs.convex.dev/api/modules/react_descope): A
+  React component for authenticating users with Descope.
 
 This package also includes [`convex`](https://docs.convex.dev/using/cli), the
 command-line interface for managing Convex projects.
