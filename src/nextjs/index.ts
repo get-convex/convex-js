@@ -212,20 +212,4 @@ function validateDeploymentUrl(
       }: Must start with "https://" or "http://". Found "${deploymentUrl}".`,
     );
   }
-
-  // Skip validation on localhost because it's for internal Convex development.
-  if (
-    deploymentUrl.indexOf("127.0.0.1") !== -1 ||
-    deploymentUrl.indexOf("localhost") !== -1
-  ) {
-    return;
-  }
-
-  if (!deploymentUrl.endsWith(".convex.cloud")) {
-    throw new Error(
-      `Invalid ${
-        isFromEnv ? "NEXT_PUBLIC_CONVEX_URL" : "deployment address"
-      }: Must end with ".convex.cloud". Found "${deploymentUrl}".`,
-    );
-  }
 }
