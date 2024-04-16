@@ -1,0 +1,6 @@
+{
+    "main": "../dist/cjs/react-descope/index.js",
+    "module": "../dist/esm/react-descope/index.js",
+    "types": "../dist/internal-cjs-types/react-descope/index.d.ts"
+  }
+  
