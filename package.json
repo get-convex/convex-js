@@ -64,6 +64,16 @@
         "import": "./dist/esm/react-clerk/index.js"
       }
     },
+    "./react-fusionauth": {
+      "require": {
+        "types": "./dist/internal-cjs-types/react-fusionauth/index.d.ts",
+        "require": "./dist/cjs/react-fusionauth/index.js"
+      },
+      "import": {
+        "types": "./dist/internal-esm-types/react-fusionauth/index.d.ts",
+        "import": "./dist/esm/react-fusionauth/index.js"
+      }
+    },
     "./nextjs": {
       "require": {
         "types": "./dist/internal-cjs-types/nextjs/index.d.ts",
@@ -119,6 +129,9 @@
       "react-clerk": [
         "./dist/internal-cjs-types/react-clerk/index.d.ts"
       ],
+      "react-fusionauth": [
+        "./dist/internal-cjs-types/react-fusionauth/index.d.ts"
+      ],
       "nextjs": [
         "./dist/internal-cjs-types/nextjs/index.d.ts"
       ],
@@ -169,6 +182,7 @@
   "peerDependencies": {
     "@auth0/auth0-react": "^2.0.1",
     "@clerk/clerk-react": "^4.12.8 || ^5.0.0",
+    "@fusionauth/react-sdk": "^2.1.0",
     "react": "^17.0.2 || ^18.0.0",
     "react-dom": "^17.0.2 || ^18.0.0"
   },
@@ -184,6 +198,9 @@
     },
     "@clerk/clerk-react": {
       "optional": true
+    },
+    "@fusionauth/react-sdk": {
+      "optional": true
     }
   },
   "@comment devDependencies": [
@@ -196,6 +213,7 @@
     "@babel/types": "7.24.0",
     "@clerk/clerk-react": "4.18.0",
     "@commander-js/extra-typings": "^11.1.0",
+    "@fusionauth/react-sdk": "^2.1.0",
     "@jest/globals": "^28.1.0",
     "@microsoft/api-extractor": "~7.36.4",
     "@sentry/node": "^7.23.0",
