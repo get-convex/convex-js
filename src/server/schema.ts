@@ -72,7 +72,7 @@ type ExtractDocument<
   TableName extends string,
   T extends Validator<any, any, any>,
 > =
-  // Add the system fields to `Value` and trick TypeScript into expanding them.
+  // Add the `_id` and system fields to `Value` and trick TypeScript into expanding them.
   Expand<IdField<TableName> & SystemFields & T["type"]>;
 
 /**
