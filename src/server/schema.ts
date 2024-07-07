@@ -64,15 +64,13 @@ type ExtractFieldPaths<T extends Validator<any, any, any>> =
 
 /**
  * Extract the {@link GenericDocument} within a {@link Validator} and
- * add on the system fields.
+ * add on the system fields (including the  `_id`).
  *
- * This is used within {@link defineTable}.
  * @public
  */
-type ExtractDocument<T extends Validator<any, any, any>> =
-  // Add the system fields to `Value` (except `_id` because it depends on
-  //the table name) and trick TypeScript into expanding them.
-  Expand<SystemFields & T["type"]>;
+type ExtractDocument<TableName extends string, T extends Validator<any, any, any>> =
+  // Add the system fields to `Value` and trick TypeScript into expanding them.
+  Expand<IdField<TableName> & SystemFields & T["type"]>;
 
 /**
  * The configuration for a full text search index.
@@ -542,9 +540,7 @@ export type DataModelFromSchemaDefinition<
       infer VectorIndexes
     >
       ? {
-          // We've already added all of the system fields except for `_id`.
-          // Add that here.
-          document: Expand<IdField<TableName> & ExtractDocument<DocumentType>>;
+          document: ExtractDocument<TableName, DocumentType>;
           fieldPaths:
             | keyof IdField<TableName>
             | ExtractFieldPaths<DocumentType>;
