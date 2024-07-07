@@ -68,7 +68,10 @@ type ExtractFieldPaths<T extends Validator<any, any, any>> =
  *
  * @public
  */
-type ExtractDocument<TableName extends string, T extends Validator<any, any, any>> =
+type ExtractDocument<
+  TableName extends string,
+  T extends Validator<any, any, any>,
+> =
   // Add the system fields to `Value` and trick TypeScript into expanding them.
   Expand<IdField<TableName> & SystemFields & T["type"]>;
 
