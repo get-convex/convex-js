@@ -147,18 +147,18 @@ export function changesToGitIgnore(existingFile: string | null): string | null {
   }
   const gitIgnoreLines = existingFile.split("\n");
   const envVarFileIgnored = gitIgnoreLines.some((line) => {
-    // Remove any inline comments
-    const trimmedLine = line.split("#")[0].trim();
+    // Remove extra whitespace
+    const trimmedLine = line.trim();
 
-    // Ignore negated patterns
-    if (trimmedLine.startsWith("!")) return false;
+    // Ignore negated patterns and comments
+    if (trimmedLine.startsWith("!") || trimmedLine.startsWith("#"))
+      return false;
 
     const envIgnorePatterns = [
-      /^\.env\.local$/,
-      /^\.env\.\*$/,
-      /^\.env\*$/,
-      /^.*\.local$/,
-      /^\.env\*\.local$/,
+      // .env.local, .env.*, .env*
+      /^\.env(\.local|\.\*|\*)$/,
+      // .env*.local, *.local
+      /^(\.env)?\*\.local$/,
     ];
 
     return envIgnorePatterns.some((pattern) => pattern.test(trimmedLine));
