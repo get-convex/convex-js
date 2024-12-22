@@ -71,7 +71,7 @@ test("git ignore changes", () => {
   // Handle whitespace
   expect(changesToGitIgnore(".env.local   ")).toEqual(null);
 
-  // Add .env.local (even if it's negated) to instruct user to solve problem
+  // Add .env.local (even if it's negated) to guide the user to solve the problem
   expect(changesToGitIgnore("!.env.local")).toEqual(
     "!.env.local\n.env.local\n",
   );
