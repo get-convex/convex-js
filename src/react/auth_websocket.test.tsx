@@ -418,8 +418,12 @@ describe.sequential("auth websocket tests", () => {
         jwtEncode({ iat: ts, exp: ts + 3 }, "token1"),
         jwtEncode({ iat: ts, exp: ts + 3 }, "token2"),
         jwtEncode({ iat: ts, exp: ts + 3 }, "token3"),
+        jwtEncode({ iat: ts, exp: ts + 3 }, "token4"),
       ];
-      const tokenFetcher = vi.fn(async (_opts) => tokens.shift()!);
+      const tokenFetcher = vi.fn(async (_opts) => {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return tokens.shift()!;
+      });
       const onChange = vi.fn();
       client.setAuth(tokenFetcher, onChange);
 
@@ -460,7 +464,7 @@ describe.sequential("auth websocket tests", () => {
       send({
         type: "AuthError",
         error: "Convex token identity expired",
-        baseVersion: 1,
+        baseVersion: 2,
       });
       //await new Promise((resolve) => setTimeout(resolve));
 

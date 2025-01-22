@@ -192,6 +192,7 @@ export class AuthenticationManager {
       (this.authState.state === "waitingForServerConfirmationOfFreshToken" ||
         this.authState.state === "waitingForServerConfirmationOfCachedToken")
     ) {
+      this._logVerbose("ignoring non-auth token expired error");
       return;
     }
     const { baseVersion } = serverMessage;
@@ -217,6 +218,9 @@ export class AuthenticationManager {
   // in that we pause the WebSocket so that mutations
   // don't retry with bad auth.
   private async tryToReauthenticate(serverMessage: AuthError) {
+    this._logVerbose(
+      `trying to reauthenticate: ${JSON.stringify(serverMessage)}`,
+    );
     // We only retry once, to avoid infinite retries
     if (
       // No way to fetch another token, kaboom
@@ -364,6 +368,7 @@ export class AuthenticationManager {
       delay = 0;
     }
     const refetchTokenTimeoutId = setTimeout(() => {
+      this._logVerbose("running scheduled token refetch");
       void this.refetchToken();
     }, delay);
     this.setAuthState({
@@ -385,9 +390,15 @@ export class AuthenticationManager {
     },
   ) {
     const originalConfigVersion = ++this.configVersion;
+    this._logVerbose(
+      `fetching token with config version ${originalConfigVersion}`,
+    );
     const token = await fetchToken(fetchArgs);
     if (this.configVersion !== originalConfigVersion) {
       // This is a stale config
+      this._logVerbose(
+        `stale config version, expected ${originalConfigVersion}, got ${this.configVersion}`,
+      );
       return { isFromOutdatedConfig: true };
     }
     return { isFromOutdatedConfig: false, value: token };
@@ -397,6 +408,7 @@ export class AuthenticationManager {
     this.resetAuthState();
     // Bump this in case we are mid-token-fetch when we get stopped
     this.configVersion++;
+    this._logVerbose(`config version bumped to ${this.configVersion}`);
   }
 
   private setAndReportAuthFailed(
@@ -411,6 +423,17 @@ export class AuthenticationManager {
   }
 
   private setAuthState(newAuth: AuthState) {
+    const authStateForLog =
+      newAuth.state === "waitingForServerConfirmationOfFreshToken"
+        ? {
+            ...newAuth,
+            token: newAuth.token.slice(0, 7) + "..." + newAuth.token.slice(-7),
+          }
+        : { state: newAuth.state };
+    this._logVerbose(
+      `setting auth state to ${JSON.stringify(authStateForLog)}`,
+    );
+
     if (this.authState.state === "waitingForScheduledRefetch") {
       clearTimeout(this.authState.refetchTokenTimeoutId);
 
