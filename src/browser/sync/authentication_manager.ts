@@ -183,6 +183,17 @@ export class AuthenticationManager {
   }
 
   onAuthError(serverMessage: AuthError) {
+    // If auth error comes from a query/mutation/action and the client
+    // is waiting for the server to confirm a token, ignore.
+    // TODO: This shouldn't rely on a specific error text, make less brittle.
+    // May require backend changes.
+    if (
+      serverMessage.error === "Convex token identity expired" &&
+      (this.authState.state === "waitingForServerConfirmationOfFreshToken" ||
+        this.authState.state === "waitingForServerConfirmationOfCachedToken")
+    ) {
+      return;
+    }
     const { baseVersion } = serverMessage;
     // Versioned AuthErrors are ignored if the client advanced to
     // a newer auth identity
