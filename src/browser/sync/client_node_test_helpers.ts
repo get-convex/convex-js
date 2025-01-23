@@ -60,7 +60,8 @@ export async function withInMemoryWebSocket(
     if (!msgP) {
       throw new Error("Receive() called twice? No message promise found.");
     }
-    return JSON.parse(await msgP);
+    const result = JSON.parse(await msgP);
+    return result;
   }
   function send(message: ServerMessage) {
     // eslint-disable-next-line no-console

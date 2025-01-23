@@ -459,12 +459,11 @@ export class WebSocketManager {
       case "stopped":
         break;
       case "terminated":
-        // If we're terminating we ignore restart
-        return;
       case "connecting":
       case "ready":
       case "disconnected":
-        throw new Error("`restart()` is only valid after `stop()`");
+        this.logger.warn("Restart called without stopping first");
+        return;
       default: {
         // Enforce that the switch-case is exhaustive.
         const _: never = this.socket;

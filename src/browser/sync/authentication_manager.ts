@@ -1,4 +1,5 @@
 import { Logger } from "../logging.js";
+import { isNetworkError } from "./is_network_error.js";
 import { LocalSyncState } from "./local_state.js";
 import { AuthError, Transition } from "./protocol.js";
 import jwtDecode from "jwt-decode";
@@ -6,6 +7,8 @@ import jwtDecode from "jwt-decode";
 // setTimout uses 32 bit integer, so it can only
 // schedule about 24 days in the future.
 const MAXIMUM_REFRESH_DELAY = 20 * 24 * 60 * 60 * 1000; // 20 days
+
+const FETCH_TOKEN_RETRIES = 3;
 
 /**
  * An async function returning the JWT-encoded OpenID Connect Identity Token
@@ -138,8 +141,6 @@ export class AuthenticationManager {
         hasRetried: false,
       });
       this.authenticate(token.value);
-      this._logVerbose("resuming WS after auth token fetch");
-      this.resumeSocket();
     } else {
       this.setAuthState({
         state: "initialRefetch",
@@ -148,6 +149,8 @@ export class AuthenticationManager {
       // Try again with `forceRefreshToken: true`
       await this.refetchToken();
     }
+    this._logVerbose("resuming WS after auth token fetch");
+    this.resumeSocket();
   }
 
   onTransition(serverMessage: Transition) {
@@ -311,12 +314,7 @@ export class AuthenticationManager {
       }
       this.setAndReportAuthFailed(this.authState.config.onAuthChange);
     }
-    // Resuming in case this refetch was triggered
-    // by an invalid cached token.
-    this._logVerbose(
-      "resuming WS after auth token fetch (if currently paused)",
-    );
-    this.resumeSocket();
+    this.restartSocket();
   }
 
   private scheduleTokenRefetch(token: string) {
@@ -388,20 +386,34 @@ export class AuthenticationManager {
     fetchArgs: {
       forceRefreshToken: boolean;
     },
-  ) {
+  ): Promise<{ isFromOutdatedConfig: boolean; value?: string | null }> {
+    // Retries are primarily to guard against network failures due to client
+    // being in background.
+    let retries = FETCH_TOKEN_RETRIES;
     const originalConfigVersion = ++this.configVersion;
     this._logVerbose(
       `fetching token with config version ${originalConfigVersion}`,
     );
-    const token = await fetchToken(fetchArgs);
-    if (this.configVersion !== originalConfigVersion) {
-      // This is a stale config
-      this._logVerbose(
-        `stale config version, expected ${originalConfigVersion}, got ${this.configVersion}`,
-      );
-      return { isFromOutdatedConfig: true };
+    try {
+      const token = await fetchToken(fetchArgs);
+      if (this.configVersion !== originalConfigVersion) {
+        // This is a stale config
+        this._logVerbose(
+          `stale config version, expected ${originalConfigVersion}, got ${this.configVersion}`,
+        );
+        return { isFromOutdatedConfig: true };
+      }
+      return { isFromOutdatedConfig: false, value: token };
+    } catch (e) {
+      if (retries <= 0 || !isNetworkError(e)) {
+        throw e;
+      }
     }
-    return { isFromOutdatedConfig: false, value: token };
+    retries--;
+    this._logVerbose(
+      `fetchTokenAndGuardAgainstRace failed, retry ${FETCH_TOKEN_RETRIES - retries + 1} of ${FETCH_TOKEN_RETRIES}`,
+    );
+    return await this.fetchTokenAndGuardAgainstRace(fetchToken, fetchArgs);
   }
 
   stop() {
