@@ -80,6 +80,9 @@ export class AuthenticationManager {
   // Used to detect races involving `setConfig` calls
   // while a token is being fetched.
   private configVersion = 0;
+  // Used to ensure further reauth attempts are not triggered
+  // while a reauth is in progress.
+  private tryingToReauthenticate = false;
   // Shared by the BaseClient so that the auth manager can easily inspect it
   private readonly syncState: LocalSyncState;
   // Passed down by BaseClient, sends a message to the server
@@ -169,12 +172,14 @@ export class AuthenticationManager {
 
     if (this.authState.state === "waitingForServerConfirmationOfCachedToken") {
       this._logVerbose("server confirmed auth token is valid");
+      this.tryingToReauthenticate = false;
       void this.refetchToken();
       this.authState.config.onAuthChange(true);
       return;
     }
     if (this.authState.state === "waitingForServerConfirmationOfFreshToken") {
       this._logVerbose("server confirmed new auth token is valid");
+      this.tryingToReauthenticate = false;
       this.scheduleTokenRefetch(this.authState.token);
       if (!this.authState.hadAuth) {
         this.authState.config.onAuthChange(true);
@@ -213,6 +218,7 @@ export class AuthenticationManager {
       // We failed on a fresh token, trying another one won't help
       this.authState.state === "waitingForServerConfirmationOfFreshToken"
     ) {
+      this.tryingToReauthenticate = false;
       this.logger.error(
         `Failed to authenticate: "${serverMessage.error}", check your server auth config`,
       );
@@ -225,6 +231,7 @@ export class AuthenticationManager {
       return;
     }
     this._logVerbose("attempting to reauthenticate");
+    this.tryingToReauthenticate = true;
     await this.stopSocket();
     const token = await this.fetchTokenAndGuardAgainstRace(
       this.authState.config.fetchToken,
@@ -260,7 +267,11 @@ export class AuthenticationManager {
   // before the token expires - an active client should never
   // need to reauthenticate.
   private async refetchToken() {
-    if (this.authState.state === "noAuth") {
+    if (
+      this.authState.state === "noAuth" ||
+      // No passive refetching while a reauth is in progress
+      this.tryingToReauthenticate
+    ) {
       return;
     }
     this._logVerbose("refetching auth token");
