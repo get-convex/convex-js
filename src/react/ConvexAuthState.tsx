@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { AuthTokenFetcher } from "../browser/sync/client.js";
 import { ConvexProvider } from "./client.js";
+import { Logger } from "../browser/logging.js";
 
 // Until we can import from our own entry points (requires TypeScript 4.7),
 // just describe the interface enough to help users pass the right type.
@@ -16,6 +17,7 @@ type IConvexReactClient = {
     onChange: (isAuthenticated: boolean) => void,
   ): void;
   clearAuth(): void;
+  logger: Logger;
 };
 
 /**
@@ -112,6 +114,29 @@ export function ConvexProviderWithAuth({
   ) {
     setIsConvexAuthenticated(false);
   }
+
+  useEffect(() => {
+    client.logger.logVerbose(
+      "auth state changed",
+      JSON.stringify(
+        {
+          authProviderLoading,
+          authProviderAuthenticated,
+          isConvexAuthenticated,
+          isLoading: isConvexAuthenticated === null,
+          isAuthenticated:
+            authProviderAuthenticated && (isConvexAuthenticated ?? false),
+        },
+        null,
+        2,
+      ),
+    );
+  }, [
+    authProviderLoading,
+    authProviderAuthenticated,
+    isConvexAuthenticated,
+    client.logger,
+  ]);
 
   return (
     <ConvexAuthContext.Provider
