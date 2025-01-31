@@ -138,8 +138,6 @@ export class AuthenticationManager {
         hasRetried: false,
       });
       this.authenticate(token.value);
-      this._logVerbose("resuming WS after auth token fetch");
-      this.resumeSocket();
     } else {
       this.setAuthState({
         state: "initialRefetch",
@@ -148,6 +146,8 @@ export class AuthenticationManager {
       // Try again with `forceRefreshToken: true`
       await this.refetchToken();
     }
+    this._logVerbose("resuming WS after auth token fetch");
+    this.resumeSocket();
   }
 
   onTransition(serverMessage: Transition) {
@@ -296,12 +296,7 @@ export class AuthenticationManager {
       }
       this.setAndReportAuthFailed(this.authState.config.onAuthChange);
     }
-    // Resuming in case this refetch was triggered
-    // by an invalid cached token.
-    this._logVerbose(
-      "resuming WS after auth token fetch (if currently paused)",
-    );
-    this.resumeSocket();
+    this.restartSocket();
   }
 
   private scheduleTokenRefetch(token: string) {
