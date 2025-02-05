@@ -11,18 +11,22 @@ import { ConvexReactClient } from "./index.js";
 import waitForExpect from "wait-for-expect";
 import { anyApi } from "../server/index.js";
 import { Long } from "../browser/long.js";
+import { instantiateDefaultLogger, Logger } from "../browser/logging.js";
 
-const testReactClient = (address: string) =>
+const testLogger = instantiateDefaultLogger({ verbose: true });
+const testReactClient = (address: string, logger?: Logger) =>
   new ConvexReactClient(address, {
     webSocketConstructor: nodeWebSocket,
     unsavedChangesWarning: false,
+    logger,
+    verbose: true,
   });
 
 // Disabled due to flakes in CI
 // https://linear.app/convex/issue/ENG-7052/re-enable-auth-websocket-client-tests
 
 // On Linux these can retry forever due to EADDRINUSE so run then sequentially.
-describe.sequential.skip("auth websocket tests", () => {
+describe.sequential("auth websocket tests", () => {
   // This is the path usually taken on page load after a user logged in,
   // with a constant token provider.
   test("Authenticate via valid static token", async () => {
@@ -324,6 +328,182 @@ describe.sequential.skip("auth websocket tests", () => {
 
       expect(firstOnChange).toHaveBeenCalledTimes(0);
       expect(secondOnChange).toHaveBeenCalledWith(true);
+    });
+  });
+
+  test("Client ignores non-auth responses for token validation", async () => {
+    await withInMemoryWebSocket(async ({ address, receive, send }) => {
+      const client = testReactClient(address, testLogger);
+      const ts = Math.ceil(Date.now() / 1000);
+      const tokens = [
+        jwtEncode({ iat: ts, exp: ts + 1000 }, "token1"),
+        jwtEncode({ iat: ts, exp: ts + 1000 }, "token2"),
+      ];
+      const tokenFetcher = vi.fn(async (_opts) => tokens.shift()!);
+      const onChange = vi.fn();
+      client.setAuth(tokenFetcher, onChange);
+
+      expect((await receive()).type).toEqual("Connect");
+      expect((await receive()).type).toEqual("Authenticate");
+      expect((await receive()).type).toEqual("ModifyQuerySet");
+
+      const querySetVersion = client.sync["remoteQuerySet"]["version"];
+
+      send({
+        type: "Transition",
+        startVersion: {
+          ...querySetVersion,
+          identity: 0,
+        },
+        endVersion: {
+          ...querySetVersion,
+          identity: 1,
+        },
+        modifications: [],
+      });
+
+      expect((await receive()).type).toEqual("Authenticate");
+
+      // In this race condition, a delayed auth error from a non-auth message
+      // comes back while the client is waiting for server validation of
+      // the new token.
+      send({
+        type: "AuthError",
+        error: "Convex token identity expired",
+        baseVersion: 1,
+      });
+
+      send({
+        type: "Transition",
+        startVersion: {
+          ...querySetVersion,
+          identity: 1,
+        },
+        endVersion: {
+          ...querySetVersion,
+          identity: 2,
+        },
+        modifications: [],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve));
+      await client.close();
+
+      expect(tokenFetcher).toHaveBeenCalledTimes(2);
+      expect(tokenFetcher).toHaveBeenNthCalledWith(1, {
+        forceRefreshToken: false,
+      });
+      expect(tokenFetcher).toHaveBeenNthCalledWith(2, {
+        forceRefreshToken: true,
+      });
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange).toHaveBeenNthCalledWith(1, true);
+      // Without proper handling, this second call will be false
+      expect(onChange).toHaveBeenNthCalledWith(2, true);
+    });
+  });
+
+  test.only("Client maintains connection when refetch occurs during reauth attempt", async () => {
+    await withInMemoryWebSocket(async ({ address, receive, send }) => {
+      const client = testReactClient(address, testLogger);
+      const ts = Math.ceil(Date.now() / 1000);
+      const tokens = [
+        jwtEncode({ iat: ts, exp: ts + 3 }, "token1"),
+        jwtEncode({ iat: ts, exp: ts + 3 }, "token2"),
+        jwtEncode({ iat: ts, exp: ts + 3 }, "token3"),
+      ];
+      const tokenFetcher = vi.fn(async (_opts) => tokens.shift()!);
+      const onChange = vi.fn();
+      client.setAuth(tokenFetcher, onChange);
+
+      expect((await receive()).type).toEqual("Connect");
+      expect((await receive()).type).toEqual("Authenticate");
+      expect((await receive()).type).toEqual("ModifyQuerySet");
+
+      const querySetVersion = client.sync["remoteQuerySet"]["version"];
+
+      send({
+        type: "Transition",
+        startVersion: {
+          ...querySetVersion,
+          identity: 0,
+        },
+        endVersion: {
+          ...querySetVersion,
+          identity: 1,
+        },
+        modifications: [],
+      });
+
+      expect((await receive()).type).toEqual("Authenticate");
+
+      send({
+        type: "Transition",
+        startVersion: {
+          ...querySetVersion,
+          identity: 1,
+        },
+        endVersion: {
+          ...querySetVersion,
+          identity: 2,
+        },
+        modifications: [],
+      });
+
+      send({
+        type: "AuthError",
+        error: "Convex token identity expired",
+        baseVersion: 1,
+      });
+      //await new Promise((resolve) => setTimeout(resolve));
+
+      console.log(-1);
+      expect((await receive()).type).toEqual("Authenticate");
+      console.log(0);
+      expect((await receive()).type).toEqual("Connect");
+      console.log(1);
+      expect((await receive()).type).toEqual("Authenticate");
+      console.log(2);
+      expect((await receive()).type).toEqual("ModifyQuerySet");
+      console.log(3);
+      /*
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      console.log(0);
+      expect((await receive()).type).toEqual("Authenticate");
+      console.log(1);
+      */
+
+      send({
+        type: "Transition",
+        startVersion: {
+          ...querySetVersion,
+          identity: 0,
+        },
+        endVersion: {
+          ...querySetVersion,
+          identity: 1,
+        },
+        modifications: [],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve));
+      //await client.close();
+
+      expect(tokenFetcher).toHaveBeenCalledTimes(3);
+      expect(tokenFetcher).toHaveBeenNthCalledWith(1, {
+        forceRefreshToken: false,
+      });
+      expect(tokenFetcher).toHaveBeenNthCalledWith(2, {
+        forceRefreshToken: true,
+      });
+      expect(tokenFetcher).toHaveBeenNthCalledWith(3, {
+        forceRefreshToken: true,
+      });
+      expect(onChange).toHaveBeenCalledTimes(3);
+      expect(onChange).toHaveBeenNthCalledWith(1, true);
+      expect(onChange).toHaveBeenNthCalledWith(2, true);
+      expect(onChange).toHaveBeenNthCalledWith(3, false);
     });
   });
 
