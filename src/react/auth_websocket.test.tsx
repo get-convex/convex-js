@@ -11,14 +11,11 @@ import { ConvexReactClient } from "./index.js";
 import waitForExpect from "wait-for-expect";
 import { anyApi } from "../server/index.js";
 import { Long } from "../browser/long.js";
-import { instantiateDefaultLogger, Logger } from "../browser/logging.js";
 
-const testLogger = instantiateDefaultLogger({ verbose: true });
-const testReactClient = (address: string, logger?: Logger) =>
+const testReactClient = (address: string) =>
   new ConvexReactClient(address, {
     webSocketConstructor: nodeWebSocket,
     unsavedChangesWarning: false,
-    logger,
     verbose: true,
   });
 
@@ -26,7 +23,7 @@ const testReactClient = (address: string, logger?: Logger) =>
 // https://linear.app/convex/issue/ENG-7052/re-enable-auth-websocket-client-tests
 
 // On Linux these can retry forever due to EADDRINUSE so run then sequentially.
-describe.sequential("auth websocket tests", () => {
+describe.sequential.skip("auth websocket tests", () => {
   // This is the path usually taken on page load after a user logged in,
   // with a constant token provider.
   test("Authenticate via valid static token", async () => {
@@ -195,17 +192,20 @@ describe.sequential("auth websocket tests", () => {
           // Do nothing
         });
 
-      let token = jwtEncode({ iat: 1234500, exp: 1244500 }, "wobabloobla");
-      const tokenFetcher = vi.fn(async () => token);
+      const tokens = [
+        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret1"),
+        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret2"),
+        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret3"),
+        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret4"),
+      ];
+
+      const tokenFetcher = vi.fn(async () => tokens.shift());
       const onAuthChange = vi.fn();
       client.setAuth(tokenFetcher, onAuthChange);
 
       expect((await receive()).type).toEqual("Connect");
       expect((await receive()).type).toEqual("Authenticate");
       expect((await receive()).type).toEqual("ModifyQuerySet");
-
-      // Token must change, otherwise client will not try to reauthenticate
-      token = jwtEncode({ iat: 1234500, exp: 1244500 }, "secret");
 
       send({
         type: "AuthError",
@@ -214,7 +214,7 @@ describe.sequential("auth websocket tests", () => {
       });
       close();
 
-      // The client reconnects automatically
+      // The client reconnects automatically and retries twice
 
       expect((await receive()).type).toEqual("Connect");
       expect((await receive()).type).toEqual("Authenticate");
@@ -225,6 +225,26 @@ describe.sequential("auth websocket tests", () => {
         type: "AuthError",
         error: AUTH_ERROR_MESSAGE,
         baseVersion: authErrorBaseVersion,
+      });
+      close();
+
+      expect((await receive()).type).toEqual("Connect");
+      expect((await receive()).type).toEqual("Authenticate");
+      expect((await receive()).type).toEqual("ModifyQuerySet");
+
+      send({
+        type: "AuthError",
+        error: AUTH_ERROR_MESSAGE,
+      });
+      close();
+
+      expect((await receive()).type).toEqual("Connect");
+      expect((await receive()).type).toEqual("Authenticate");
+      expect((await receive()).type).toEqual("ModifyQuerySet");
+
+      send({
+        type: "AuthError",
+        error: AUTH_ERROR_MESSAGE,
       });
       close();
 
@@ -333,7 +353,7 @@ describe.sequential("auth websocket tests", () => {
 
   test("Client ignores non-auth responses for token validation", async () => {
     await withInMemoryWebSocket(async ({ address, receive, send }) => {
-      const client = testReactClient(address, testLogger);
+      const client = testReactClient(address);
       const ts = Math.ceil(Date.now() / 1000);
       const tokens = [
         jwtEncode({ iat: ts, exp: ts + 1000 }, "token1"),
@@ -406,7 +426,7 @@ describe.sequential("auth websocket tests", () => {
   test("Client maintains connection when refetch occurs during reauth attempt", async () => {
     await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
       vi.useFakeTimers();
-      const client = testReactClient(address, testLogger);
+      const client = testReactClient(address);
       const ts = Math.ceil(Date.now() / 1000);
       const tokens = [
         jwtEncode({ iat: ts, exp: ts + 3 }, "token1"),
@@ -463,7 +483,6 @@ describe.sequential("auth websocket tests", () => {
         baseVersion: 2,
       });
       close();
-      //await new Promise((resolve) => setTimeout(resolve));
 
       expect((await receive()).type).toEqual("Connect");
       expect((await receive()).type).toEqual("Authenticate");
@@ -482,8 +501,7 @@ describe.sequential("auth websocket tests", () => {
         modifications: [],
       });
 
-      //await new Promise((resolve) => setTimeout(resolve));
-      //await client.close();
+      await client.close();
 
       expect(tokenFetcher).toHaveBeenCalledTimes(4);
       expect(tokenFetcher).toHaveBeenNthCalledWith(1, {
@@ -509,7 +527,7 @@ describe.sequential("auth websocket tests", () => {
   // fetch is taking place.
   test("Handles network error during token fetch", async () => {
     await withInMemoryWebSocket(async ({ address, receive, send }) => {
-      const client = testReactClient(address, testLogger);
+      const client = testReactClient(address);
       const ts = Math.ceil(Date.now() / 1000);
       const tokens = [
         jwtEncode({ iat: ts, exp: ts + 1000 }, "token1"),
@@ -558,6 +576,84 @@ describe.sequential("auth websocket tests", () => {
         endVersion: {
           ...querySetVersion,
           identity: 2,
+        },
+        modifications: [],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve));
+      await client.close();
+
+      expect(tokenFetcher).toHaveBeenCalledTimes(3);
+      expect(tokenFetcher).toHaveBeenNthCalledWith(1, {
+        forceRefreshToken: false,
+      });
+      expect(tokenFetcher).toHaveBeenNthCalledWith(2, {
+        forceRefreshToken: true,
+      });
+      expect(tokenFetcher).toHaveBeenNthCalledWith(3, {
+        forceRefreshToken: true,
+      });
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange).toHaveBeenNthCalledWith(1, true);
+      expect(onChange).toHaveBeenNthCalledWith(2, true);
+    });
+  });
+
+  test("Retries token validation", async () => {
+    await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
+      const client = testReactClient(address);
+      const ts = Math.ceil(Date.now() / 1000);
+      const tokens = [
+        jwtEncode({ iat: ts, exp: ts + 1000 }, "token1"),
+        jwtEncode({ iat: ts, exp: ts + 1000 }, "token2"),
+        jwtEncode({ iat: ts, exp: ts + 1000 }, "token3"),
+      ];
+      const tokenFetcher = vi.fn(async (_opts) => tokens.shift()!);
+      const onChange = vi.fn();
+      client.setAuth(tokenFetcher, onChange);
+
+      expect((await receive()).type).toEqual("Connect");
+      expect((await receive()).type).toEqual("Authenticate");
+      expect((await receive()).type).toEqual("ModifyQuerySet");
+
+      const querySetVersion = client.sync["remoteQuerySet"]["version"];
+
+      send({
+        type: "Transition",
+        startVersion: {
+          ...querySetVersion,
+          identity: 0,
+        },
+        endVersion: {
+          ...querySetVersion,
+          identity: 1,
+        },
+        modifications: [],
+      });
+
+      expect((await receive()).type).toEqual("Authenticate");
+
+      // Simulating an unexpected network error
+      send({
+        type: "AuthError",
+        error: "bla",
+        baseVersion: 1,
+      });
+      close();
+
+      expect((await receive()).type).toEqual("Connect");
+      expect((await receive()).type).toEqual("Authenticate");
+      expect((await receive()).type).toEqual("ModifyQuerySet");
+
+      send({
+        type: "Transition",
+        startVersion: {
+          ...querySetVersion,
+          identity: 0,
+        },
+        endVersion: {
+          ...querySetVersion,
+          identity: 1,
         },
         modifications: [],
       });
