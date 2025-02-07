@@ -3,12 +3,12 @@ import { isNetworkError } from "./is_network_error.js";
 import { LocalSyncState } from "./local_state.js";
 import { AuthError, Transition } from "./protocol.js";
 import jwtDecode from "jwt-decode";
-
 // setTimout uses 32 bit integer, so it can only
 // schedule about 24 days in the future.
 const MAXIMUM_REFRESH_DELAY = 20 * 24 * 60 * 60 * 1000; // 20 days
 
-const FETCH_TOKEN_RETRIES = 3;
+const FETCH_TOKEN_RETRIES = 2;
+const TOKEN_CONFIRMATION_RETRIES = 2;
 
 /**
  * An async function returning the JWT-encoded OpenID Connect Identity Token
@@ -95,6 +95,7 @@ export class AuthenticationManager {
   private readonly clearAuth: () => void;
   private readonly logger: Logger;
   private readonly refreshTokenLeewaySeconds: number;
+  private tokenConfirmationRetries = TOKEN_CONFIRMATION_RETRIES;
   constructor(
     syncState: LocalSyncState,
     callbacks: {
@@ -179,6 +180,7 @@ export class AuthenticationManager {
     if (this.authState.state === "waitingForServerConfirmationOfFreshToken") {
       this._logVerbose("server confirmed new auth token is valid");
       this.scheduleTokenRefetch(this.authState.token);
+      this.tokenConfirmationRetries = TOKEN_CONFIRMATION_RETRIES;
       if (!this.authState.hadAuth) {
         this.authState.config.onAuthChange(true);
       }
@@ -224,7 +226,8 @@ export class AuthenticationManager {
       // No way to fetch another token, kaboom
       this.authState.state === "noAuth" ||
       // We failed on a fresh token, trying another one won't help
-      this.authState.state === "waitingForServerConfirmationOfFreshToken"
+      (this.authState.state === "waitingForServerConfirmationOfFreshToken" &&
+        this.tokenConfirmationRetries <= 0)
     ) {
       this.logger.error(
         `Failed to authenticate: "${serverMessage.error}", check your server auth config`,
@@ -237,6 +240,13 @@ export class AuthenticationManager {
       }
       return;
     }
+    if (this.authState.state === "waitingForServerConfirmationOfFreshToken") {
+      this.tokenConfirmationRetries--;
+      this._logVerbose(
+        `retrying reauthentication, ${this.tokenConfirmationRetries} retries remaining`,
+      );
+    }
+
     this._logVerbose("attempting to reauthenticate");
     await this.stopSocket();
     const token = await this.fetchTokenAndGuardAgainstRace(
