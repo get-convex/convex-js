@@ -234,7 +234,6 @@
   ],
   "dependencies": {
     "esbuild": "0.23.0",
-    "is-network-error": "^1.1.0",
     "jwt-decode": "^3.1.2",
     "prettier": "3.4.2"
   },
