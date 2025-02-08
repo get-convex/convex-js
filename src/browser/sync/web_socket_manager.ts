@@ -274,7 +274,7 @@ export class WebSocketManager {
       type: message.type,
       ...(message.type === "Authenticate" && message.tokenType === "User"
         ? {
-            value: message.value.slice(0, 7) + "..." + message.value.slice(-7),
+            value: `...${message.value.slice(-7)}`,
           }
         : {}),
     };
