@@ -223,9 +223,7 @@ export class AuthenticationManager {
   // in that we pause the WebSocket so that mutations
   // don't retry with bad auth.
   private async tryToReauthenticate(serverMessage: AuthError) {
-    this._logVerbose(
-      `trying to reauthenticate: ${JSON.stringify(serverMessage)}`,
-    );
+    this._logVerbose(`attempting to reauthenticate: ${serverMessage.error}`);
     // We only retry once, to avoid infinite retries
     if (
       // No way to fetch another token, kaboom
@@ -252,7 +250,6 @@ export class AuthenticationManager {
       );
     }
 
-    this._logVerbose("attempting to reauthenticate");
     await this.stopSocket();
     const token = await this.fetchTokenAndGuardAgainstRace(
       this.authState.config.fetchToken,
@@ -324,6 +321,9 @@ export class AuthenticationManager {
       }
       this.setAndReportAuthFailed(this.authState.config.onAuthChange);
     }
+    // Restart in case this refetch was triggered via schedule during
+    // a reauthentication attempt.
+    this._logVerbose("restarting WS after auth token fetch");
     this.restartSocket();
   }
 
@@ -448,8 +448,9 @@ export class AuthenticationManager {
     const authStateForLog =
       newAuth.state === "waitingForServerConfirmationOfFreshToken"
         ? {
-            ...newAuth,
-            token: newAuth.token.slice(0, 7) + "..." + newAuth.token.slice(-7),
+            hadAuth: newAuth.hadAuth,
+            state: newAuth.state,
+            token: `...${newAuth.token.slice(-7)}`,
           }
         : { state: newAuth.state };
     this._logVerbose(

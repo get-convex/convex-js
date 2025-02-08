@@ -532,7 +532,7 @@ describe.sequential.skip("auth websocket tests", () => {
 
   // This can happen when a native app goes to background right as a token
   // fetch is taking place.
-  test("Handles network error during token fetch", async () => {
+  test("Client retries on network error during token fetch", async () => {
     await withInMemoryWebSocket(async ({ address, receive, send }) => {
       const client = testReactClient(address);
       const ts = Math.ceil(Date.now() / 1000);
@@ -606,7 +606,7 @@ describe.sequential.skip("auth websocket tests", () => {
     });
   });
 
-  test("Retries token validation", async () => {
+  test("Client retries token validation on error", async () => {
     await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
       const client = testReactClient(address);
       const ts = Math.ceil(Date.now() / 1000);
