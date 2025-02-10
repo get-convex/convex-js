@@ -331,9 +331,7 @@ export class WebSocketManager {
    * This should be used when we hit an error and would like to restart the session.
    */
   private closeAndReconnect(closeReason: string) {
-    this._logVerbose(
-      `begin closeAndReconnect with reason ${closeReason}, socket state: ${this.socket.state}`,
-    );
+    this._logVerbose(`begin closeAndReconnect with reason ${closeReason}`);
     switch (this.socket.state) {
       case "disconnected":
       case "terminated":

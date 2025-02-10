@@ -2,6 +2,7 @@ import { Logger } from "../logging.js";
 import { LocalSyncState } from "./local_state.js";
 import { AuthError, Transition } from "./protocol.js";
 import jwtDecode from "jwt-decode";
+
 // setTimout uses 32 bit integer, so it can only
 // schedule about 24 days in the future.
 const MAXIMUM_REFRESH_DELAY = 20 * 24 * 60 * 60 * 1000; // 20 days
@@ -321,7 +322,9 @@ export class AuthenticationManager {
     }
     // Restart in case this refetch was triggered via schedule during
     // a reauthentication attempt.
-    this._logVerbose("restarting WS after auth token fetch");
+    this._logVerbose(
+      "restarting WS after auth token fetch (if currently stopped)",
+    );
     this.restartSocket();
   }
 
@@ -394,7 +397,7 @@ export class AuthenticationManager {
     fetchArgs: {
       forceRefreshToken: boolean;
     },
-  ): Promise<{ isFromOutdatedConfig: boolean; value?: string | null }> {
+  ) {
     const originalConfigVersion = ++this.configVersion;
     this._logVerbose(
       `fetching token with config version ${originalConfigVersion}`,
