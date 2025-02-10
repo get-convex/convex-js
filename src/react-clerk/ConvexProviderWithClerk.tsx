@@ -3,14 +3,12 @@ import React from "react";
 import { ReactNode, useCallback, useMemo } from "react";
 import { AuthTokenFetcher } from "../browser/sync/client.js";
 import { ConvexProviderWithAuth } from "../react/ConvexAuthState.js";
-import { Logger } from "../browser/logging.js";
 
 // Until we can import from our own entry points (requires TypeScript 4.7),
 // just describe the interface enough to help users pass the right type.
 type IConvexReactClient = {
   setAuth(fetchToken: AuthTokenFetcher): void;
   clearAuth(): void;
-  logger: Logger;
 };
 
 // https://clerk.com/docs/reference/clerk-react/useauth

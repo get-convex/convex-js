@@ -16,7 +16,6 @@ const testReactClient = (address: string) =>
   new ConvexReactClient(address, {
     webSocketConstructor: nodeWebSocket,
     unsavedChangesWarning: false,
-    verbose: true,
   });
 
 // Disabled due to flakes in CI
