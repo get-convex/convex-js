@@ -350,6 +350,8 @@ describe.sequential.skip("auth websocket tests", () => {
     });
   });
 
+  // This is a race condition where a delayed auth error from a non-auth message
+  // comes back while the client is waiting for server validation of the new token.
   test("Client ignores non-auth responses for token validation", async () => {
     await withInMemoryWebSocket(async ({ address, receive, send }) => {
       const client = testReactClient(address);
@@ -383,9 +385,8 @@ describe.sequential.skip("auth websocket tests", () => {
 
       expect((await receive()).type).toEqual("Authenticate");
 
-      // In this race condition, a delayed auth error from a non-auth message
-      // comes back while the client is waiting for server validation of
-      // the new token.
+      // This auth error text is specific to query/mutation/action related auth
+      // errors, which should be ignored for token validation.
       send({
         type: "AuthError",
         error: "Convex token identity expired",
@@ -422,20 +423,27 @@ describe.sequential.skip("auth websocket tests", () => {
     });
   });
 
+  // This is a race condition where a connection stopped by reauthentication
+  // never restarts due to reauthentication exiting early. This happens when
+  // an additional refetch begins while reauthentication is still running,
+  // such as with a scheduled refetch.
   test("Client maintains connection when refetch occurs during reauth attempt", async () => {
     await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
       vi.useFakeTimers();
       const client = testReactClient(address);
-      const ts = Math.ceil(Date.now() / 1000);
+      // Tokens have a 3 second expiration, scheduled refetch occurs 2 seconds
+      // prior to expiration (so 1 second after token validation completes).
       const tokens = [
-        jwtEncode({ iat: ts, exp: ts + 3 }, "token1"),
-        jwtEncode({ iat: ts, exp: ts + 3 }, "token2"),
-        jwtEncode({ iat: ts, exp: ts + 3 }, "token3"),
-        jwtEncode({ iat: ts, exp: ts + 3 }, "token4"),
+        (ts: number) => jwtEncode({ iat: ts, exp: ts + 3 }, "token1"),
+        (ts: number) => jwtEncode({ iat: ts, exp: ts + 3 }, "token2"),
+        (ts: number) => jwtEncode({ iat: ts, exp: ts + 3 }, "token3"),
+        (ts: number) => jwtEncode({ iat: ts, exp: ts + 3 }, "token4"),
       ];
       const tokenFetcher = vi.fn(async (_opts) => {
+        // Simulate a one second delay in token fetching - long enough to
+        // cause a scheduled refetch to occur while reauth is still running.
         vi.advanceTimersByTime(1000);
-        return tokens.shift()!;
+        return tokens.shift()!(Math.ceil(Date.now() / 1000));
       });
       const onChange = vi.fn();
       client.setAuth(tokenFetcher, onChange);
@@ -475,7 +483,7 @@ describe.sequential.skip("auth websocket tests", () => {
       });
 
       // A race condition where a user triggered query with a newly stale
-      // token gets an auth error while reauth is refetching a fresh token.
+      // token triggers an auth error.
       send({
         type: "AuthError",
         error: "Convex token identity expired",
@@ -483,10 +491,21 @@ describe.sequential.skip("auth websocket tests", () => {
       });
       close();
 
+      // The error has now caused reauthentication to begin. Reauth stops the
+      // connection. The scheduled refetch will have started during the
+      // 1000ms token fetcher delay, causing the reauth attempt to exit early
+      // and never restart the connection.
+      //
+      // This is the race condition this test covers. The scheduled refetch
+      // previously would fetch a new token but never restart the connection
+      // stopped by reauth.
       expect((await receive()).type).toEqual("Connect");
       expect((await receive()).type).toEqual("Authenticate");
       expect((await receive()).type).toEqual("ModifyQuerySet");
 
+      // If the connection is successfully restarted, the client will receive
+      // the following Transition message and call onChange a second time with
+      // true for `isAuthenticated`.
       send({
         type: "Transition",
         startVersion: {
@@ -503,33 +522,50 @@ describe.sequential.skip("auth websocket tests", () => {
       await client.close();
 
       expect(tokenFetcher).toHaveBeenCalledTimes(4);
+      // Initial setConfig
       expect(tokenFetcher).toHaveBeenNthCalledWith(1, {
         forceRefreshToken: false,
       });
+      // Initial fresh token fetch
       expect(tokenFetcher).toHaveBeenNthCalledWith(2, {
         forceRefreshToken: true,
       });
+      // Reauth attempt
       expect(tokenFetcher).toHaveBeenNthCalledWith(3, {
         forceRefreshToken: true,
       });
+      // Scheduled refetch
       expect(tokenFetcher).toHaveBeenNthCalledWith(4, {
         forceRefreshToken: true,
       });
+
+      // Confirm that auth state changed exactly twice, and was never
+      // set to false.
       expect(onChange).toHaveBeenCalledTimes(2);
+      // Initial setConfig
       expect(onChange).toHaveBeenNthCalledWith(1, true);
+      // Refetch after reauth
       expect(onChange).toHaveBeenNthCalledWith(2, true);
       vi.useRealTimers();
     });
   });
 
+  // When awaiting server confirmation of a fresh token, a subsequent
+  // auth error (from an Authenticate request) will cause the client to go to
+  // an unauthenticated state. This test covers a race condition where an
+  // Authenticate request for a fresh token is sent, and then the client app
+  // goes to background and misses the Transition response. If the client
+  // becomes active after the new token has expired, a new Authenticate request
+  // will be sent with the expired token, leading to an error response and
+  // unauthenticated state.
   test("Client retries token validation on error", async () => {
     await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
       const client = testReactClient(address);
       const ts = Math.ceil(Date.now() / 1000);
       const tokens = [
-        jwtEncode({ iat: ts, exp: ts + 1000 }, "token1"),
-        jwtEncode({ iat: ts, exp: ts + 1000 }, "token2"),
-        jwtEncode({ iat: ts, exp: ts + 1000 }, "token3"),
+        jwtEncode({ iat: ts, exp: ts + 60 }, "token1"),
+        jwtEncode({ iat: ts, exp: ts + 60 }, "token2"),
+        jwtEncode({ iat: ts, exp: ts + 60 }, "token3"),
       ];
       const tokenFetcher = vi.fn(async (_opts) => tokens.shift()!);
       const onChange = vi.fn();
@@ -556,7 +592,8 @@ describe.sequential.skip("auth websocket tests", () => {
 
       expect((await receive()).type).toEqual("Authenticate");
 
-      // Simulating an unexpected network error
+      // Simulating an auth error while waiting for server confirmation of a
+      // fresh token.
       send({
         type: "AuthError",
         error: "bla",
@@ -564,6 +601,7 @@ describe.sequential.skip("auth websocket tests", () => {
       });
       close();
 
+      // The client should reattempt reauthentication.
       expect((await receive()).type).toEqual("Connect");
       expect((await receive()).type).toEqual("Authenticate");
       expect((await receive()).type).toEqual("ModifyQuerySet");
@@ -581,21 +619,27 @@ describe.sequential.skip("auth websocket tests", () => {
         modifications: [],
       });
 
+      // Flush
       await new Promise((resolve) => setTimeout(resolve));
       await client.close();
 
       expect(tokenFetcher).toHaveBeenCalledTimes(3);
+      // Initial setConfig
       expect(tokenFetcher).toHaveBeenNthCalledWith(1, {
         forceRefreshToken: false,
       });
+      // Initial fresh token fetch
       expect(tokenFetcher).toHaveBeenNthCalledWith(2, {
         forceRefreshToken: true,
       });
+      // Reauth second attempt
       expect(tokenFetcher).toHaveBeenNthCalledWith(3, {
         forceRefreshToken: true,
       });
       expect(onChange).toHaveBeenCalledTimes(2);
+      // Initial setConfig
       expect(onChange).toHaveBeenNthCalledWith(1, true);
+      // Reauth second attempt
       expect(onChange).toHaveBeenNthCalledWith(2, true);
     });
   });

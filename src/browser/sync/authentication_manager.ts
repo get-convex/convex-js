@@ -218,7 +218,6 @@ export class AuthenticationManager {
   // don't retry with bad auth.
   private async tryToReauthenticate(serverMessage: AuthError) {
     this._logVerbose(`attempting to reauthenticate: ${serverMessage.error}`);
-    // We only retry once, to avoid infinite retries
     if (
       // No way to fetch another token, kaboom
       this.authState.state === "noAuth" ||
