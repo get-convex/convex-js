@@ -11,18 +11,21 @@ import { ConvexReactClient } from "./index.js";
 import waitForExpect from "wait-for-expect";
 import { anyApi } from "../server/index.js";
 import { Long } from "../browser/long.js";
+import { ClientMessage } from "../browser/sync/protocol.js";
 
 const testReactClient = (address: string) =>
   new ConvexReactClient(address, {
     webSocketConstructor: nodeWebSocket,
     unsavedChangesWarning: false,
+    verbose: true,
   });
 
 // Disabled due to flakes in CI
 // https://linear.app/convex/issue/ENG-7052/re-enable-auth-websocket-client-tests
 
 // On Linux these can retry forever due to EADDRINUSE so run then sequentially.
-describe.sequential.skip("auth websocket tests", () => {
+describe.sequential("auth websocket tests", () => {
+  // xcxc re-add skip
   // This is the path usually taken on page load after a user logged in,
   // with a constant token provider.
   test("Authenticate via valid static token", async () => {
@@ -363,16 +366,24 @@ describe.sequential.skip("auth websocket tests", () => {
     await withInMemoryWebSocket(async ({ address, receive, send }) => {
       const client = testReactClient(address);
       const ts = Math.ceil(Date.now() / 1000);
-      const tokens = [
-        jwtEncode({ iat: ts, exp: ts + 1000 }, "token1"),
-        jwtEncode({ iat: ts, exp: ts + 1000 }, "token2"),
-      ];
+      const token1 = jwtEncode({ iat: ts, exp: ts + 1000 }, "token1");
+      const token2 = jwtEncode({ iat: ts, exp: ts + 1000 }, "token2");
+      const tokens = [token1, token2];
       const tokenFetcher = vi.fn(async (_opts) => tokens.shift()!);
       const onChange = vi.fn();
+      // This will immediately send the `token1` to the server (treating it as
+      // a token cached in local storage / other memory), and then asynchronously
+      // fetch `token2`, as a "fresh" token, and send that in a future `Authenticate`
+      // message.
       client.setAuth(tokenFetcher, onChange);
 
+      // Messages for initial connection + handling `token1`
       expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
+      const authenticateMessage1 = await receive();
+      assertAuthenticateMessage(authenticateMessage1, {
+        baseVersion: 0,
+        token: token1,
+      });
       expect((await receive()).type).toEqual("ModifyQuerySet");
 
       const querySetVersion = client.sync["remoteQuerySet"]["version"];
@@ -390,44 +401,63 @@ describe.sequential.skip("auth websocket tests", () => {
         modifications: [],
       });
 
-      expect((await receive()).type).toEqual("Authenticate");
+      // Message from the client containing `token2`
+      const authenticateMessage2 = await receive();
+      assertAuthenticateMessage(authenticateMessage2, {
+        baseVersion: 1,
+        token: token2,
+      });
 
-      // This auth error text is specific to query/mutation/action related auth
-      // errors, which should be ignored for token validation.
+      // The client's sync state should still be on version 1, because we haven't transitioned
+      // to the new token yet. But the AuthenticationManager should be in the state `waitingForServerConfirmationOfFreshToken`
+
+      // The server may send an auth error for version 1 before it has received the
+      // `Authenticate` message for version 2.
+
+      // One way this can happen is a query re-executing (i.e. because the data changed) and noticing
+      // that the current auth has expired.
       send({
         type: "AuthError",
         error: "Convex token identity expired",
         baseVersion: 1,
       });
 
+      // The client should stop its websocket connection since its current auth is
+      // expired so the server will error until it's given new auth.
+
+      // However, on the next reconnect, it should send `token2` to complete the token exchange.
+      expect((await receive()).type).toEqual("Connect");
+      const authenticateMessage3 = await receive();
+      assertAuthenticateMessage(authenticateMessage3, {
+        baseVersion: 0,
+        token: token2,
+      });
+      expect((await receive()).type).toEqual("ModifyQuerySet");
+
+      const querySetVersion2 = client.sync["remoteQuerySet"]["version"];
+
       send({
         type: "Transition",
         startVersion: {
-          ...querySetVersion,
-          identity: 1,
+          ...querySetVersion2,
+          identity: 0,
         },
         endVersion: {
-          ...querySetVersion,
-          identity: 2,
+          ...querySetVersion2,
+          identity: 1,
         },
         modifications: [],
       });
 
+      // Flush
       await new Promise((resolve) => setTimeout(resolve));
       await client.close();
 
-      expect(tokenFetcher).toHaveBeenCalledTimes(2);
-      expect(tokenFetcher).toHaveBeenNthCalledWith(1, {
-        forceRefreshToken: false,
-      });
-      expect(tokenFetcher).toHaveBeenNthCalledWith(2, {
-        forceRefreshToken: true,
-      });
       expect(onChange).toHaveBeenCalledTimes(2);
       expect(onChange).toHaveBeenNthCalledWith(1, true);
       // Without proper handling, this second call will be false
       expect(onChange).toHaveBeenNthCalledWith(2, true);
-    });
+    }, true);
   });
 
   // This is a race condition where a connection stopped by reauthentication
@@ -965,3 +995,23 @@ describe.sequential.skip("auth websocket tests", () => {
     });
   });
 });
+
+function assertAuthenticateMessage(
+  message: ClientMessage,
+  expected: {
+    baseVersion: number;
+    token: string;
+  },
+) {
+  expect(message.type).toEqual("Authenticate");
+  // (These errors are redundant, but are necessary for type narrowing)
+  if (message.type !== "Authenticate") {
+    throw new Error("Expected an Authenticate message");
+  }
+  expect(message.baseVersion).toEqual(expected.baseVersion);
+  expect(message.tokenType).toEqual("User");
+  if (message.tokenType !== "User") {
+    throw new Error("Expected a User token");
+  }
+  expect(message.value).toEqual(expected.token);
+}

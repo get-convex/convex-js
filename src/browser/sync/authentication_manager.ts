@@ -1,6 +1,6 @@
 import { Logger } from "../logging.js";
 import { LocalSyncState } from "./local_state.js";
-import { AuthError, Transition } from "./protocol.js";
+import { AuthError, IdentityVersion, Transition } from "./protocol.js";
 import jwtDecode from "jwt-decode";
 
 // setTimout uses 32 bit integer, so it can only
@@ -60,6 +60,7 @@ type AuthState =
       config: AuthConfig;
       hadAuth: boolean;
       token: string;
+      baseVersion: IdentityVersion;
     }
   | {
       state: "waitingForScheduledRefetch";
@@ -85,7 +86,7 @@ export class AuthenticationManager {
   // Shared by the BaseClient so that the auth manager can easily inspect it
   private readonly syncState: LocalSyncState;
   // Passed down by BaseClient, sends a message to the server
-  private readonly authenticate: (token: string) => void;
+  private readonly authenticate: (token: string) => IdentityVersion;
   private readonly stopSocket: () => Promise<void>;
   private readonly restartSocket: () => void;
   private readonly pauseSocket: () => void;
@@ -98,7 +99,7 @@ export class AuthenticationManager {
   constructor(
     syncState: LocalSyncState,
     callbacks: {
-      authenticate: (token: string) => void;
+      authenticate: (token: string) => IdentityVersion;
       stopSocket: () => Promise<void>;
       restartSocket: () => void;
       pauseSocket: () => void;
@@ -187,18 +188,6 @@ export class AuthenticationManager {
   }
 
   onAuthError(serverMessage: AuthError) {
-    // If auth error comes from a query/mutation/action and the client
-    // is waiting for the server to confirm a token, ignore.
-    // TODO: This shouldn't rely on a specific error text, make less brittle.
-    // May require backend changes.
-    if (
-      serverMessage.error === "Convex token identity expired" &&
-      (this.authState.state === "waitingForServerConfirmationOfFreshToken" ||
-        this.authState.state === "waitingForServerConfirmationOfCachedToken")
-    ) {
-      this._logVerbose("ignoring non-auth token expired error");
-      return;
-    }
     const { baseVersion } = serverMessage;
     // Versioned AuthErrors are ignored if the client advanced to
     // a newer auth identity
@@ -223,12 +212,14 @@ export class AuthenticationManager {
   // don't retry with bad auth.
   private async tryToReauthenticate(serverMessage: AuthError) {
     this._logVerbose(`attempting to reauthenticate: ${serverMessage.error}`);
+    const baseVersion = serverMessage.baseVersion!;
     if (
       // No way to fetch another token, kaboom
       this.authState.state === "noAuth" ||
       // We failed on a fresh token, trying another one won't help
       (this.authState.state === "waitingForServerConfirmationOfFreshToken" &&
-        this.tokenConfirmationRetries <= 0)
+        this.tokenConfirmationRetries <= 0 &&
+        baseVersion === this.authState.baseVersion + 1)
     ) {
       this.logger.error(
         `Failed to authenticate: "${serverMessage.error}", check your server auth config`,
@@ -241,7 +232,10 @@ export class AuthenticationManager {
       }
       return;
     }
-    if (this.authState.state === "waitingForServerConfirmationOfFreshToken") {
+    if (
+      this.authState.state === "waitingForServerConfirmationOfFreshToken" &&
+      baseVersion === this.authState.baseVersion + 1
+    ) {
       this.tokenConfirmationRetries--;
       this._logVerbose(
         `retrying reauthentication, ${this.tokenConfirmationRetries} retries remaining`,
@@ -249,6 +243,20 @@ export class AuthenticationManager {
     }
 
     await this.stopSocket();
+    if (this.authState.state === "waitingForServerConfirmationOfFreshToken") {
+      this.restartSocket();
+      this.pauseSocket();
+      const baseVersion = this.authenticate(this.authState.token);
+      this.setAuthState({
+        state: "waitingForServerConfirmationOfFreshToken",
+        config: this.authState.config,
+        token: this.authState.token,
+        baseVersion,
+        hadAuth: this.syncState.hasAuth(),
+      });
+      this.resumeSocket();
+      return;
+    }
     const token = await this.fetchTokenAndGuardAgainstRace(
       this.authState.config.fetchToken,
       {
@@ -260,14 +268,13 @@ export class AuthenticationManager {
     }
 
     if (token.value && this.syncState.isNewAuth(token.value)) {
-      this.authenticate(token.value);
+      const baseVersion = this.authenticate(token.value);
       this.setAuthState({
         state: "waitingForServerConfirmationOfFreshToken",
         config: this.authState.config,
         token: token.value,
-        hadAuth:
-          this.authState.state === "notRefetching" ||
-          this.authState.state === "waitingForScheduledRefetch",
+        baseVersion,
+        hadAuth: this.syncState.hasAuth(),
       });
     } else {
       this._logVerbose("reauthentication failed, could not fetch a new token");
@@ -299,13 +306,14 @@ export class AuthenticationManager {
 
     if (token.value) {
       if (this.syncState.isNewAuth(token.value)) {
+        const baseVersion = this.authenticate(token.value);
         this.setAuthState({
           state: "waitingForServerConfirmationOfFreshToken",
           hadAuth: this.syncState.hasAuth(),
           token: token.value,
+          baseVersion,
           config: this.authState.config,
         });
-        this.authenticate(token.value);
       } else {
         this.setAuthState({
           state: "notRefetching",

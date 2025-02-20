@@ -38,7 +38,7 @@ export async function withInMemoryWebSocket(
   const wss = await listeningSocketServer();
 
   const setUpSocket = () => {
-    wss.once("connection", function connection(ws: WebSocket) {
+    wss.on("connection", function connection(ws: WebSocket) {
       socket = ws;
       ws.on("message", function message(data: string) {
         received(data);
