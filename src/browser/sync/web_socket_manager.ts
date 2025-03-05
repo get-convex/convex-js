@@ -454,7 +454,7 @@ export class WebSocketManager {
    * Create a new WebSocket after a previous `stop()`, unless `terminate()` was
    * called before.
    */
-  restart(): void {
+  tryRestart(): void {
     switch (this.socket.state) {
       case "stopped":
         break;
@@ -462,7 +462,7 @@ export class WebSocketManager {
       case "connecting":
       case "ready":
       case "disconnected":
-        this.logger.warn("Restart called without stopping first");
+        this.logger.logVerbose("Restart called without stopping first");
         return;
       default: {
         // Enforce that the switch-case is exhaustive.

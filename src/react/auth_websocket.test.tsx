@@ -11,18 +11,25 @@ import { ConvexReactClient } from "./index.js";
 import waitForExpect from "wait-for-expect";
 import { anyApi } from "../server/index.js";
 import { Long } from "../browser/long.js";
+import {
+  AuthError,
+  ClientMessage,
+  ServerMessage,
+} from "../browser/sync/protocol.js";
 
 const testReactClient = (address: string) =>
   new ConvexReactClient(address, {
     webSocketConstructor: nodeWebSocket,
     unsavedChangesWarning: false,
+    verbose: true,
   });
 
 // Disabled due to flakes in CI
 // https://linear.app/convex/issue/ENG-7052/re-enable-auth-websocket-client-tests
 
 // On Linux these can retry forever due to EADDRINUSE so run then sequentially.
-describe.sequential.skip("auth websocket tests", () => {
+describe.sequential("auth websocket tests", () => {
+  // xcxc re-add skip
   // This is the path usually taken on page load after a user logged in,
   // with a constant token provider.
   test("Authenticate via valid static token", async () => {
@@ -66,12 +73,6 @@ describe.sequential.skip("auth websocket tests", () => {
 
   // This happens when a user opens a page after their cached token expired
   test("Reauthenticate after token expiration with versioning", async () => {
-    await testRauthenticationOnInvalidTokenSucceeds(0);
-  });
-
-  async function testRauthenticationOnInvalidTokenSucceeds(
-    authErrorBaseVersion: number,
-  ) {
     await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
       const client = testReactClient(address);
 
@@ -81,24 +82,30 @@ describe.sequential.skip("auth websocket tests", () => {
       const onAuthChange = vi.fn();
       client.setAuth(tokenFetcher, onAuthChange);
 
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: token,
+      });
 
       // Token must change, otherwise client will not try to reauthenticate
       token = jwtEncode({ iat: 1234500, exp: 1244500 }, "secret");
 
-      send({
-        type: "AuthError",
-        error: "bla",
-        baseVersion: authErrorBaseVersion,
+      await simulateAuthError({
+        send,
+        close,
+        authError: {
+          type: "AuthError",
+          error: "bla",
+          baseVersion: 0,
+          authUpdateAttempted: true,
+        },
       });
-      close();
 
       // The client reconnects automatically
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: token,
+      });
 
       const querySetVersion = client.sync["remoteQuerySet"]["version"];
 
@@ -108,7 +115,7 @@ describe.sequential.skip("auth websocket tests", () => {
         startVersion: querySetVersion,
         endVersion: {
           ...querySetVersion,
-          identity: querySetVersion.identity + 1,
+          identity: 1,
         },
         modifications: [],
       });
@@ -126,7 +133,7 @@ describe.sequential.skip("auth websocket tests", () => {
       });
       expect(onAuthChange).toHaveBeenCalledWith(true);
     });
-  }
+  });
 
   // This happens when a user opens a page and they cannot
   // fetch from a cache (say due to Prevent Cross Site tracking)
@@ -134,19 +141,23 @@ describe.sequential.skip("auth websocket tests", () => {
     await withInMemoryWebSocket(async ({ address, receive, send }) => {
       const client = testReactClient(address);
 
-      const token: string | null = null;
-      const fetchToken = async (args: { forceRefreshToken: boolean }) =>
-        args.forceRefreshToken
-          ? jwtEncode({ iat: 1234500, exp: 1244500 }, "secret")
-          : token;
-      const tokenFetcher = vi.fn(fetchToken);
+      const freshToken = jwtEncode({ iat: 1234500, exp: 1244500 }, "secret");
+      const tokenFetcher = vi.fn(
+        async (args: { forceRefreshToken: boolean }) => {
+          if (args.forceRefreshToken) {
+            return freshToken;
+          }
+          return null;
+        },
+      );
       const onAuthChange = vi.fn();
       void client.setAuth(tokenFetcher, onAuthChange);
 
-      expect((await receive()).type).toEqual("Connect");
       // The client authenticates after the token refetch
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: freshToken,
+      });
 
       const querySetVersion = client.sync["remoteQuerySet"]["version"];
 
@@ -156,7 +167,7 @@ describe.sequential.skip("auth websocket tests", () => {
         startVersion: querySetVersion,
         endVersion: {
           ...querySetVersion,
-          identity: querySetVersion.identity + 1,
+          identity: 1,
         },
         modifications: [],
       });
@@ -177,11 +188,7 @@ describe.sequential.skip("auth websocket tests", () => {
   });
 
   // This is usually a misconfigured server rejecting any token
-  test("Fail when tokens are always rejected with versioning", async () => {
-    await testRauthenticationFails(0);
-  });
-
-  async function testRauthenticationFails(authErrorBaseVersion: number) {
+  test("Fail when tokens are always rejected", async () => {
     await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
       const client = testReactClient(address);
 
@@ -191,69 +198,82 @@ describe.sequential.skip("auth websocket tests", () => {
           // Do nothing
         });
 
-      const tokens = [
-        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret1"),
-        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret2"),
-        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret3"),
-        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret4"),
-      ];
+      const token1 = jwtEncode({ iat: 1234500, exp: 1244500 }, "secret1");
+      const token2 = jwtEncode({ iat: 1234500, exp: 1244500 }, "secret2");
+      const token3 = jwtEncode({ iat: 1234500, exp: 1244500 }, "secret3");
+      const token4 = jwtEncode({ iat: 1234500, exp: 1244500 }, "secret4");
+
+      const tokens = [token1, token2, token3, token4];
 
       const tokenFetcher = vi.fn(async () => tokens.shift());
       const onAuthChange = vi.fn();
       client.setAuth(tokenFetcher, onAuthChange);
 
       expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
+      assertAuthenticateMessage(await receive(), {
+        baseVersion: 0,
+        token: token1,
+      });
       expect((await receive()).type).toEqual("ModifyQuerySet");
 
       send({
         type: "AuthError",
         error: "bla",
-        baseVersion: authErrorBaseVersion,
+        baseVersion: 0,
+        authUpdateAttempted: true,
       });
       close();
 
       // The client reconnects automatically and retries twice
-
       expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
+      assertAuthenticateMessage(await receive(), {
+        baseVersion: 0,
+        token: token2,
+      });
       expect((await receive()).type).toEqual("ModifyQuerySet");
 
       const AUTH_ERROR_MESSAGE = "bada boom";
       send({
         type: "AuthError",
         error: AUTH_ERROR_MESSAGE,
-        baseVersion: authErrorBaseVersion,
+        baseVersion: 0,
+        authUpdateAttempted: true,
       });
       close();
 
       expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
+      assertAuthenticateMessage(await receive(), {
+        baseVersion: 0,
+        token: token3,
+      });
       expect((await receive()).type).toEqual("ModifyQuerySet");
 
       send({
         type: "AuthError",
         error: AUTH_ERROR_MESSAGE,
+        baseVersion: 0,
+        authUpdateAttempted: true,
       });
       close();
 
       expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
+      assertAuthenticateMessage(await receive(), {
+        baseVersion: 0,
+        token: token4,
+      });
       expect((await receive()).type).toEqual("ModifyQuerySet");
 
       send({
         type: "AuthError",
         error: AUTH_ERROR_MESSAGE,
+        baseVersion: 0,
+        authUpdateAttempted: true,
       });
       close();
 
-      // The client reconnects automatically
+      // The client reconnects automatically (but without auth)
       expect((await receive()).type).toEqual("Connect");
       expect((await receive()).type).toEqual("ModifyQuerySet");
-
-      await waitForExpect(() => {
-        expect(onAuthChange).toHaveBeenCalledTimes(1);
-      });
       await client.close();
 
       expect(onAuthChange).toHaveBeenCalledTimes(1);
@@ -262,7 +282,7 @@ describe.sequential.skip("auth websocket tests", () => {
         `Failed to authenticate: "${AUTH_ERROR_MESSAGE}", check your server auth config`,
       );
     });
-  }
+  });
 
   // This happens when "refresh token"s expired - auth provider client thinks
   // it's authed but it cannot fetch a token at all.
@@ -290,40 +310,46 @@ describe.sequential.skip("auth websocket tests", () => {
     await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
       const client = testReactClient(address);
 
-      const badTokenFetcher = vi.fn(async () =>
-        jwtEncode({ iat: 1234500, exp: 1244500 }, "wobalooba"),
-      );
+      const badToken = jwtEncode({ iat: 1234500, exp: 1244500 }, "wobalooba");
+      const badTokenFetcher = vi.fn(async () => badToken);
       const firstOnChange = vi.fn();
       client.setAuth(badTokenFetcher, firstOnChange);
 
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: badToken,
+      });
 
       const querySetVersion = client.sync["remoteQuerySet"]["version"];
 
-      const goodTokenFetcher = vi.fn(async () =>
-        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret"),
-      );
+      const goodToken = jwtEncode({ iat: 1234500, exp: 1244500 }, "secret");
+      const goodTokenFetcher = vi.fn(async () => goodToken);
 
       const secondOnChange = vi.fn();
       client.setAuth(goodTokenFetcher, secondOnChange);
 
-      expect((await receive()).type).toEqual("Authenticate");
+      assertAuthenticateMessage(await receive(), {
+        baseVersion: 1,
+        token: goodToken,
+      });
 
       // This is the current server AuthError sequence:
       // send a message and close the connection.
-      send({
-        type: "AuthError",
-        error: "bla",
-        // Client started at 0
-        baseVersion: 0,
+      await simulateAuthError({
+        send,
+        close,
+        authError: {
+          type: "AuthError",
+          error: "bla",
+          baseVersion: 0,
+          authUpdateAttempted: true,
+        },
       });
-      close();
 
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: goodToken,
+      });
 
       send({
         type: "Transition",
@@ -353,20 +379,25 @@ describe.sequential.skip("auth websocket tests", () => {
   // This is a race condition where a delayed auth error from a non-auth message
   // comes back while the client is waiting for server validation of the new token.
   test("Client ignores non-auth responses for token validation", async () => {
-    await withInMemoryWebSocket(async ({ address, receive, send }) => {
+    await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
       const client = testReactClient(address);
       const ts = Math.ceil(Date.now() / 1000);
-      const tokens = [
-        jwtEncode({ iat: ts, exp: ts + 1000 }, "token1"),
-        jwtEncode({ iat: ts, exp: ts + 1000 }, "token2"),
-      ];
+      const initialToken = jwtEncode({ iat: ts, exp: ts + 1000 }, "token1");
+      const freshToken = jwtEncode({ iat: ts, exp: ts + 1000 }, "token2");
+      const tokens = [initialToken, freshToken];
       const tokenFetcher = vi.fn(async (_opts) => tokens.shift()!);
       const onChange = vi.fn();
+      // This will immediately send the `initialToken` to the server (treating it as
+      // a token cached in local storage / other memory), and then asynchronously
+      // fetch `freshToken`, as a "fresh" token, and send that in a future `Authenticate`
+      // message.
       client.setAuth(tokenFetcher, onChange);
 
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
+      // Messages for initial connection + handling `initialToken`
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: initialToken,
+      });
 
       const querySetVersion = client.sync["remoteQuerySet"]["version"];
 
@@ -383,44 +414,62 @@ describe.sequential.skip("auth websocket tests", () => {
         modifications: [],
       });
 
-      expect((await receive()).type).toEqual("Authenticate");
-
-      // This auth error text is specific to query/mutation/action related auth
-      // errors, which should be ignored for token validation.
-      send({
-        type: "AuthError",
-        error: "Convex token identity expired",
+      // Message from the client containing `freshToken`
+      assertAuthenticateMessage(await receive(), {
         baseVersion: 1,
+        token: freshToken,
       });
+
+      // The client's sync state should still be on version 1, because we haven't transitioned
+      // to the new token yet. But the AuthenticationManager should be in the state `waitingForServerConfirmationOfFreshToken`
+
+      // The server may send an auth error for version 1 before it has processed the
+      // `Authenticate` message for version 2.
+
+      // One way this can happen is a query re-executing (i.e. because the data changed) and noticing
+      // that the current auth has expired. This should have `authUpdateAttempted: false` because
+      // the server has not yet processed the `Authenticate` message for version 2.
+      await simulateAuthError({
+        send,
+        close,
+        authError: {
+          type: "AuthError",
+          error: "bla",
+          baseVersion: 1,
+          authUpdateAttempted: false,
+        },
+      });
+
+      // However, on the next reconnect, it should send `freshToken` to complete the token exchange.
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: freshToken,
+      });
+
+      const querySetVersion2 = client.sync["remoteQuerySet"]["version"];
 
       send({
         type: "Transition",
         startVersion: {
-          ...querySetVersion,
-          identity: 1,
+          ...querySetVersion2,
+          identity: 0,
         },
         endVersion: {
-          ...querySetVersion,
-          identity: 2,
+          ...querySetVersion2,
+          identity: 1,
         },
         modifications: [],
       });
 
+      // Flush
       await new Promise((resolve) => setTimeout(resolve));
       await client.close();
 
-      expect(tokenFetcher).toHaveBeenCalledTimes(2);
-      expect(tokenFetcher).toHaveBeenNthCalledWith(1, {
-        forceRefreshToken: false,
-      });
-      expect(tokenFetcher).toHaveBeenNthCalledWith(2, {
-        forceRefreshToken: true,
-      });
       expect(onChange).toHaveBeenCalledTimes(2);
       expect(onChange).toHaveBeenNthCalledWith(1, true);
       // Without proper handling, this second call will be false
       expect(onChange).toHaveBeenNthCalledWith(2, true);
-    });
+    }, true);
   });
 
   // This is a race condition where a connection stopped by reauthentication
@@ -431,27 +480,70 @@ describe.sequential.skip("auth websocket tests", () => {
     await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
       vi.useFakeTimers();
       const client = testReactClient(address);
-      // Tokens have a 3 second expiration, scheduled refetch occurs 2 seconds
-      // prior to expiration (so 1 second after token validation completes).
+      // In this test we're going to simulate `fetchToken` taking a long time (1s)
+      // so we can test race conditions, so the issued time will be 1s after the
+      // fetched time.
+
+      // Tokens in this test will expire 3s after they are issued, and we're relying
+      // on the default 2s refresh leeway which means the scheduled refetch will
+      // start 1s after the token is issued.
+
+      const nowInSeconds = Math.ceil(Date.now() / 1000);
+      // existing token, the times shouldn't matter since we immediately fetch a fresh token
+      const initialToken = jwtEncode(
+        { iat: nowInSeconds - 10, exp: nowInSeconds + 10 },
+        "initialToken",
+      );
+      // fresh token, fetched at ts=1
+      const freshToken = jwtEncode(
+        { iat: nowInSeconds + 1, exp: nowInSeconds + 4 },
+        "freshToken",
+      );
+      // scheduled refetch at ts=2 (2s before freshToken expires), but with a 1s delay
+      const scheduledRefetchToken = jwtEncode(
+        { iat: nowInSeconds + 3, exp: nowInSeconds + 6 },
+        "scheduledRefetchToken",
+      );
+      // fetched at ts 1.5 in response to an auth error, issued at ts=2.5
+      const reauthToken = jwtEncode(
+        { iat: nowInSeconds + 2.5, exp: nowInSeconds + 5.5 },
+        "reauthToken",
+      );
       const tokens = [
-        (ts: number) => jwtEncode({ iat: ts, exp: ts + 3 }, "token1"),
-        (ts: number) => jwtEncode({ iat: ts, exp: ts + 3 }, "token2"),
-        (ts: number) => jwtEncode({ iat: ts, exp: ts + 3 }, "token3"),
-        (ts: number) => jwtEncode({ iat: ts, exp: ts + 3 }, "token4"),
+        initialToken,
+        freshToken,
+        reauthToken,
+        scheduledRefetchToken,
       ];
-      const tokenFetcher = vi.fn(async (_opts) => {
-        // Simulate a one second delay in token fetching - long enough to
-        // cause a scheduled refetch to occur while reauth is still running.
-        vi.advanceTimersByTime(1000);
-        return tokens.shift()!(Math.ceil(Date.now() / 1000));
+      const tokenFetcher = vi.fn(
+        async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
+          const token = tokens.shift();
+          if (forceRefreshToken === false) {
+            if (token !== initialToken) {
+              throw new Error(
+                "scheduledRefetchToken should be fetched with forceRefreshToken=true",
+              );
+            }
+            return token;
+          }
+
+          vi.advanceTimersByTime(1000);
+          return token;
+        },
+      );
+      const onChange = vi.fn((isAuthenticated: boolean) => {
+        if (!isAuthenticated) {
+          throw new Error("Client is unexpectedly unauthenticated");
+        }
       });
-      const onChange = vi.fn();
       client.setAuth(tokenFetcher, onChange);
 
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
-
+      // Initial connection, sending `initialToken`
+      // ts=0
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: initialToken,
+      });
       const querySetVersion = client.sync["remoteQuerySet"]["version"];
 
       send({
@@ -467,8 +559,15 @@ describe.sequential.skip("auth websocket tests", () => {
         modifications: [],
       });
 
-      expect((await receive()).type).toEqual("Authenticate");
+      // Immediately fetch a a fresh token (`freshToken`).
+      // `freshToken` expires at ts=4
+      // We will also schedule a refetch at ts=2 (2s before `freshToken` expires)
+      assertAuthenticateMessage(await receive(), {
+        baseVersion: 1,
+        token: freshToken,
+      });
 
+      // Server confirms `freshToken` and transitions to version 2
       send({
         type: "Transition",
         startVersion: {
@@ -482,30 +581,53 @@ describe.sequential.skip("auth websocket tests", () => {
         modifications: [],
       });
 
-      // A race condition where a user triggered query with a newly stale
-      // token triggers an auth error.
-      send({
-        type: "AuthError",
-        error: "Convex token identity expired",
-        baseVersion: 2,
+      vi.advanceTimersByTime(500);
+
+      // ts=1.5
+      // `freshToken` becomes stale before the client has a chance to fetch and send
+      // `scheduledRefetchToken` (e.g. because the page is backgrounded or because `fetchToken` is slow
+      // for some reason), so the server hits an AuthError.
+      await simulateAuthError({
+        send,
+        close,
+        authError: {
+          type: "AuthError",
+          error: "bla",
+          baseVersion: 2,
+          authUpdateAttempted: false,
+        },
       });
-      close();
 
-      // The error has now caused reauthentication to begin. Reauth stops the
-      // connection. The scheduled refetch will have started during the
-      // 1000ms token fetcher delay, causing the reauth attempt to exit early
-      // and never restart the connection.
-      //
-      // This is the race condition this test covers. The scheduled refetch
-      // previously would fetch a new token but never restart the connection
-      // stopped by reauth.
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
+      // In response to this error, we call `tryToReauthenticate`.
+      // Let's say `this.configVersion` is X
+      // This will first stop the websocket, which bumps the configVersion to X+1
+      // This'll call `fetchAndGuardAgainstRace`, which bumps `this.configVersion` to X+2
+      // and sets `originalConfigVersion=X+2` locally
+      // Then it starts fetching `reauthToken` at ts=1.5 and it will finish at ts=2.5.
 
-      // If the connection is successfully restarted, the client will receive
-      // the following Transition message and call onChange a second time with
-      // true for `isAuthenticated`.
+      // At ts=2, we expect the scheduled token fetch to start.
+      // This calls `fetchAndGuardAgainstRace`, which bumps `this.configVersion` to X+3
+      // and sets `originalConfigVersion=X+3` locally
+
+      // At ts=2.5, we get a result from `fetchToken` from the `fetchAndGuardAgainstRace` call
+      // in tryToReauthenticate.
+      // However, the config version no longer matches, so we return { isFromOutdatedConfig: true }
+      // and exit from tryToReauthenticate early. Notably, before `tryRestartSocket` is called,
+      // so the connection is still stopped.
+
+      // At ts=3, we get a result from `fetchToken` from the scheduled refetch.
+      // This time we return the token since the config version matches.
+
+      // Previously, `refetchToken` would not call `tryRestartSocket`, so the WS would
+      // stay stopped.
+
+      // Now that `tryRestartSocket` is called, we should expect to see an Authenticate
+      // message with `scheduledRefetchToken`
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: scheduledRefetchToken,
+      });
+
       send({
         type: "Transition",
         startVersion: {
@@ -520,33 +642,11 @@ describe.sequential.skip("auth websocket tests", () => {
       });
 
       await client.close();
-
-      expect(tokenFetcher).toHaveBeenCalledTimes(4);
-      // Initial setConfig
-      expect(tokenFetcher).toHaveBeenNthCalledWith(1, {
-        forceRefreshToken: false,
-      });
-      // Initial fresh token fetch
-      expect(tokenFetcher).toHaveBeenNthCalledWith(2, {
-        forceRefreshToken: true,
-      });
-      // Reauth attempt
-      expect(tokenFetcher).toHaveBeenNthCalledWith(3, {
-        forceRefreshToken: true,
-      });
-      // Scheduled refetch
-      expect(tokenFetcher).toHaveBeenNthCalledWith(4, {
-        forceRefreshToken: true,
-      });
-
-      // Confirm that auth state changed exactly twice, and was never
-      // set to false.
-      expect(onChange).toHaveBeenCalledTimes(2);
-      // Initial setConfig
-      expect(onChange).toHaveBeenNthCalledWith(1, true);
-      // Refetch after reauth
-      expect(onChange).toHaveBeenNthCalledWith(2, true);
       vi.useRealTimers();
+
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange).toHaveBeenNthCalledWith(1, true);
+      expect(onChange).toHaveBeenNthCalledWith(2, true);
     });
   });
 
@@ -562,18 +662,18 @@ describe.sequential.skip("auth websocket tests", () => {
     await withInMemoryWebSocket(async ({ address, receive, send, close }) => {
       const client = testReactClient(address);
       const ts = Math.ceil(Date.now() / 1000);
-      const tokens = [
-        jwtEncode({ iat: ts, exp: ts + 60 }, "token1"),
-        jwtEncode({ iat: ts, exp: ts + 60 }, "token2"),
-        jwtEncode({ iat: ts, exp: ts + 60 }, "token3"),
-      ];
+      const token1 = jwtEncode({ iat: ts, exp: ts + 60 }, "token1");
+      const token2 = jwtEncode({ iat: ts, exp: ts + 60 }, "token2");
+      const token3 = jwtEncode({ iat: ts, exp: ts + 60 }, "token3");
+      const tokens = [token1, token2, token3];
       const tokenFetcher = vi.fn(async (_opts) => tokens.shift()!);
       const onChange = vi.fn();
       client.setAuth(tokenFetcher, onChange);
 
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: token1,
+      });
 
       const querySetVersion = client.sync["remoteQuerySet"]["version"];
 
@@ -590,22 +690,28 @@ describe.sequential.skip("auth websocket tests", () => {
         modifications: [],
       });
 
-      expect((await receive()).type).toEqual("Authenticate");
+      assertAuthenticateMessage(await receive(), {
+        baseVersion: 1,
+        token: token2,
+      });
 
       // Simulating an auth error while waiting for server confirmation of a
       // fresh token.
-      send({
-        type: "AuthError",
-        error: "bla",
-        baseVersion: 1,
+      await simulateAuthError({
+        send,
+        close,
+        authError: {
+          type: "AuthError",
+          error: "bla",
+          baseVersion: 1,
+          authUpdateAttempted: true,
+        },
       });
-      close();
-
       // The client should reattempt reauthentication.
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
-
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: token3,
+      });
       send({
         type: "Transition",
         startVersion: {
@@ -648,14 +754,14 @@ describe.sequential.skip("auth websocket tests", () => {
     await withInMemoryWebSocket(async ({ address, receive, send }) => {
       const client = testReactClient(address);
 
-      const tokenFetcher = vi.fn(async () =>
-        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret"),
-      );
+      const token1 = jwtEncode({ iat: 1234500, exp: 1244500 }, "secret");
+      const tokenFetcher = vi.fn(async () => token1);
       client.setAuth(tokenFetcher);
 
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: token1,
+      });
 
       const querySetVersion = client.sync["remoteQuerySet"]["version"];
 
@@ -671,14 +777,16 @@ describe.sequential.skip("auth websocket tests", () => {
         modifications: [],
       });
 
-      const tokenFetcher2 = vi.fn(async () =>
-        jwtEncode({ iat: 1234550, exp: 1244550 }, "secret"),
-      );
+      const token2 = jwtEncode({ iat: 1234550, exp: 1244550 }, "secret");
+      const tokenFetcher2 = vi.fn(async () => token2);
       client.setAuth(tokenFetcher2);
       client.watchQuery(anyApi.myQuery.default).onUpdate(() => {});
 
       // Crucially Authenticate comes first!
-      expect((await receive()).type).toEqual("Authenticate");
+      assertAuthenticateMessage(await receive(), {
+        baseVersion: 1,
+        token: token2,
+      });
       expect((await receive()).type).toEqual("ModifyQuerySet");
     });
   });
@@ -687,18 +795,18 @@ describe.sequential.skip("auth websocket tests", () => {
     await withInMemoryWebSocket(async ({ address, receive, send }) => {
       const client = testReactClient(address);
 
-      const tokenFetcher = vi.fn(async () =>
-        jwtEncode({ iat: 1234500, exp: 1244500 }, "secret"),
-      );
+      const token1 = jwtEncode({ iat: 1234500, exp: 1244500 }, "secret");
+      const tokenFetcher = vi.fn(async () => token1);
       client.setAuth(tokenFetcher);
 
       const unsubscribe = client
         .watchQuery(anyApi.myQuery.default)
         .onUpdate(() => {});
 
-      expect((await receive()).type).toEqual("Connect");
-      expect((await receive()).type).toEqual("Authenticate");
-      expect((await receive()).type).toEqual("ModifyQuerySet");
+      await assertReconnectWithAuth(receive, {
+        baseVersion: 0,
+        token: token1,
+      });
 
       const querySetVersion = client.sync["remoteQuerySet"]["version"];
 
@@ -739,12 +847,13 @@ describe.sequential.skip("auth websocket tests", () => {
       unsubscribe();
 
       // Finish fetching the token
-      resolve!(jwtEncode({ iat: 1234550, exp: 1244550 }, "secret"));
+      const token2 = jwtEncode({ iat: 1234550, exp: 1244550 }, "secret");
+      resolve!(token2);
 
       // Crucially Authenticate comes first!
-      expect(await receive()).toMatchObject({
-        type: "Authenticate",
+      assertAuthenticateMessage(await receive(), {
         baseVersion: 1,
+        token: token2,
       });
       expect(await receive()).toMatchObject({
         type: "ModifyQuerySet",
@@ -959,3 +1068,50 @@ describe.sequential.skip("auth websocket tests", () => {
     });
   });
 });
+
+function assertAuthenticateMessage(
+  message: ClientMessage,
+  expected: {
+    baseVersion: number;
+    token: string;
+  },
+) {
+  expect(message.type).toEqual("Authenticate");
+  // (These errors are redundant, but are necessary for type narrowing)
+  if (message.type !== "Authenticate") {
+    throw new Error("Expected an Authenticate message");
+  }
+  expect(message.baseVersion).toEqual(expected.baseVersion);
+  expect(message.tokenType).toEqual("User");
+  if (message.tokenType !== "User") {
+    throw new Error("Expected a User token");
+  }
+  expect(message.value).toEqual(expected.token);
+}
+
+async function assertReconnectWithAuth(
+  receive: () => Promise<ClientMessage>,
+  expectedAuth: {
+    baseVersion: number;
+    token: string;
+  },
+) {
+  expect((await receive()).type).toEqual("Connect");
+  assertAuthenticateMessage(await receive(), expectedAuth);
+  expect((await receive()).type).toEqual("ModifyQuerySet");
+}
+
+async function simulateAuthError(args: {
+  send: (message: ServerMessage) => void;
+  close: () => void;
+  authError: AuthError;
+}) {
+  args.send({
+    type: "AuthError",
+    error: args.authError.error,
+    baseVersion: args.authError.baseVersion,
+    authUpdateAttempted: args.authError.authUpdateAttempted,
+  });
+  // The server always closes the connection after an AuthError
+  args.close();
+}
