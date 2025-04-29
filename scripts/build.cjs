@@ -120,7 +120,7 @@ if (process.argv.includes("react-script-tag")) {
       entryPoints: ["src/react/index.ts"],
       bundle: true,
       platform: "browser",
-      external: ["react", "react-dom"],
+      external: ["react"],
       sourcemap: true,
       outfile: tempDir + "/react.bundle.js",
       globalName: "convex",
@@ -128,7 +128,6 @@ if (process.argv.includes("react-script-tag")) {
       plugins: [
         externalGlobalPlugin({
           react: "window.React",
-          "react-dom": "window.ReactDOM",
         }),
       ],
     })
