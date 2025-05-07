@@ -42,7 +42,11 @@ import {
 import { writeConvexUrlToEnvFile } from "./lib/envvars.js";
 import path from "path";
 import { projectDashboardUrl } from "./lib/dashboard.js";
-import { doCodegen, doInitCodegen } from "./lib/codegen.js";
+import {
+  doCodegen,
+  doCodegenForNewProject,
+  doInitCodegen,
+} from "./lib/codegen.js";
 import { handleLocalDeployment } from "./lib/localDeployment/localDeployment.js";
 import {
   promptOptions,
@@ -598,12 +602,7 @@ async function selectNewProject(
     );
   }
 
-  const { projectConfig: existingProjectConfig } = await readProjectConfig(ctx);
-  const configPath = await configFilepath(ctx);
-  const functionsPath = functionsDir(configPath, existingProjectConfig);
-  await doInitCodegen(ctx, functionsPath, true);
-  // Disable typechecking since there isn't any code yet.
-  await doCodegen(ctx, functionsPath, "disable");
+  await doCodegenForNewProject(ctx);
   return { teamSlug, projectSlug, devDeployment };
 }
 
