@@ -44,31 +44,34 @@ const CLOSE_NOT_FOUND = 4040;
  *     terminate() -> terminated
  *   stopped:
  *     restart() -> connecting
+ *     scheduleReconnect() -> connecting
  *     terminate() -> terminated
  * terminalStates:
  *   terminated
  *
  *
  *
- *                                        ┌────────────────┐
- *                ┌────terminate()────────│  disconnected  │◀─┐
- *                │                       └────────────────┘  │
- *                ▼                            │       ▲      │
- *       ┌────────────────┐           new WebSocket()  │      │
- *    ┌─▶│   terminated   │◀──────┐            │       │      │
- *    │  └────────────────┘       │            │       │      │
- *    │           ▲          terminate()       │    close() close()
- *    │      terminate()          │            │       │      │
- *    │           │               │            ▼       │      │
- *    │  ┌────────────────┐       └───────┌────────────────┐  │
- *    │  │    stopped     │──restart()───▶│   connecting   │  │
- *    │  └────────────────┘               └────────────────┘  │
- *    │           ▲                                │          │
- *    │           │                               onopen      │
- *    │           │                                │          │
- *    │           │                                ▼          │
- * terminate()    │                       ┌────────────────┐  │
- *    │           └────────stop()─────────│     ready      │──┘
+ *                                        ┌───────────────────┐
+ *                ┌────terminate()────────│    disconnected   │◀────┐
+ *                │                       └───────────────────┘     │
+ *                ▼                            │       ▲     ▲      │
+ *       ┌────────────────┐           new WebSocket()  │     │      │
+ *    ┌─▶│   terminated   │◀──────┐            │       │     │      │
+ *    │  └────────────────┘       │            │       │     │      │
+ *    │           ▲          terminate()       │    close()  │   close()
+ *    │      terminate()          │            │       │     │      │
+ *    │           │               │            ▼       │     │      │
+ *    │  ┌────────────────┐       └───────┌────────────────┐ │      │
+ *    │  │                │──restart()───▶│   connecting   │ │      │
+ *    │  │     stopped    │               └────────────────┘ │      │
+ *    │  │                │─scheduleReconnect()──│───────────┘      │
+ *    │  └────────────────┘                      │                  │
+ *    │           ▲                              │                  │
+ *    │           │                             onopen              │
+ *    │           │                              │                  │
+ *    │           │                              ▼                  │
+ * terminate()    │                       ┌────────────────┐        │
+ *    │           └────────stop()─────────│     ready      │────────┘
  *    │                                   └────────────────┘
  *    │                                            │
  *    │                                            │
@@ -127,6 +130,7 @@ export class WebSocketManager {
   private readonly onMessage: (message: ServerMessage) => OnMessageResponse;
   private readonly webSocketConstructor: typeof WebSocket;
   private readonly logger: Logger;
+  private scheduledReconnectTimerId: NodeJS.Timeout | null;
 
   constructor(
     uri: string,
@@ -149,6 +153,7 @@ export class WebSocketManager {
 
     this.serverInactivityThreshold = 30000;
     this.reconnectDueToServerInactivityTimeout = null;
+    this.scheduledReconnectTimerId = null;
 
     this.uri = uri;
     this.onOpen = callbacks.onOpen;
@@ -176,9 +181,12 @@ export class WebSocketManager {
       this.socket.state !== "disconnected" &&
       this.socket.state !== "stopped"
     ) {
-      throw new Error(
-        "Didn't start connection from disconnected state: " + this.socket.state,
+      // This can only happen from a scheduled reconnect kicking off at the
+      // wrong time. Log the error and bail, but don't throw.
+      this.logger.error(
+        `Didn't start connection from disconnected state: ${this.socket.state}, bailing`,
       );
+      return;
     }
 
     const ws = new this.webSocketConstructor(this.uri);
@@ -252,6 +260,8 @@ export class WebSocketManager {
           msg += `: ${event.reason}`;
         }
         this.logger.log(msg);
+      } else {
+        this._logVerbose(`WebSocket closed with code ${event.code}`);
       }
       this.scheduleReconnect();
       return;
@@ -321,10 +331,16 @@ export class WebSocketManager {
   }
 
   private scheduleReconnect() {
-    this.socket = { state: "disconnected" };
+    this.setSocketState({ state: "disconnected" });
     const backoff = this.nextBackoff();
     this.logger.log(`Attempting reconnect in ${backoff}ms`);
-    setTimeout(() => this.connect(), backoff);
+    if (this.scheduledReconnectTimerId) {
+      clearTimeout(this.scheduledReconnectTimerId);
+    }
+    this.scheduledReconnectTimerId = setTimeout(() => {
+      this.connect();
+      this.scheduledReconnectTimerId = null;
+    }, backoff);
   }
 
   /**
@@ -333,13 +349,15 @@ export class WebSocketManager {
    * This should be used when we hit an error and would like to restart the session.
    */
   private closeAndReconnect(closeReason: string) {
-    this._logVerbose(`begin closeAndReconnect with reason ${closeReason}`);
+    this._logVerbose(
+      `begin closeAndReconnect with reason ${closeReason}, socket state: ${this.socket.state}`,
+    );
     switch (this.socket.state) {
-      case "disconnected":
       case "terminated":
-      case "stopped":
-        // Nothing to do if we don't have a WebSocket.
+        // Nothing to do if we're terminating.
         return;
+      case "disconnected":
+      case "stopped":
       case "connecting":
       case "ready": {
         this.lastCloseReason = closeReason;
@@ -363,6 +381,7 @@ export class WebSocketManager {
    * closed socket is not accessible or used again after this method is called
    */
   private close(): Promise<void> {
+    this._logVerbose(`close attempted with socket state: ${this.socket.state}`);
     switch (this.socket.state) {
       case "disconnected":
       case "terminated":
