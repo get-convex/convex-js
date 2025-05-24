@@ -43,6 +43,8 @@ import { isAnonymousDeployment } from "../deployment.js";
 import { createProject } from "../api.js";
 import { removeAnonymousPrefix } from "../deployment.js";
 import { nodeFs } from "../../../bundler/fs.js";
+import { doCodegenForNewProject, doInitCodegen } from "../codegen.js";
+import { functionsDir } from "../utils/utils.js";
 
 export async function handleAnonymousDeployment(
   ctx: Context,
@@ -174,6 +176,9 @@ export async function handleAnonymousDeployment(
     }
   });
 
+  if (deployment.kind === "new") {
+    await doCodegenForNewProject(ctx);
+  }
   return {
     adminKey,
     deploymentName: deployment.deploymentName,
