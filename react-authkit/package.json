@@ -1,0 +1,5 @@
+{
+  "main": "../dist/cjs/react-authkit/index.js",
+  "module": "../dist/esm/react-authkit/index.js",
+  "types": "../dist/cjs-types/react-authkit/index.d.ts"
+}
