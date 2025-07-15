@@ -34,7 +34,7 @@ export function ConvexProviderWithAuthKit({
   client: IConvexReactClient;
   useAuth: UseAuth;
 }) {
-  const useAuthFromWorkOS = useUseAuthFromWorkOS(useAuth);
+  const useAuthFromWorkOS = useUseAuthFromAuthKit(useAuth);
   return (
     <ConvexProviderWithAuth client={client} useAuth={useAuthFromWorkOS}>
       {children}
@@ -42,18 +42,17 @@ export function ConvexProviderWithAuthKit({
   );
 }
 
-function useUseAuthFromWorkOS(useAuth: UseAuth) {
+function useUseAuthFromAuthKit(useAuth: UseAuth) {
   return useMemo(
     () =>
       function useAuthFromWorkOS() {
         const { isLoading, user, getAccessToken } = useAuth();
-        getAccessToken().then((token) => console.log({ user, token }));
 
         const fetchAccessToken = useCallback(async () => {
           try {
             const token = await getAccessToken();
             return token;
-          } catch (error) {
+          } catch {
             return null;
           }
         }, [getAccessToken]);
