@@ -258,6 +258,7 @@
     "a bundle."
   ],
   "devDependencies": {
+    "@ark/attest": "0.48.2",
     "@auth0/auth0-react": "2.3.0",
     "@babel/parser": "^7.27.1",
     "@babel/types": "^7.27.1",
@@ -339,5 +340,6 @@
   "engines": {
     "npm": ">=7.0.0",
     "node": ">=18.0.0"
-  }
+  },
+  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
 }

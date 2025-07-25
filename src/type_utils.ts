@@ -9,12 +9,9 @@
  * It is functionally the identity for object types, but in practice it can
  * simplify expressions like `A & B`.
  */
-export type Expand<ObjectType extends Record<any, any>> =
-  ObjectType extends Record<any, any>
-    ? {
-        [Key in keyof ObjectType]: ObjectType[Key];
-      }
-    : never;
+export type Expand<ObjectType extends Record<any, any>> = {
+  [Key in keyof ObjectType]: ObjectType[Key];
+} & unknown;
 
 /**
  * An `Omit<>` type that:
