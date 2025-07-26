@@ -21,7 +21,7 @@ import {
   getFunctionName,
   makeFunctionReference,
 } from "../server/api.js";
-import { EmptyObject } from "../server/registration.js";
+import { AreAllPropertiesOptional } from "../server/registration.js";
 import {
   instantiateDefaultLogger,
   instantiateNoopLogger,
@@ -606,9 +606,9 @@ export const ConvexProvider: React.FC<{
 };
 
 export type OptionalRestArgsOrSkip<FuncRef extends FunctionReference<any>> =
-  FuncRef["_args"] extends EmptyObject
-    ? [args?: EmptyObject | "skip"]
-    : [args: FuncRef["_args"] | "skip"];
+  AreAllPropertiesOptional<FuncRef['_args']> extends true
+    ? [args?: FuncRef['_args'] | "skip"]
+    : [args: FuncRef['_args'] | "skip"];
 
 /**
  * Load a reactive query within a React component.

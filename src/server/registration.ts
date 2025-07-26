@@ -308,6 +308,22 @@ export type ArgsArray = OneArgArray | NoArgsArray;
 export type EmptyObject = Record<string, never>;
 
 /**
+ * Is a property key of a type optional
+ */
+export type IsOptionalKey<T, K extends keyof T> =
+  object extends Pick<T, K> ? true : false
+
+/**
+ * Are all properties of a type optional
+ */
+export type AreAllPropertiesOptional<T> =
+  true extends {
+    [K in keyof T]: IsOptionalKey<T, K> extends true ? never : true
+  }[keyof T]
+    ? false
+    : true
+
+/**
  * Convert an {@link ArgsArray} into a single object type.
  *
  * Empty arguments arrays are converted to {@link EmptyObject}.
