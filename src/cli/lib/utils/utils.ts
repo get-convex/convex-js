@@ -24,6 +24,10 @@ import {
 
 const retryingFetch = fetchRetryFactory(fetch);
 
+export function rootDirectory(): string {
+  return path.join(os.homedir(), `.${convexName()}`);
+}
+
 export const productionProvisionHost = "https://api.convex.dev";
 export const provisionHost =
   process.env.CONVEX_PROVISION_HOST || productionProvisionHost;
@@ -551,10 +555,6 @@ function convexName() {
     }
   }
   return "convex";
-}
-
-export function rootDirectory(): string {
-  return path.join(os.homedir(), `.${convexName()}`);
 }
 
 export function cacheDir() {
