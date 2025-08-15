@@ -1,13 +1,13 @@
 import chalk from "chalk";
 import os from "os";
-import path from "path";
 import { rootDirectory } from "./utils.js";
 import { Context } from "../../../bundler/context.js";
 import { logError, logVerbose } from "../../../bundler/log.js";
 import { z } from "zod";
+import { CONVEX_CONFIG_PATH } from "./utils.js";
 
 export function globalConfigPath(): string {
-  return path.join(rootDirectory(), "config.json");
+  return CONVEX_CONFIG_PATH;
 }
 
 // GlobalConfig is stored in a file that very old versions of Convex also need to access.

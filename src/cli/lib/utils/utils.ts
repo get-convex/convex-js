@@ -34,6 +34,7 @@ export const CONVEX_DEPLOYMENT_ENV_VAR_NAME = "CONVEX_DEPLOYMENT";
 export const CONVEX_SELF_HOSTED_URL_VAR_NAME = "CONVEX_SELF_HOSTED_URL";
 export const CONVEX_SELF_HOSTED_ADMIN_KEY_VAR_NAME =
   "CONVEX_SELF_HOSTED_ADMIN_KEY";
+export const CONVEX_CONFIG_PATH = path.join(rootDirectory(), "config.json");
 const MAX_RETRIES = 6;
 // After 3 retries, log a progress message that we're retrying the request
 const RETRY_LOG_THRESHOLD = 3;
