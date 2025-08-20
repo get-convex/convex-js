@@ -35,15 +35,7 @@ import type {
   FunctionReference,
 } from "../../../server";
 
-/**
- * A utility for referencing Convex functions in your app's API.
- *
- * Usage:
- * ```js
- * const myFunctionReference = api.myModule.myFunction;
- * ```
- */
-declare const fullApi: ApiFromModules<{
+export type Modules = {
   admin: typeof admin;
   apiKeys: typeof apiKeys;
   cleanup: typeof cleanup;
@@ -64,7 +56,17 @@ declare const fullApi: ApiFromModules<{
   share: typeof share;
   snapshot: typeof snapshot;
   socialShare: typeof socialShare;
-}>;
+};
+
+/**
+ * A utility for referencing Convex functions in your app's API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
+declare const fullApi: ApiFromModules<Modules>;
 declare const fullApiWithMounts: typeof fullApi;
 
 export declare const api: FilterApi<
