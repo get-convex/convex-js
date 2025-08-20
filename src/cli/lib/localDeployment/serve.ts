@@ -1,6 +1,6 @@
 import http from "node:http";
 import { Context } from "../../../bundler/context.js";
-import { logVerbose } from "../../../bundler/context.js";
+import { logVerbose } from "../../../bundler/log.js";
 
 // The below is adapted from https://github.com/vercel/serve/blob/main/source/utilities/server.ts
 // MIT License -- https://github.com/vercel/serve/blob/main/license.md
@@ -48,7 +48,6 @@ export const startServer = async (
     // handling.
     run().catch((error: Error) => {
       logVerbose(
-        ctx,
         `Failed to serve: ${error.stack?.toString() ?? error.message}`,
       );
     });
@@ -56,17 +55,14 @@ export const startServer = async (
 
   const server = http.createServer(serverHandler);
   const cleanupHandle = ctx.registerCleanup(async () => {
-    logVerbose(ctx, `Stopping server on port ${port}`);
+    logVerbose(`Stopping server on port ${port}`);
     await server.close();
   });
 
   // Listen for any error that occurs while serving, and throw an error
   // if any errors are received.
   server.on("error", (error) => {
-    logVerbose(
-      ctx,
-      `Failed to serve: ${error.stack?.toString() ?? error.message}`,
-    );
+    logVerbose(`Failed to serve: ${error.stack?.toString() ?? error.message}`);
   });
 
   // Finally, start the server -- this promise resolves once the server has started.

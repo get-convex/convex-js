@@ -2,7 +2,8 @@ import chalk from "chalk";
 import os from "os";
 import path from "path";
 import { rootDirectory } from "./utils.js";
-import { Context, logError, logVerbose } from "../../../bundler/context.js";
+import { Context } from "../../../bundler/context.js";
+import { logError, logVerbose } from "../../../bundler/log.js";
 import { z } from "zod";
 
 export function globalConfigPath(): string {
@@ -38,7 +39,6 @@ export function readGlobalConfig(ctx: Context): GlobalConfig | null {
   } catch (err) {
     // Print an error and act as if the file does not exist.
     logError(
-      ctx,
       chalk.red(
         `Failed to parse global config in ${configPath} with error ${
           err as any
@@ -66,7 +66,6 @@ export async function modifyGlobalConfig(ctx: Context, config: GlobalConfig) {
       schema.parse(storedConfig);
     } catch (err) {
       logError(
-        ctx,
         chalk.red(
           `Failed to parse global config in ${configPath} with error ${
             err as any
@@ -97,7 +96,7 @@ async function overrwriteGlobalConfig(ctx: Context, config: GlobalConfig) {
       ),
     });
   }
-  logVerbose(ctx, `Saved credentials to ${formatPathForPrinting(path)}`);
+  logVerbose(`Saved credentials to ${formatPathForPrinting(path)}`);
 }
 
 export function formatPathForPrinting(path: string) {

@@ -1,12 +1,7 @@
 import chalk from "chalk";
 import { Command, Option } from "@commander-js/extra-typings";
-import {
-  Context,
-  logFinishedStep,
-  logMessage,
-  oneoffContext,
-  showSpinner,
-} from "../bundler/context.js";
+import { Context, oneoffContext } from "../bundler/context.js";
+import { logFinishedStep, logMessage, showSpinner } from "../bundler/log.js";
 import {
   deploymentSelectionWithinProjectFromOptions,
   loadSelectedDeploymentCredentials,
@@ -31,6 +26,7 @@ import { promptYesNo } from "./lib/utils/prompts.js";
 import { deployToDeployment, runCommand } from "./lib/deploy2.js";
 import { getDeploymentSelection } from "./lib/deploymentSelection.js";
 import { deploymentNameAndTypeFromSelection } from "./lib/deploymentSelection.js";
+import { checkVersion } from "./lib/updates.js";
 export const deploy = new Command("deploy")
   .summary("Deploy to your prod deployment")
   .description(
@@ -103,7 +99,6 @@ Same format as .env.local or .env files, and overrides them.`,
 
     if (deploymentSelection.kind === "anonymous") {
       logMessage(
-        ctx,
         "You are currently developing anonymously with a locally running project.\n" +
           "To deploy your Convex app to the cloud, log in by running `npx convex login`.\n" +
           "See https://docs.convex.dev/production for more information on how Convex cloud works and instructions on how to set up hosting.",
@@ -187,7 +182,6 @@ async function deployToNewPreviewDeployment(
 
   if (options.dryRun) {
     logFinishedStep(
-      ctx,
       `Would have claimed preview deployment for "${previewName}"`,
     );
     await runCommand(ctx, {
@@ -198,11 +192,10 @@ async function deployToNewPreviewDeployment(
       adminKey: "preview-deployment-admin-key",
     });
     logFinishedStep(
-      ctx,
       `Would have deployed Convex functions to preview deployment for "${previewName}"`,
     );
     if (options.previewRun !== undefined) {
-      logMessage(ctx, `Would have run function "${options.previewRun}"`);
+      logMessage(`Would have run function "${options.previewRun}"`);
     }
     return;
   }
@@ -239,9 +232,9 @@ async function deployToNewPreviewDeployment(
     url: previewUrl,
     liveComponentSources: false,
   };
-  showSpinner(ctx, `Deploying to ${previewUrl}...`);
+  showSpinner(`Deploying to ${previewUrl}...`);
   await runPush(ctx, pushOptions);
-  logFinishedStep(ctx, `Deployed Convex functions to ${previewUrl}`);
+  logFinishedStep(`Deployed Convex functions to ${previewUrl}`);
 
   if (options.previewRun !== undefined) {
     await runFunctionAndLog(ctx, {
@@ -252,10 +245,7 @@ async function deployToNewPreviewDeployment(
       componentPath: undefined,
       callbacks: {
         onSuccess: () => {
-          logFinishedStep(
-            ctx,
-            `Finished running function "${options.previewRun}"`,
-          );
+          logFinishedStep(`Finished running function "${options.previewRun}"`);
         },
       },
     });
@@ -283,37 +273,31 @@ async function deployToExistingDeployment(
     envFile?: string | undefined;
   },
 ) {
-  const selectionWithinProject =
-    await deploymentSelectionWithinProjectFromOptions(ctx, {
-      ...options,
-      implicitProd: true,
-    });
+  const selectionWithinProject = deploymentSelectionWithinProjectFromOptions({
+    ...options,
+    implicitProd: true,
+  });
   const deploymentSelection = await getDeploymentSelection(ctx, options);
   const deploymentToActOn = await loadSelectedDeploymentCredentials(
     ctx,
     deploymentSelection,
     selectionWithinProject,
   );
-  if (deploymentToActOn.deploymentFields !== null) {
-    await usageStateWarning(
-      ctx,
-      deploymentToActOn.deploymentFields.deploymentName,
-    );
-  }
+  const { deploymentFields } = deploymentToActOn;
+
   const configuredDeployment =
     deploymentNameAndTypeFromSelection(deploymentSelection);
   if (configuredDeployment !== null && configuredDeployment.name !== null) {
     const shouldPushToProd =
-      configuredDeployment.name ===
-        deploymentToActOn.deploymentFields?.deploymentName ||
+      configuredDeployment.name === deploymentFields?.deploymentName ||
       (options.yes ??
         (await askToConfirmPush(
           ctx,
           {
             configuredName: configuredDeployment.name,
             configuredType: configuredDeployment.type,
-            requestedName: deploymentToActOn.deploymentFields?.deploymentName!,
-            requestedType: deploymentToActOn.deploymentFields?.deploymentType!,
+            requestedName: deploymentFields?.deploymentName!,
+            requestedType: deploymentFields?.deploymentType!,
           },
           deploymentToActOn.url,
         )));
@@ -326,16 +310,24 @@ async function deployToExistingDeployment(
     }
   }
 
-  await deployToDeployment(
-    ctx,
-    {
-      url: deploymentToActOn.url,
-      adminKey: deploymentToActOn.adminKey,
-      deploymentName:
-        deploymentToActOn.deploymentFields?.deploymentName ?? null,
-    },
-    options,
-  );
+  const isCloudDeployment = deploymentFields !== null;
+  await Promise.all([
+    deployToDeployment(
+      ctx,
+      {
+        url: deploymentToActOn.url,
+        adminKey: deploymentToActOn.adminKey,
+        deploymentName: deploymentFields?.deploymentName ?? null,
+      },
+      options,
+    ),
+    ...(isCloudDeployment
+      ? [
+          usageStateWarning(ctx, deploymentFields.deploymentName),
+          checkVersion(),
+        ]
+      : []),
+  ]);
 }
 
 async function askToConfirmPush(
@@ -349,7 +341,6 @@ async function askToConfirmPush(
   prodUrl: string,
 ) {
   logMessage(
-    ctx,
     `\
 You're currently developing against your ${chalk.bold(
       deployment.configuredType ?? "dev",

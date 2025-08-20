@@ -1,5 +1,6 @@
 import chalk from "chalk";
-import { Context, logFinishedStep, logMessage } from "../../bundler/context.js";
+import { Context } from "../../bundler/context.js";
+import { logFinishedStep, logMessage } from "../../bundler/log.js";
 import { DeploymentType } from "./api.js";
 import { writeConvexUrlToEnvFile } from "./envvars.js";
 import { getDashboardUrl } from "./dashboard.js";
@@ -18,23 +19,20 @@ export async function finalizeConfiguration(
   const envVarWrite = await writeConvexUrlToEnvFile(ctx, options.url);
   if (envVarWrite !== null) {
     logFinishedStep(
-      ctx,
       `${messageForDeploymentType(options.deploymentType, options.url)} and saved its:\n` +
         `    name as CONVEX_DEPLOYMENT to .env.local\n` +
         `    URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`,
     );
   } else if (options.changedDeploymentEnvVar) {
     logFinishedStep(
-      ctx,
       `${messageForDeploymentType(options.deploymentType, options.url)} and saved its name as CONVEX_DEPLOYMENT to .env.local`,
     );
   }
   if (options.wroteToGitIgnore) {
-    logMessage(ctx, chalk.gray(`  Added ".env.local" to .gitignore`));
+    logMessage(chalk.gray(`  Added ".env.local" to .gitignore`));
   }
   if (options.deploymentType === "anonymous") {
     logMessage(
-      ctx,
       `Run \`npx convex login\` at any time to create an account and link this deployment.`,
     );
   }
@@ -49,7 +47,6 @@ export async function finalizeConfiguration(
       deploymentType: options.deploymentType,
     });
     logMessage(
-      ctx,
       `\nWrite your Convex functions in ${chalk.bold(options.functionsPath)}\n` +
         "Give us feedback at https://convex.dev/community or support@convex.dev\n" +
         `View the Convex dashboard at ${dashboardUrl}\n`,
@@ -68,7 +65,7 @@ function messageForDeploymentType(deploymentType: DeploymentType, url: string) {
     case "preview":
       return `Provisioned a ${deploymentType} deployment`;
     default: {
-      const _exhaustiveCheck: never = deploymentType;
+      deploymentType satisfies never;
       return `Provisioned a ${deploymentType as any} deployment`;
     }
   }

@@ -26,8 +26,7 @@ export function getDashboardUrl(
     case "preview":
       return deploymentDashboardUrlPage(deploymentName, "");
     default: {
-      const _exhaustiveCheck: never = deploymentType;
-      return _exhaustiveCheck;
+      return deploymentType satisfies never;
     }
   }
 }
@@ -36,7 +35,10 @@ export function deploymentDashboardUrlPage(
   configuredDeployment: string | null,
   page: string,
 ): string {
-  return `${DASHBOARD_HOST}/d/${configuredDeployment}${page}`;
+  const deploymentFrag = configuredDeployment
+    ? `/d/${configuredDeployment}`
+    : "";
+  return `${DASHBOARD_HOST}${deploymentFrag}${page}`;
 }
 
 export function deploymentDashboardUrl(

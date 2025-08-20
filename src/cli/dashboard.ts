@@ -1,13 +1,8 @@
 import { Command } from "@commander-js/extra-typings";
 import chalk from "chalk";
 import open from "open";
-import {
-  Context,
-  logMessage,
-  logOutput,
-  logWarning,
-  oneoffContext,
-} from "../bundler/context.js";
+import { Context, oneoffContext } from "../bundler/context.js";
+import { logMessage, logOutput, logWarning } from "../bundler/log.js";
 import {
   deploymentSelectionWithinProjectFromOptions,
   loadSelectedDeploymentCredentials,
@@ -36,7 +31,7 @@ export const dashboard = new Command("dashboard")
     const ctx = await oneoffContext(options);
 
     const selectionWithinProject =
-      await deploymentSelectionWithinProjectFromOptions(ctx, options);
+      deploymentSelectionWithinProjectFromOptions(options);
     const deploymentSelection = await getDeploymentSelection(ctx, options);
     const deployment = await loadSelectedDeploymentCredentials(
       ctx,
@@ -47,19 +42,19 @@ export const dashboard = new Command("dashboard")
 
     if (deployment.deploymentFields === null) {
       const msg = `Self-hosted deployment configured.\n\`${chalk.bold("npx convex dashboard")}\` is not supported for self-hosted deployments.\nSee self-hosting instructions for how to self-host the dashboard.`;
-      logMessage(ctx, chalk.yellow(msg));
+      logMessage(chalk.yellow(msg));
       return;
     }
     const dashboardUrl = getDashboardUrl(ctx, deployment.deploymentFields);
     if (isAnonymousDeployment(deployment.deploymentFields.deploymentName)) {
       const warningMessage = `You are not currently running the dashboard locally. Make sure \`npx convex dev\` is running and try again.`;
       if (dashboardUrl === null) {
-        logWarning(ctx, warningMessage);
+        logWarning(warningMessage);
         return;
       }
       const isLocalDashboardRunning = await checkIfDashboardIsRunning(ctx);
       if (!isLocalDashboardRunning) {
-        logWarning(ctx, warningMessage);
+        logWarning(warningMessage);
         return;
       }
       await logOrOpenUrl(ctx, dashboardUrl, options.open);
@@ -71,9 +66,16 @@ export const dashboard = new Command("dashboard")
 
 async function logOrOpenUrl(ctx: Context, url: string, shouldOpen: boolean) {
   if (shouldOpen) {
-    logMessage(ctx, chalk.gray(`Opening ${url} in the default browser...`));
-    await open(url);
+    logMessage(chalk.gray(`Opening ${url} in the default browser...`));
+    try {
+      // This can fail e.g. on a headless dev machine.
+      await open(url);
+    } catch {
+      logWarning(
+        `⚠️ Could not open dashboard in the default browser.\nPlease visit: ${url}`,
+      );
+    }
   } else {
-    logOutput(ctx, url);
+    logOutput(url);
   }
 }

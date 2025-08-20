@@ -1,4 +1,5 @@
-import { Context, logVerbose, logWarning } from "../../bundler/context.js";
+import { Context } from "../../bundler/context.js";
+import { logVerbose, logWarning } from "../../bundler/log.js";
 import { getTeamAndProjectFromPreviewAdminKey } from "./deployment.js";
 import {
   assertLocalBackendRunning,
@@ -119,10 +120,9 @@ export type DeploymentSelectionOptions =
     envFile?: string | undefined;
   };
 
-export async function deploymentSelectionWithinProjectFromOptions(
-  ctx: Context,
+export function deploymentSelectionWithinProjectFromOptions(
   options: DeploymentSelectionOptions,
-): Promise<DeploymentSelectionWithinProject> {
+): DeploymentSelectionWithinProject {
   if (options.previewName !== undefined) {
     return { kind: "previewName", previewName: options.previewName };
   }
@@ -160,13 +160,11 @@ export async function validateDeploymentSelectionForExistingDeployment(
       });
     case "deployKey":
       logWarning(
-        ctx,
         "Ignoring `--prod`, `--preview-name`, or `--deployment-name` flags and using deployment from CONVEX_DEPLOY_KEY",
       );
       break;
     case "cliArgs":
       logWarning(
-        ctx,
         "Ignoring `--prod`, `--preview-name`, or `--deployment-name` flags since this command was run with --url and --admin-key",
       );
       break;
@@ -241,7 +239,7 @@ export async function checkAccessToSelectedProject(
       // it will instead fail as soon as we try to use the key.
       return { kind: "unknown" };
     default: {
-      const _exhaustivenessCheck: never = projectSelection;
+      projectSelection satisfies never;
       return await ctx.crash({
         exitCode: 1,
         errorType: "fatal",
@@ -426,7 +424,7 @@ async function handleOwnDev(
       };
     }
     default: {
-      const _exhaustivenessCheck: never = projectSelection;
+      projectSelection satisfies never;
       return ctx.crash({
         exitCode: 1,
         errorType: "fatal",
@@ -575,7 +573,7 @@ async function fetchDeploymentCredentialsWithinCurrentProject(
         projectSelection,
       );
     default: {
-      const _exhaustivenessCheck: never = deploymentSelection;
+      deploymentSelection satisfies never;
       return ctx.crash({
         exitCode: 1,
         errorType: "fatal",
@@ -617,7 +615,6 @@ async function _loadExistingDeploymentCredentialsForProject(
     deploymentSelection,
   );
   logVerbose(
-    ctx,
     `Deployment URL: ${result.url}, Deployment Name: ${result.deploymentName}, Deployment Type: ${result.deploymentType}`,
   );
   if (ensureLocalRunning && result.deploymentType === "local") {
@@ -639,15 +636,8 @@ async function _loadExistingDeploymentCredentialsForProject(
     },
   };
 }
-// This is used by most commands (notably not `dev` and `deploy`) to determine
-// which deployment to act on, taking into account the deployment selection flags.
-//
-export async function loadSelectedDeploymentCredentials(
-  ctx: Context,
-  deploymentSelection: DeploymentSelection,
-  selectionWithinProject: DeploymentSelectionWithinProject,
-  { ensureLocalRunning } = { ensureLocalRunning: true },
-): Promise<{
+
+export type DetailedDeploymentCredentials = {
   adminKey: string;
   url: string;
   deploymentFields: {
@@ -656,7 +646,17 @@ export async function loadSelectedDeploymentCredentials(
     projectSlug: string | null;
     teamSlug: string | null;
   } | null;
-}> {
+};
+
+// This is used by most commands (notably not `dev` and `deploy`) to determine
+// which deployment to act on, taking into account the deployment selection flags.
+//
+export async function loadSelectedDeploymentCredentials(
+  ctx: Context,
+  deploymentSelection: DeploymentSelection,
+  selectionWithinProject: DeploymentSelectionWithinProject,
+  { ensureLocalRunning } = { ensureLocalRunning: true },
+): Promise<DetailedDeploymentCredentials> {
   switch (deploymentSelection.kind) {
     case "existingDeployment":
       await validateDeploymentSelectionForExistingDeployment(
@@ -666,7 +666,6 @@ export async function loadSelectedDeploymentCredentials(
       );
       // We're already set up.
       logVerbose(
-        ctx,
         `Deployment URL: ${deploymentSelection.deploymentToActOn.url}, Deployment Name: ${deploymentSelection.deploymentToActOn.deploymentFields?.deploymentName ?? "unknown"}, Deployment Type: ${deploymentSelection.deploymentToActOn.deploymentFields?.deploymentType ?? "unknown"}`,
       );
       return {
@@ -738,7 +737,7 @@ export async function loadSelectedDeploymentCredentials(
       };
     }
     default: {
-      const _exhaustivenessCheck: never = deploymentSelection;
+      deploymentSelection satisfies never;
       return await ctx.crash({
         exitCode: 1,
         errorType: "fatal",

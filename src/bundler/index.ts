@@ -5,7 +5,8 @@ import { parse as parseAST } from "@babel/parser";
 import { Identifier, ImportSpecifier } from "@babel/types";
 import * as Sentry from "@sentry/node";
 import { Filesystem, consistentPathSort } from "./fs.js";
-import { Context, logVerbose, logWarning } from "./context.js";
+import { Context } from "./context.js";
+import { logVerbose, logWarning } from "./log.js";
 import { wasmPlugin } from "./wasm.js";
 import {
   ExternalPackage,
@@ -100,7 +101,6 @@ async function doEsbuild(
       const st = ctx.fs.stat(absPath);
       if (st.size !== input.bytes) {
         logWarning(
-          ctx,
           `Bundled file ${absPath} changed right after esbuild invocation`,
         );
         // Consider this a transient error so we'll try again and hopefully
@@ -195,7 +195,7 @@ export async function bundle(
     });
   }
   for (const warning of result.warnings) {
-    logWarning(ctx, chalk.yellow(`esbuild warning: ${warning.text}`));
+    logWarning(chalk.yellow(`esbuild warning: ${warning.text}`));
   }
   const sourceMaps = new Map();
   const modules: Bundle[] = [];
@@ -300,8 +300,14 @@ export async function bundleAuthConfig(ctx: Context, dir: string) {
     ? authConfigTsPath
     : authConfigPath;
   if (!ctx.fs.exists(chosenPath)) {
+    logVerbose(
+      chalk.yellow(
+        `Found no auth config file at ${authConfigTsPath} or ${authConfigPath} so there are no configured auth providers`,
+      ),
+    );
     return [];
   }
+  logVerbose(chalk.yellow(`Bundling auth config found at ${chosenPath}`));
   const result = await bundle(ctx, dir, [chosenPath], true, "browser");
   return result.modules;
 }
@@ -372,7 +378,6 @@ export async function entryPoints(
       const source = ctx.fs.readUtf8File(fpath);
       if (await doesImportConvexHttpRouter(source))
         logWarning(
-          ctx,
           chalk.yellow(
             `Found ${fpath}. HTTP action routes will not be imported from this file. Did you mean to include http${extension}?`,
           ),
@@ -385,29 +390,25 @@ export async function entryPoints(
 
     // This should match isEntryPoint in the convex eslint plugin.
     if (!ENTRY_POINT_EXTENSIONS.some((ext) => relPath.endsWith(ext))) {
-      logVerbose(ctx, chalk.yellow(`Skipping non-JS file ${fpath}`));
+      logVerbose(chalk.yellow(`Skipping non-JS file ${fpath}`));
     } else if (relPath.startsWith("_generated" + path.sep)) {
-      logVerbose(ctx, chalk.yellow(`Skipping ${fpath}`));
+      logVerbose(chalk.yellow(`Skipping ${fpath}`));
     } else if (base.startsWith(".")) {
-      logVerbose(ctx, chalk.yellow(`Skipping dotfile ${fpath}`));
+      logVerbose(chalk.yellow(`Skipping dotfile ${fpath}`));
     } else if (base.startsWith("#")) {
-      logVerbose(ctx, chalk.yellow(`Skipping likely emacs tempfile ${fpath}`));
+      logVerbose(chalk.yellow(`Skipping likely emacs tempfile ${fpath}`));
     } else if (base === "schema.ts" || base === "schema.js") {
-      logVerbose(ctx, chalk.yellow(`Skipping ${fpath}`));
+      logVerbose(chalk.yellow(`Skipping ${fpath}`));
     } else if ((base.match(/\./g) || []).length > 1) {
       // `auth.config.ts` and `convex.config.ts` are important not to bundle.
       // `*.test.ts` `*.spec.ts` are common in developer code.
-      logVerbose(
-        ctx,
-        chalk.yellow(`Skipping ${fpath} that contains multiple dots`),
-      );
+      logVerbose(chalk.yellow(`Skipping ${fpath} that contains multiple dots`));
     } else if (relPath.includes(" ")) {
       logVerbose(
-        ctx,
         chalk.yellow(`Skipping ${relPath} because it contains a space`),
       );
     } else {
-      logVerbose(ctx, chalk.green(`Preparing ${fpath}`));
+      logVerbose(chalk.green(`Preparing ${fpath}`));
       entryPoints.push(fpath);
     }
   }
@@ -424,7 +425,6 @@ export async function entryPoints(
       return true;
     }
     logVerbose(
-      ctx,
       chalk.yellow(
         `Skipping ${fpath} because it has no export or import to make it a valid TypeScript module`,
       ),
@@ -473,7 +473,6 @@ function hasUseNodeDirective(ctx: Context, fpath: string): boolean {
 
     // Log that we failed to parse in verbose node if we need this for debugging.
     logVerbose(
-      ctx,
       `Failed to parse ${fpath}. Use node is set to ${lineMatches} based on regex. Parse error: ${error.toString()}.`,
     );
 

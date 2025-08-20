@@ -1,5 +1,6 @@
 import { Command, Option } from "@commander-js/extra-typings";
-import { logVerbose, oneoffContext } from "../bundler/context.js";
+import { oneoffContext } from "../bundler/context.js";
+import { logVerbose } from "../bundler/log.js";
 import { deploymentCredentialsOrConfigure } from "./configure.js";
 import { usageStateWarning } from "./lib/usage.js";
 import { normalizeDevOptions } from "./lib/command.js";
@@ -11,6 +12,7 @@ import {
 } from "./lib/utils/utils.js";
 import { getDeploymentSelection } from "./lib/deploymentSelection.js";
 import { detectSuspiciousEnvironmentVariables } from "./lib/envvars.js";
+import { checkVersion } from "./lib/updates.js";
 
 export const dev = new Command("dev")
   .summary("Develop against a dev deployment, watching for changes")
@@ -161,7 +163,7 @@ Same format as .env.local or .env files, and overrides them.`,
   .action(async (cmdOptions) => {
     const ctx = await oneoffContext(cmdOptions);
     process.on("SIGINT", async () => {
-      logVerbose(ctx, "Received SIGINT, cleaning up...");
+      logVerbose("Received SIGINT, cleaning up...");
       await ctx.flushAndExit(-2);
     });
 
@@ -173,7 +175,7 @@ Same format as .env.local or .env files, and overrides them.`,
     const devOptions = await normalizeDevOptions(ctx, cmdOptions);
 
     const selectionWithinProject =
-      await deploymentSelectionWithinProjectFromOptions(ctx, cmdOptions);
+      deploymentSelectionWithinProjectFromOptions(cmdOptions);
 
     if (cmdOptions.configure === undefined) {
       if (cmdOptions.team || cmdOptions.project || cmdOptions.devDeployment)
@@ -237,21 +239,26 @@ Same format as .env.local or .env files, and overrides them.`,
       },
     );
 
-    if (credentials.deploymentFields !== null) {
-      await usageStateWarning(ctx, credentials.deploymentFields.deploymentName);
-    }
-
-    if (cmdOptions.skipPush) {
-      return;
-    }
-
-    await devAgainstDeployment(
-      ctx,
-      {
-        url: credentials.url,
-        adminKey: credentials.adminKey,
-        deploymentName: credentials.deploymentFields?.deploymentName ?? null,
-      },
-      devOptions,
-    );
+    await Promise.all([
+      ...(!cmdOptions.skipPush
+        ? [
+            devAgainstDeployment(
+              ctx,
+              {
+                url: credentials.url,
+                adminKey: credentials.adminKey,
+                deploymentName:
+                  credentials.deploymentFields?.deploymentName ?? null,
+              },
+              devOptions,
+            ),
+          ]
+        : []),
+      ...(credentials.deploymentFields !== null
+        ? [
+            usageStateWarning(ctx, credentials.deploymentFields.deploymentName),
+            checkVersion(),
+          ]
+        : []),
+    ]);
   });

@@ -3,11 +3,8 @@ import { functionsDir, ensureHasConvexDependency } from "./lib/utils/utils.js";
 import { Command } from "@commander-js/extra-typings";
 import { readConfig } from "./lib/config.js";
 import { typeCheckFunctions } from "./lib/typecheck.js";
-import {
-  logFinishedStep,
-  logMessage,
-  oneoffContext,
-} from "../bundler/context.js";
+import { oneoffContext } from "../bundler/context.js";
+import { logFinishedStep, logMessage } from "../bundler/log.js";
 
 // Experimental (it's going to fail sometimes) TypeScript type checking.
 // Includes a separate command to help users debug their TypeScript configs.
@@ -34,7 +31,7 @@ export const typecheck = new Command("typecheck")
       async (typecheckResult, logSpecificError, runOnError) => {
         logSpecificError?.();
         if (typecheckResult === "typecheckFailed") {
-          logMessage(ctx, chalk.gray("Typecheck failed"));
+          logMessage(chalk.gray("Typecheck failed"));
           try {
             await runOnError?.();
             // If runOnError doesn't throw then it worked the second time.
@@ -49,7 +46,6 @@ export const typecheck = new Command("typecheck")
           });
         } else if (typecheckResult === "cantTypeCheck") {
           logMessage(
-            ctx,
             chalk.gray("Unable to typecheck; is TypeScript installed?"),
           );
           return await ctx.crash({
@@ -59,7 +55,6 @@ export const typecheck = new Command("typecheck")
           });
         } else {
           logFinishedStep(
-            ctx,
             "Typecheck passed: `tsc --noEmit` completed with exit code 0.",
           );
           return await ctx.flushAndExit(0);

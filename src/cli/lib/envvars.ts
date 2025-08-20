@@ -4,7 +4,8 @@
 import chalk from "chalk";
 import * as dotenv from "dotenv";
 
-import { Context, logWarning } from "../../bundler/context.js";
+import { Context } from "../../bundler/context.js";
+import { logWarning } from "../../bundler/log.js";
 import { loadPackageJson } from "./utils/utils.js";
 
 const _FRAMEWORKS = [
@@ -191,7 +192,6 @@ async function envVarWriteConfig(
   const matching = Object.keys(config).filter((key) => EXPECTED_NAMES.has(key));
   if (matching.length > 1) {
     logWarning(
-      ctx,
       chalk.yellow(
         `Found multiple CONVEX_URL environment variables in ${envFile} so cannot update automatically.`,
       ),
@@ -208,7 +208,6 @@ async function envVarWriteConfig(
       Object.values(config).filter((v) => v === oldValue).length !== 1
     ) {
       logWarning(
-        ctx,
         chalk.yellow(`Can't safely modify ${envFile}, please edit manually.`),
       );
       return null;
@@ -285,7 +284,6 @@ export async function detectSuspiciousEnvironmentVariables(
 
       if (ignoreSuspiciousEnvVars) {
         logWarning(
-          ctx,
           `ignoring suspicious environment variable ${key}, did you mean to use quotes like CONVEX_DEPLOY_KEY='...'?`,
         );
       } else {
@@ -299,7 +297,7 @@ export async function detectSuspiciousEnvironmentVariables(
   }
 }
 
-export function buildEnvironment(): string | boolean {
+export function getBuildEnvironment(): string | false {
   return process.env.VERCEL
     ? "Vercel"
     : process.env.NETLIFY

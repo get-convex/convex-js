@@ -7,13 +7,13 @@ import { ProjectConfig } from "../config.js";
 import { spawn } from "child_process";
 import { InvalidArgumentError } from "commander";
 import fetchRetryFactory, { RequestInitRetryParams } from "fetch-retry";
+import { Context, ErrorType } from "../../../bundler/context.js";
 import {
-  Context,
-  ErrorType,
+  failExistingSpinner,
   logError,
   logMessage,
   logWarning,
-} from "../../../bundler/context.js";
+} from "../../../bundler/log.js";
 import { version } from "../../version.js";
 import { Project } from "../api.js";
 import { promptOptions, promptSearch, promptYesNo } from "./prompts.js";
@@ -171,10 +171,9 @@ export async function logAndHandleFetchError(
   ctx: Context,
   err: unknown,
 ): Promise<never> {
-  if (ctx.spinner) {
-    // Fail the spinner so the stderr lines appear
-    ctx.spinner.fail();
-  }
+  // Fail the spinner so the stderr lines appear
+  failExistingSpinner();
+
   if (err instanceof ThrowingFetchError) {
     return await err.handle(ctx);
   } else {
@@ -192,7 +191,7 @@ function logDeprecationWarning(ctx: Context, deprecationMessage: string) {
     return;
   }
   ctx.deprecationMessagePrinted = true;
-  logWarning(ctx, chalk.yellow(deprecationMessage));
+  logWarning(chalk.yellow(deprecationMessage));
 }
 
 async function checkFetchErrorForDeprecation(ctx: Context, resp: Response) {
@@ -858,10 +857,10 @@ export function spawnAsync(
 
     if (pipeOutput) {
       child.stdout.on("data", (text) =>
-        logMessage(ctx, text.toString("utf-8").trimEnd()),
+        logMessage(text.toString("utf-8").trimEnd()),
       );
       child.stderr.on("data", (text) =>
-        logError(ctx, text.toString("utf-8").trimEnd()),
+        logError(text.toString("utf-8").trimEnd()),
       );
     } else {
       child.stdout.on("data", (data) => {
@@ -1020,7 +1019,6 @@ export function bareDeploymentFetch(
     onError?.(err);
     if (attempt >= RETRY_LOG_THRESHOLD) {
       logMessage(
-        ctx,
         chalk.gray(`Retrying request (attempt ${attempt}/${MAX_RETRIES})...`),
       );
     }
@@ -1060,7 +1058,6 @@ export function deploymentFetch(
     onError?.(err);
     if (attempt >= RETRY_LOG_THRESHOLD) {
       logMessage(
-        ctx,
         chalk.gray(`Retrying request (attempt ${attempt}/${MAX_RETRIES})...`),
       );
     }

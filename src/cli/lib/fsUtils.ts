@@ -1,4 +1,5 @@
-import { Context, logOutput } from "../../bundler/context.js";
+import { Context } from "../../bundler/context.js";
+import { logOutput } from "../../bundler/log.js";
 import path from "path";
 import { NodeFs } from "../../bundler/fs.js";
 
@@ -23,7 +24,7 @@ export function recursivelyDelete(
       recursivelyDelete(ctx, path.join(deletePath, entry.name), opts);
     }
     if (dryRun) {
-      logOutput(ctx, `Command would delete directory: ${deletePath}`);
+      logOutput(`Command would delete directory: ${deletePath}`);
       return;
     }
     try {
@@ -36,7 +37,7 @@ export function recursivelyDelete(
     }
   } else {
     if (dryRun) {
-      logOutput(ctx, `Command would delete file: ${deletePath}`);
+      logOutput(`Command would delete file: ${deletePath}`);
       return;
     }
     try {

@@ -104,9 +104,10 @@ const serverDisconnectErrors = {
   ExecuteFullError: { timeout: 3000 },
   SystemTimeoutError: { timeout: 3000 },
   ExpiredInQueue: { timeout: 3000 },
-  // More ErrorMetadata::overloaded() that typically indicate a deploy just happened
+  // ErrorMetadata::feature_temporarily_unavailable() that typically indicate a deploy just happened
   VectorIndexesUnavailable: { timeout: 1000 },
   SearchIndexesUnavailable: { timeout: 1000 },
+  TableSummariesUnavailable: { timeout: 1000 },
   // More ErrorMeatadata::overloaded()
   VectorIndexTooLarge: { timeout: 3000 },
   SearchIndexTooLarge: { timeout: 3000 },
@@ -411,7 +412,7 @@ export class WebSocketManager {
       }
       default: {
         // Enforce that the switch-case is exhaustive.
-        const _: never = this.socket;
+        this.socket satisfies never;
       }
     }
   }
@@ -456,7 +457,7 @@ export class WebSocketManager {
       }
       default: {
         // Enforce that the switch-case is exhaustive.
-        const _: never = this.socket;
+        this.socket satisfies never;
         return Promise.resolve();
       }
     }
@@ -482,7 +483,7 @@ export class WebSocketManager {
       }
       default: {
         // Enforce that the switch-case is exhaustive.
-        const _: never = this.socket;
+        this.socket satisfies never;
         throw new Error(
           `Invalid websocket state: ${(this.socket as any).state}`,
         );
@@ -505,7 +506,7 @@ export class WebSocketManager {
       }
       default: {
         // Enforce that the switch-case is exhaustive.
-        const _: never = this.socket;
+        this.socket satisfies never;
         return Promise.resolve();
       }
     }
@@ -527,7 +528,7 @@ export class WebSocketManager {
         return;
       default: {
         // Enforce that the switch-case is exhaustive.
-        const _: never = this.socket;
+        this.socket satisfies never;
       }
     }
     this.connect();
@@ -547,7 +548,7 @@ export class WebSocketManager {
       }
       default: {
         // Enforce that the switch-case is exhaustive.
-        const _: never = this.socket;
+        this.socket satisfies never;
         return;
       }
     }
@@ -580,7 +581,7 @@ export class WebSocketManager {
         return;
       default: {
         // Enforce that the switch-case is exhaustive.
-        const _: never = this.socket;
+        this.socket satisfies never;
       }
     }
     this.connect();

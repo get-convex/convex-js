@@ -1,6 +1,6 @@
 import inquirer from "inquirer";
-import { Context, logOutput } from "../../../bundler/context.js";
-
+import { Context } from "../../../bundler/context.js";
+import { logOutput } from "../../../bundler/log.js";
 export const promptString = async (
   ctx: Context,
   options: {
@@ -108,7 +108,7 @@ export const promptYesNo = async (
     ]);
     return result;
   } else {
-    logOutput(ctx, options.message);
+    logOutput(options.message);
     return ctx.crash({
       exitCode: 1,
       errorType: "fatal",

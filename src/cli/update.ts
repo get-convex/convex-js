@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { Command } from "@commander-js/extra-typings";
-import { logMessage, oneoffContext } from "../bundler/context.js";
+import { oneoffContext } from "../bundler/context.js";
+import { logMessage } from "../bundler/log.js";
 import { loadPackageJson } from "./lib/utils/utils.js";
 
 export const update = new Command("update")
@@ -22,7 +23,6 @@ export const update = new Command("update")
     }
 
     logMessage(
-      ctx,
       chalk.green(
         `To view the Convex changelog, go to https://news.convex.dev/tag/releases/\nWhen you are ready to upgrade, run the following commands:\n${updateInstructions}`,
       ),

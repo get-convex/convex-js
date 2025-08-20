@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+- `ConvexReactClient.prewarmQuery({query, args})` method for subscribing to a
+  query for 5 seconds. Prewarming indicates likely future interest in a
+  subscription and is currently implemented by subscribing to the query for 5
+  seconds.
+
+  The return value of this method may change and the arguments may change in the
+  future so this API should be considered unstable but adapting to these changes
+  shouldn't be difficult.
+
+- Expose the schemaValidation property of schema, intended for runtime tests or
+  assertions that it is indeed enabled.
+
+- Export TokenFetcher type, intended for external auth integrations.
+
+- More informative messaging on code push. Link to index backfill progress in
+  the dashboard.
+
+- Fix a bug where an auth token passed initially to the ConvexHttpClient was
+  ignored.
+
+- Experimental `expectAuth` option for Convex clients for indicating that
+  setAuth() will be called soon, so to wait for that token. Once setAuth() has
+  been called the existing token-waiting behavior takes over.
+
+  This is useful for applications that create a client and run a mutation,
+  query, or action _before_ setAuth() has been called, e.g. via a provider in
+  React.
+
+- Change the default permissions for the local MCP server: access to production
+  deployments is now disabled by default, requiring
+  `--dangerously-enable-production-deployments` to enable.
+
 ## 1.25.4
 
 - Experimental `convex dev --once --debug-node-apis` debug flag for tracing
@@ -264,7 +298,6 @@ To upgrade to this release you'll need to upgrade any Convex components you use.
 
   because this pattern causes problems and there are straightforward
   workarounds. The problems here:
-
   1. Arguments and return values aren't validated despite the presence of
      validators at the function definition site.
   2. Functions called this way unexpectedly lack isolation and atomicity. Convex
@@ -274,7 +307,6 @@ To upgrade to this release you'll need to upgrade any Convex components you use.
      deadlocks and other bad behavior.
 
   There are two options for how to modify your code to address the warning:
-
   1. Refactor it out as a helper function, then call that helper function
      directly.
   2. Use `ctx.runMutation`, `ctx.runQuery`, or `ctx.runAction()` instead of
@@ -299,7 +331,6 @@ To upgrade to this release you'll need to upgrade any Convex components you use.
   there are many breaking changes.
 
 - Improvements to `npx convex run`:
-
   - Better argument parsing with JSON5 so `{ name: "sshader" }` parses
   - support for `--identity` similar to dashboard "acting as user" feature, like
     `npx convex run --identity '{ name: "sshader" }'`

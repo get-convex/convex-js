@@ -9,13 +9,8 @@ import {
   makeFunctionReference,
 } from "../../server/index.js";
 import { Value, convexToJson, jsonToConvex } from "../../values/value.js";
-import {
-  Context,
-  logFinishedStep,
-  logMessage,
-  logOutput,
-  OneoffCtx,
-} from "../../bundler/context.js";
+import { Context, OneoffCtx } from "../../bundler/context.js";
+import { logFinishedStep, logMessage, logOutput } from "../../bundler/log.js";
 import { waitForever, waitUntilCalled } from "./utils/utils.js";
 import JSON5 from "json5";
 import path from "path";
@@ -123,7 +118,7 @@ export async function runFunctionAndLog(
 
   // `null` is the default return type
   if (result !== null) {
-    logOutput(ctx, formatValue(result));
+    logOutput(formatValue(result));
   }
 }
 
@@ -363,15 +358,14 @@ export async function subscribeAndLog(
     callbacks: {
       onStart() {
         logFinishedStep(
-          ctx,
           `Watching query ${args.functionName} on ${args.deploymentUrl}...`,
         );
       },
       onChange(result) {
-        logOutput(ctx, formatValue(result));
+        logOutput(formatValue(result));
       },
       onStop() {
-        logMessage(ctx, `Closing connection to ${args.deploymentUrl}...`);
+        logMessage(`Closing connection to ${args.deploymentUrl}...`);
       },
     },
   });

@@ -1,5 +1,6 @@
 import { vi, test, expect } from "vitest";
-import { logFailure, oneoffContext } from "../../../bundler/context.js";
+import { oneoffContext } from "../../../bundler/context.js";
+import { logFailure } from "../../../bundler/log.js";
 import { findLatestVersionWithBinary } from "./download.js";
 import { components } from "@octokit/openapi-types";
 import stripAnsi from "strip-ansi";
@@ -14,7 +15,7 @@ async function setupContext() {
     ...originalContext,
     crash: (args: { printedMessage: string | null }) => {
       if (args.printedMessage !== null) {
-        logFailure(originalContext, args.printedMessage);
+        logFailure(args.printedMessage);
       }
       throw new Error();
     },
