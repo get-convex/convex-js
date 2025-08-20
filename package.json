@@ -195,7 +195,8 @@
     "test": "vitest --silent",
     "test-not-silent": "vitest",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
-    "test-esm": "node ./scripts/test-esm.mjs && ./scripts/checkdeps.mjs && ./scripts/checkimports.mjs"
+    "test-esm": "node ./scripts/test-esm.mjs && ./scripts/checkdeps.mjs && ./scripts/checkimports.mjs",
+    "type-bench": "node ./src/test/types.bench.ts"
   },
   "files": [
     "bin",

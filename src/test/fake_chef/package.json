@@ -1,8 +1,5 @@
 {
   "name": "fake-chef",
-  "engines": {
-    "node": ">=18.18.0"
-  },
   "dependencies": {
     "@convex-dev/migrations": "^0.2.7",
     "@convex-dev/rate-limiter": "^0.2.6",
