@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v } from "../../values";
 import { httpAction, internalMutation, mutation } from "./_generated/server";
 import { getCurrentMember } from "./sessions";
 import { internal } from "./_generated/api";
@@ -21,14 +21,18 @@ export const openaiProxy = httpAction(async (ctx, req) => {
     return new Response("Invalid authorization header", { status: 401 });
   }
   const token = authHeader.slice(7);
-  const result = await ctx.runMutation(internal.openaiProxy.decrementToken, { token });
+  const result = await ctx.runMutation(internal.openaiProxy.decrementToken, {
+    token,
+  });
   if (!result.success) {
     return new Response(result.error, { status: 401 });
   }
 
   const url = new URL(req.url);
   if (url.pathname != "/openai-proxy/chat/completions") {
-    return new Response("Only the /chat/completions API is supported", { status: 400 });
+    return new Response("Only the /chat/completions API is supported", {
+      status: 400,
+    });
   }
 
   let body: any;
@@ -38,11 +42,15 @@ export const openaiProxy = httpAction(async (ctx, req) => {
     return new Response("Invalid request body", { status: 400 });
   }
   if (!ALLOWED_MODELS.includes(body.model)) {
-    return new Response("Only gpt-4o-mini and gpt-4.1-nano are supported", { status: 400 });
+    return new Response("Only gpt-4o-mini and gpt-4.1-nano are supported", {
+      status: 400,
+    });
   }
 
   if (body.max_completion_tokens && body.max_completion_tokens > 16384) {
-    return new Response("max_completion_tokens must be <= 16384", { status: 400 });
+    return new Response("max_completion_tokens must be <= 16384", {
+      status: 400,
+    });
   }
   if (body.max_tokens && body.max_tokens > 16384) {
     return new Response("max_tokens must be <= 16384", { status: 400 });

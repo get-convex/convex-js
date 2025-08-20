@@ -1,4 +1,4 @@
-import { ConvexError, v } from "convex/values";
+import { ConvexError, v } from "../../values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { getChatByIdOrUrlIdEnsuringAccess } from "./messages";
@@ -9,17 +9,26 @@ export const share = mutation({
   args: {
     sessionId: v.id("sessions"),
     id: v.string(),
-    shared: v.union(v.literal("shared"), v.literal("expresslyUnshared"), v.literal("noPreferenceExpressed")),
+    shared: v.union(
+      v.literal("shared"),
+      v.literal("expresslyUnshared"),
+      v.literal("noPreferenceExpressed"),
+    ),
     allowForkFromLatest: v.boolean(),
     thumbnailImageStorageId: v.optional(v.id("_storage")),
     referralCode: v.optional(v.union(v.string(), v.null())),
   },
-  handler: async (ctx, { sessionId, id, shared, allowForkFromLatest, referralCode }) => {
+  handler: async (
+    ctx,
+    { sessionId, id, shared, allowForkFromLatest, referralCode },
+  ) => {
     // Validate referral code if set
     if (referralCode !== undefined && referralCode !== null) {
       // Only allow alphanumeric, dashes, and underscores
       if (!/^[a-zA-Z0-9_-]+$/.test(referralCode)) {
-        throw new ConvexError("Invalid referral code: must be alphanumeric, dashes, or underscores only");
+        throw new ConvexError(
+          "Invalid referral code: must be alphanumeric, dashes, or underscores only",
+        );
       }
     }
     const chat = await getChatByIdOrUrlIdEnsuringAccess(ctx, { id, sessionId });
@@ -105,7 +114,9 @@ async function getSocialShareInner(ctx: QueryCtx, code: string) {
   }
 
   const session = await ctx.db.get(chat.creatorId);
-  const authorProfile = session?.memberId ? ((await ctx.db.get(session.memberId))?.cachedProfile ?? null) : null;
+  const authorProfile = session?.memberId
+    ? ((await ctx.db.get(session.memberId))?.cachedProfile ?? null)
+    : null;
 
   const chatHasBeenDeployed = !!chat.hasBeenDeployed;
 
@@ -173,7 +184,10 @@ export const saveThumbnail = internalMutation({
     storageId: v.id("_storage"),
   },
   handler: async (ctx, { sessionId, urlId, storageId }) => {
-    const chat = await getChatByIdOrUrlIdEnsuringAccess(ctx, { id: urlId, sessionId });
+    const chat = await getChatByIdOrUrlIdEnsuringAccess(ctx, {
+      id: urlId,
+      sessionId,
+    });
     if (!chat) {
       throw new ConvexError("Chat not found");
     }
@@ -224,7 +238,9 @@ export const createAdminShare = internalMutation({
       .withIndex("byChatId", (q) => q.eq("chatId", chatId))
       .unique();
     if (existing) {
-      console.log(`Already have a share for chat ${chatId}: Go to https://chef.show/${existing.code}`);
+      console.log(
+        `Already have a share for chat ${chatId}: Go to https://chef.show/${existing.code}`,
+      );
       return;
     }
 
@@ -238,6 +254,8 @@ export const createAdminShare = internalMutation({
       allowForkFromLatest: true,
       allowShowInGallery: false,
     });
-    console.log(`Created admin share for chat ${chatId}. Go to https://chef.show/${code}`);
+    console.log(
+      `Created admin share for chat ${chatId}. Go to https://chef.show/${code}`,
+    );
   },
 });

@@ -1,6 +1,6 @@
-import { defineSchema, defineTable } from "convex/server";
-import { v } from "convex/values";
-import type { Infer, Validator } from "convex/values";
+import { defineSchema, defineTable } from "../../server";
+import { v } from "../../values";
+import type { Infer, Validator } from "../../values";
 import type { CoreMessage } from "ai";
 
 export const apiKeyValidator = v.object({
@@ -158,7 +158,11 @@ export default defineSchema({
     code: v.string(),
     thumbnailImageStorageId: v.optional(v.id("_storage")),
     // Does the share link work. Three states so we can immediately share on opening the share dialog.
-    shared: v.union(v.literal("shared"), v.literal("expresslyUnshared"), v.literal("noPreferenceExpressed")),
+    shared: v.union(
+      v.literal("shared"),
+      v.literal("expresslyUnshared"),
+      v.literal("noPreferenceExpressed"),
+    ),
     // Allow others to fork this project at its most recent state. Always true for now.
     allowForkFromLatest: v.boolean(),
     // Allow to be shown in gallery (doesn't mean we actual show it).
@@ -208,7 +212,9 @@ export default defineSchema({
     // Such a loose type doesn't feel so bad since this is debugging data, but if we try
     // to display older versions of this we need to make any fields added to CoreMessage in
     // later versions of the Vercel AI SDK optional on the read path.
-    responseCoreMessages: v.array(v.any() as Validator<CoreMessage, "required", any>),
+    responseCoreMessages: v.array(
+      v.any() as Validator<CoreMessage, "required", any>,
+    ),
     promptCoreMessagesStorageId: v.id("_storage"),
     finishReason: v.string(),
     modelId: v.string(),

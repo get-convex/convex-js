@@ -1,5 +1,9 @@
-import { internalMutation, internalAction, internalQuery } from "./_generated/server";
-import { v } from "convex/values";
+import {
+  internalMutation,
+  internalAction,
+  internalQuery,
+} from "./_generated/server";
+import { v } from "../../values";
 import schema from "./schema";
 import { internal } from "./_generated/api";
 
@@ -23,7 +27,9 @@ export const clearAll = internalAction({
       let isCleared = false;
 
       while (!isCleared) {
-        isCleared = await ctx.runMutation(internal.dev.deleteFromTable, { tableName });
+        isCleared = await ctx.runMutation(internal.dev.deleteFromTable, {
+          tableName,
+        });
       }
     }
   },
@@ -37,13 +43,18 @@ export const findSessionForUser = internalQuery({
       if (!isNaN(parseInt(normalizedGithubMemberId))) {
         normalizedGithubMemberId = `github|${normalizedGithubMemberId}`;
       } else {
-        throw new Error("Invalid github member id -- these should look like github|1234567890");
+        throw new Error(
+          "Invalid github member id -- these should look like github|1234567890",
+        );
       }
     }
     const convexMember = await ctx.db
       .query("convexMembers")
       .withIndex("byTokenIdentifier", (q) =>
-        q.eq("tokenIdentifier", `https://auth.convex.dev/|${normalizedGithubMemberId}`),
+        q.eq(
+          "tokenIdentifier",
+          `https://auth.convex.dev/|${normalizedGithubMemberId}`,
+        ),
       )
       .first();
     if (!convexMember) {

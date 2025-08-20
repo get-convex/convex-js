@@ -1,4 +1,4 @@
-import { cronJobs } from "convex/server";
+import { cronJobs } from "../../server";
 import { internal } from "./_generated/api";
 
 const crons = cronJobs();

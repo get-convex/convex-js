@@ -1,6 +1,9 @@
 import { internalMutation, query } from "./_generated/server";
-import { v } from "convex/values";
-import { getChatByIdOrUrlIdEnsuringAccess, getLatestChatMessageStorageState } from "./messages";
+import { v } from "../../values";
+import {
+  getChatByIdOrUrlIdEnsuringAccess,
+  getLatestChatMessageStorageState,
+} from "./messages";
 
 // Save the snapshot information after successful upload
 export const saveSnapshot = internalMutation({
@@ -10,7 +13,10 @@ export const saveSnapshot = internalMutation({
     storageId: v.id("_storage"),
   },
   handler: async (ctx, { sessionId, chatId, storageId }) => {
-    const chat = await getChatByIdOrUrlIdEnsuringAccess(ctx, { id: chatId, sessionId });
+    const chat = await getChatByIdOrUrlIdEnsuringAccess(ctx, {
+      id: chatId,
+      sessionId,
+    });
 
     if (!chat) {
       throw new Error("Chat not found");
@@ -27,11 +33,17 @@ export const getSnapshotUrl = query({
     chatId: v.string(),
   },
   handler: async (ctx, { sessionId, chatId }) => {
-    const chat = await getChatByIdOrUrlIdEnsuringAccess(ctx, { id: chatId, sessionId });
+    const chat = await getChatByIdOrUrlIdEnsuringAccess(ctx, {
+      id: chatId,
+      sessionId,
+    });
     if (!chat) {
       throw new Error("Chat not found");
     }
-    const latestChatStorageState = await getLatestChatMessageStorageState(ctx, chat);
+    const latestChatStorageState = await getLatestChatMessageStorageState(
+      ctx,
+      chat,
+    );
     if (latestChatStorageState?.snapshotId) {
       const url = await ctx.storage.getUrl(latestChatStorageState.snapshotId);
       return url;
@@ -45,7 +57,9 @@ export const getSnapshotUrl = query({
     }
     const snapshot = await ctx.storage.getUrl(snapshotId);
     if (!snapshot) {
-      throw new Error(`Expected to find a storageUrl for snapshot with id ${snapshotId}`);
+      throw new Error(
+        `Expected to find a storageUrl for snapshot with id ${snapshotId}`,
+      );
     }
     return snapshot;
   },

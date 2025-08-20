@@ -1,6 +1,13 @@
-import { v } from "convex/values";
-import { action, internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { ConvexError } from "convex/values";
+import { v } from "../../values";
+import {
+  action,
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
+import { ConvexError } from "../../values";
 import type { Id } from "./_generated/dataModel";
 import { getChatByIdOrUrlIdEnsuringAccess } from "./messages";
 import { internal } from "./_generated/api";
@@ -20,16 +27,25 @@ export const verifySession = query({
     if (!session || !session.memberId) {
       return false;
     }
-    return isValidSessionForConvexOAuth(ctx, { sessionId, memberId: session.memberId });
+    return isValidSessionForConvexOAuth(ctx, {
+      sessionId,
+      memberId: session.memberId,
+    });
   },
 });
 
-export async function isValidSession(ctx: QueryCtx, args: { sessionId: Id<"sessions"> }) {
+export async function isValidSession(
+  ctx: QueryCtx,
+  args: { sessionId: Id<"sessions"> },
+) {
   const session = await ctx.db.get(args.sessionId);
   if (!session || !session.memberId) {
     return false;
   }
-  return await isValidSessionForConvexOAuth(ctx, { sessionId: args.sessionId, memberId: session.memberId });
+  return await isValidSessionForConvexOAuth(ctx, {
+    sessionId: args.sessionId,
+    memberId: session.memberId,
+  });
 }
 
 async function isValidSessionForConvexOAuth(
@@ -65,11 +81,17 @@ export const registerConvexOAuthConnection = internalMutation({
       sessionId: args.sessionId,
     });
     if (!chat) {
-      throw new ConvexError({ code: "NotAuthorized", message: "Chat not found" });
+      throw new ConvexError({
+        code: "NotAuthorized",
+        message: "Chat not found",
+      });
     }
     const session = await ctx.db.get(args.sessionId);
     if (!session || !session.memberId) {
-      throw new ConvexError({ code: "NotAuthorized", message: "Chat not found" });
+      throw new ConvexError({
+        code: "NotAuthorized",
+        message: "Chat not found",
+      });
     }
     await ctx.db.patch(args.chatId, {
       convexProject: {
@@ -82,7 +104,9 @@ export const registerConvexOAuthConnection = internalMutation({
     });
     const credentials = await ctx.db
       .query("convexProjectCredentials")
-      .withIndex("bySlugs", (q) => q.eq("teamSlug", args.teamSlug).eq("projectSlug", args.projectSlug))
+      .withIndex("bySlugs", (q) =>
+        q.eq("teamSlug", args.teamSlug).eq("projectSlug", args.projectSlug),
+      )
       .collect();
     if (credentials.length === 0) {
       await ctx.db.insert("convexProjectCredentials", {
@@ -120,7 +144,9 @@ async function getOrCreateCurrentMember(ctx: MutationCtx) {
   }
   const existingMember = await ctx.db
     .query("convexMembers")
-    .withIndex("byTokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+    .withIndex("byTokenIdentifier", (q) =>
+      q.eq("tokenIdentifier", identity.tokenIdentifier),
+    )
     .unique();
   if (existingMember) {
     return existingMember._id;
@@ -137,7 +163,9 @@ export async function getCurrentMember(ctx: QueryCtx) {
   }
   const existingMember = await ctx.db
     .query("convexMembers")
-    .withIndex("byTokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+    .withIndex("byTokenIdentifier", (q) =>
+      q.eq("tokenIdentifier", identity.tokenIdentifier),
+    )
     .unique();
   if (!existingMember) {
     throw new ConvexError({ code: "NotAuthorized", message: "Unauthorized" });
@@ -187,13 +215,16 @@ export const updateCachedProfile = action({
     });
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`Failed to fetch profile: ${response.statusText}: ${body}`);
+      throw new Error(
+        `Failed to fetch profile: ${response.statusText}: ${body}`,
+      );
     }
 
     const convexProfile: ConvexProfile = await response.json();
 
     const profile = {
-      username: convexProfile.name || auth0Profile.name || auth0Profile.nickname || "",
+      username:
+        convexProfile.name || auth0Profile.name || auth0Profile.nickname || "",
       email: convexProfile.email || auth0Profile.email || "",
       avatar: auth0Profile.pictureUrl || "",
       id: convexProfile.id || auth0Profile.subject || "",

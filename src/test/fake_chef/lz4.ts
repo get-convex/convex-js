@@ -20,7 +20,10 @@ export class Lz4 {
   private heap_next: number;
 
   constructor() {
-    this.textDecoder = new TextDecoder("utf-8", { ignoreBOM: true, fatal: true });
+    this.textDecoder = new TextDecoder("utf-8", {
+      ignoreBOM: true,
+      fatal: true,
+    });
     this.textDecoder.decode();
 
     this.heap = new Array(32).fill(undefined);
@@ -45,7 +48,10 @@ export class Lz4 {
   compress(input: Uint8Array) {
     try {
       const retptr = this.exports.__wbindgen_add_to_stack_pointer(-16);
-      const ptr0 = this.passArray8ToWasm0(input, this.exports.__wbindgen_malloc);
+      const ptr0 = this.passArray8ToWasm0(
+        input,
+        this.exports.__wbindgen_malloc,
+      );
       const len0 = this.wasmVectorLen;
       this.exports.compress(retptr, ptr0, len0);
       var r0 = this.getInt32Memory0()[retptr / 4 + 0];
@@ -61,7 +67,10 @@ export class Lz4 {
   decompress(input: Uint8Array) {
     try {
       const retptr = this.exports.__wbindgen_add_to_stack_pointer(-16);
-      const ptr0 = this.passArray8ToWasm0(input, this.exports.__wbindgen_malloc);
+      const ptr0 = this.passArray8ToWasm0(
+        input,
+        this.exports.__wbindgen_malloc,
+      );
       const len0 = this.wasmVectorLen;
       this.exports.decompress(retptr, ptr0, len0);
       var r0 = this.getInt32Memory0()[retptr / 4 + 0];
@@ -90,14 +99,19 @@ export class Lz4 {
     if (!this.instance) {
       throw new Error("Lz4 instance not initialized");
     }
-    if (this.uint8Memory0 === null || this.uint8Memory0.buffer !== this.exports.memory.buffer) {
+    if (
+      this.uint8Memory0 === null ||
+      this.uint8Memory0.buffer !== this.exports.memory.buffer
+    ) {
       this.uint8Memory0 = new Uint8Array(this.exports.memory.buffer);
     }
     return this.uint8Memory0;
   }
 
   private getStringFromWasm0(ptr: number, len: number) {
-    return this.textDecoder.decode(this.getUint8Memory0().subarray(ptr, ptr + len));
+    return this.textDecoder.decode(
+      this.getUint8Memory0().subarray(ptr, ptr + len),
+    );
   }
 
   private passArray8ToWasm0(arg: any, malloc: any) {
@@ -115,7 +129,10 @@ export class Lz4 {
     if (!this.instance) {
       throw new Error("Lz4 instance not initialized");
     }
-    if (this.int32Memory0 === null || this.int32Memory0.buffer !== this.exports.memory.buffer) {
+    if (
+      this.int32Memory0 === null ||
+      this.int32Memory0.buffer !== this.exports.memory.buffer
+    ) {
       this.int32Memory0 = new Int32Array(this.exports.memory.buffer);
     }
     return this.int32Memory0;

@@ -1,7 +1,10 @@
-import { ConvexError, v } from "convex/values";
+import { ConvexError, v } from "../../values";
 import { mutation, query, type DatabaseReader } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
-import { getChatByIdOrUrlIdEnsuringAccess, getLatestChatMessageStorageState } from "./messages";
+import {
+  getChatByIdOrUrlIdEnsuringAccess,
+  getLatestChatMessageStorageState,
+} from "./messages";
 import { startProvisionConvexProjectHelper } from "./convexProjects";
 import type { Id } from "./_generated/dataModel";
 
@@ -122,7 +125,11 @@ async function cloneShow(
     showCode,
     sessionId,
     projectInitParams,
-  }: { showCode: string; sessionId: Id<"sessions">; projectInitParams: { teamSlug: string; auth0AccessToken: string } },
+  }: {
+    showCode: string;
+    sessionId: Id<"sessions">;
+    projectInitParams: { teamSlug: string; auth0AccessToken: string };
+  },
 ): Promise<{ id: string; description?: string }> {
   const show = await ctx.db
     .query("socialShares")
@@ -206,7 +213,11 @@ export const clone = mutation({
       .withIndex("byCode", (q) => q.eq("code", shareCode))
       .first();
     if (!getShare) {
-      return cloneShow(ctx, { showCode: shareCode, sessionId, projectInitParams });
+      return cloneShow(ctx, {
+        showCode: shareCode,
+        sessionId,
+        projectInitParams,
+      });
     }
 
     const parentChat = await ctx.db.get(getShare.chatId);
@@ -231,7 +242,8 @@ export const clone = mutation({
     if (!getShare.chatHistoryId) {
       throw new ConvexError({
         code: "NotFound",
-        message: "The original chat history was not found. It may have been deleted.",
+        message:
+          "The original chat history was not found. It may have been deleted.",
       });
     }
     await ctx.db.insert("chatMessagesStorageState", {

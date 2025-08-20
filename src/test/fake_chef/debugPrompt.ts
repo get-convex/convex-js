@@ -1,5 +1,5 @@
 import { internalMutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { v } from "../../values";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { assertIsConvexAdmin } from "./admin";
 import type { Id } from "./_generated/dataModel";
@@ -8,7 +8,9 @@ import { usageRecordValidator } from "./schema";
 async function getChatByInitialId(ctx: QueryCtx, initialId: string) {
   const chatByInitialId = await ctx.db
     .query("chats")
-    .withIndex("byInitialId", (q: any) => q.eq("initialId", initialId).lt("isDeleted", true))
+    .withIndex("byInitialId", (q: any) =>
+      q.eq("initialId", initialId).lt("isDeleted", true),
+    )
     .unique();
   if (!chatByInitialId) {
     throw new Error(`No corresponding chat found for initial ID ${initialId}`);
@@ -58,7 +60,10 @@ export const deleteDebugPrompt = internalMutation({
   },
 });
 
-async function _deleteDebugPrompt(ctx: MutationCtx, id: Id<"debugChatApiRequestLog">) {
+async function _deleteDebugPrompt(
+  ctx: MutationCtx,
+  id: Id<"debugChatApiRequestLog">,
+) {
   const record = await ctx.db.get(id);
   if (!record) {
     return;
@@ -75,7 +80,9 @@ export const deleteAllDebugPrompts = internalMutation({
 
     for (let i = 0; i < records.length; i += 10) {
       const chunk = records.slice(i, i + 10);
-      await Promise.all(chunk.map((record) => _deleteDebugPrompt(ctx, record._id)));
+      await Promise.all(
+        chunk.map((record) => _deleteDebugPrompt(ctx, record._id)),
+      );
     }
   },
 });
@@ -97,7 +104,9 @@ export const show = query({
     const promptsWithUrls = await Promise.all(
       debugPrompts.map(async (prompt) => ({
         ...prompt,
-        coreMessagesUrl: await ctx.storage.getUrl(prompt.promptCoreMessagesStorageId),
+        coreMessagesUrl: await ctx.storage.getUrl(
+          prompt.promptCoreMessagesStorageId,
+        ),
       })),
     );
 

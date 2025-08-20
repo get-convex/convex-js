@@ -1,4 +1,4 @@
-import { ConvexError, v } from "convex/values";
+import { ConvexError, v } from "../../values";
 import { mutation, query } from "./_generated/server";
 import { getChatByIdOrUrlIdEnsuringAccess } from "./messages";
 

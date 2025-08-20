@@ -1,27 +1,32 @@
-import { httpRouter } from "convex/server";
+import { httpRouter } from "../../server";
 import { httpAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { ConvexError } from "convex/values";
+import { ConvexError } from "../../values";
 import { openaiProxy } from "./openaiProxy";
 import { corsRouter } from "convex-helpers/server/cors";
 import { resendProxy } from "./resendProxy";
 
 const http = httpRouter();
-const httpWithCors = corsRouter(http, {
+const httpWithCors = corsRouter(http as never, {
   allowedHeaders: ["Content-Type", "X-Chef-Admin-Token"],
 });
 
 // This is particularly useful with CORS, where an unhandled error won't have CORS
 // headers applied to it.
-function httpActionWithErrorHandling(handler: (ctx: ActionCtx, request: Request) => Promise<Response>) {
+function httpActionWithErrorHandling(
+  handler: (ctx: ActionCtx, request: Request) => Promise<Response>,
+) {
   return httpAction(async (ctx, request) => {
     try {
       return await handler(ctx, request);
     } catch (e) {
       console.error(e);
       return new Response(
-        JSON.stringify({ error: e instanceof ConvexError ? e.message : "An unknown error occurred" }),
+        JSON.stringify({
+          error:
+            e instanceof ConvexError ? e.message : "An unknown error occurred",
+        }),
         {
           status: 500,
           headers: {
@@ -89,10 +94,13 @@ httpWithCors.route({
     if (!chatId) {
       throw new ConvexError("chatId is required");
     }
-    const storageInfo = await ctx.runQuery(internal.messages.getInitialMessagesStorageInfo, {
-      sessionId,
-      chatId,
-    });
+    const storageInfo = await ctx.runQuery(
+      internal.messages.getInitialMessagesStorageInfo,
+      {
+        sessionId,
+        chatId,
+      },
+    );
     if (!storageInfo) {
       return new Response(`Chat not found: ${chatId}`, {
         status: 404,
@@ -156,7 +164,8 @@ http.route({
       headers: {
         "Access-Control-Allow-Origin": request.headers.get("Origin") ?? "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Chef-Admin-Token",
+        "Access-Control-Allow-Headers":
+          "Content-Type, Authorization, X-Chef-Admin-Token",
         "Access-Control-Allow-Credentials": "true",
       },
     });
@@ -173,19 +182,28 @@ http.route({
     const authHeader = request.headers.get("Authorization");
     if (authHeader === null) {
       if (header !== process.env.CHEF_ADMIN_TOKEN) {
-        return new Response(JSON.stringify({ code: "Unauthorized", message: "Invalid admin token" }), {
-          status: 401,
-          headers: {
-            "Content-Type": "application/json",
+        return new Response(
+          JSON.stringify({
+            code: "Unauthorized",
+            message: "Invalid admin token",
+          }),
+          {
+            status: 401,
+            headers: {
+              "Content-Type": "application/json",
+            },
           },
-        });
+        );
       }
     }
     const chatUuid = body.chatUuid;
-    const storageId = await ctx.runQuery(internal.messages.getMessagesByChatInitialIdBypassingAccessControl, {
-      id: chatUuid,
-      ensureAdmin: authHeader !== null,
-    });
+    const storageId = await ctx.runQuery(
+      internal.messages.getMessagesByChatInitialIdBypassingAccessControl,
+      {
+        id: chatUuid,
+        ensureAdmin: authHeader !== null,
+      },
+    );
     if (!storageId) {
       return new Response(null, {
         status: 204,
@@ -223,7 +241,10 @@ httpWithCors.route({
 
     const promptCoreMessagesStorageId = await ctx.storage.store(messagesBlob);
     try {
-      await ctx.runMutation(internal.debugPrompt.storeDebugPrompt, { ...metadata, promptCoreMessagesStorageId });
+      await ctx.runMutation(internal.debugPrompt.storeDebugPrompt, {
+        ...metadata,
+        promptCoreMessagesStorageId,
+      });
     } catch (e) {
       await ctx.storage.delete(promptCoreMessagesStorageId);
       throw e;
@@ -255,18 +276,28 @@ httpWithCors.route({
     // Validate content type
     const contentType = imageBlob.type;
     if (!contentType.startsWith("image/")) {
-      return new Response(JSON.stringify({ error: "Invalid file type. Only images are allowed." }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          error: "Invalid file type. Only images are allowed.",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     const MAX_THUMBNAIL_SIZE = 5 * 1024 * 1024;
     if (imageBlob.size > MAX_THUMBNAIL_SIZE) {
-      return new Response(JSON.stringify({ error: "Thumbnail image exceeds maximum size of 5MB" }), {
-        status: 413, // Payload Too Large
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          error: "Thumbnail image exceeds maximum size of 5MB",
+        }),
+        {
+          status: 413, // Payload Too Large
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     const storageId = await ctx.storage.store(imageBlob);

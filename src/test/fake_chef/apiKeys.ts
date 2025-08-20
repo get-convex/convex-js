@@ -1,4 +1,4 @@
-import { ConvexError, v } from "convex/values";
+import { ConvexError, v } from "../../values";
 import { action, mutation, query } from "./_generated/server";
 import { apiKeyValidator } from "./schema";
 
@@ -12,7 +12,9 @@ export const apiKeyForCurrentMember = query({
     }
     const existingMember = await ctx.db
       .query("convexMembers")
-      .withIndex("byTokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+      .withIndex("byTokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
       .unique();
 
     return existingMember?.apiKey;
@@ -32,7 +34,9 @@ export const setApiKeyForCurrentMember = mutation({
 
     const existingMember = await ctx.db
       .query("convexMembers")
-      .withIndex("byTokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+      .withIndex("byTokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
       .unique();
 
     if (!existingMember) {
@@ -54,7 +58,9 @@ export const deleteApiKeyForCurrentMember = mutation({
 
     const existingMember = await ctx.db
       .query("convexMembers")
-      .withIndex("byTokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+      .withIndex("byTokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
       .unique();
 
     if (!existingMember) {
@@ -76,7 +82,9 @@ export const deleteAnthropicApiKeyForCurrentMember = mutation({
 
     const existingMember = await ctx.db
       .query("convexMembers")
-      .withIndex("byTokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+      .withIndex("byTokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
       .unique();
 
     if (!existingMember) {
@@ -105,7 +113,9 @@ export const deleteOpenaiApiKeyForCurrentMember = mutation({
 
     const existingMember = await ctx.db
       .query("convexMembers")
-      .withIndex("byTokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+      .withIndex("byTokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
       .unique();
 
     if (!existingMember) {
@@ -134,7 +144,9 @@ export const deleteXaiApiKeyForCurrentMember = mutation({
 
     const existingMember = await ctx.db
       .query("convexMembers")
-      .withIndex("byTokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+      .withIndex("byTokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
       .unique();
 
     if (!existingMember) {
@@ -163,7 +175,9 @@ export const deleteGoogleApiKeyForCurrentMember = mutation({
 
     const existingMember = await ctx.db
       .query("convexMembers")
-      .withIndex("byTokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+      .withIndex("byTokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
       .unique();
 
     if (!existingMember) {
@@ -241,7 +255,9 @@ export const validateGoogleApiKey = action({
       throw new ConvexError({ code: "NotAuthorized", message: "Unauthorized" });
     }
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${args.apiKey}`);
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${args.apiKey}`,
+    );
 
     if (response.status === 400) {
       return false;

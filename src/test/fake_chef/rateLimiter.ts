@@ -6,7 +6,7 @@ function resendProxyEmailsPerMinute() {
   return fromEnv ? parseInt(fromEnv) : 20;
 }
 
-export const rateLimiter = new RateLimiter(components.rateLimiter, {
+export const rateLimiter = new RateLimiter(components.rateLimiter as never, {
   resendProxy: {
     kind: "token bucket",
     // Permit 20 requests per minute => ~900k emails per month => ~$650/month on Resend's scale plan.

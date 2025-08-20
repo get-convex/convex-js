@@ -1,9 +1,11 @@
-import { v } from "convex/values";
+import { v } from "../../values";
 import { internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const delayInMs = parseFloat(process.env.DEBUG_FILE_CLEANUP_DELAY_MS ?? "500");
-const debugFileCleanupBatchSize = parseInt(process.env.DEBUG_FILE_CLEANUP_BATCH_SIZE ?? "100");
+const debugFileCleanupBatchSize = parseInt(
+  process.env.DEBUG_FILE_CLEANUP_BATCH_SIZE ?? "100",
+);
 
 export const deleteDebugFilesForInactiveChats = internalMutation({
   args: {
@@ -12,11 +14,16 @@ export const deleteDebugFilesForInactiveChats = internalMutation({
     shouldScheduleNext: v.boolean(),
     daysInactive: v.number(),
   },
-  handler: async (ctx, { forReal, cursor, shouldScheduleNext, daysInactive }) => {
-    const { page, isDone, continueCursor } = await ctx.db.query("debugChatApiRequestLog").paginate({
-      numItems: debugFileCleanupBatchSize,
-      cursor: cursor ?? null,
-    });
+  handler: async (
+    ctx,
+    { forReal, cursor, shouldScheduleNext, daysInactive },
+  ) => {
+    const { page, isDone, continueCursor } = await ctx.db
+      .query("debugChatApiRequestLog")
+      .paginate({
+        numItems: debugFileCleanupBatchSize,
+        cursor: cursor ?? null,
+      });
     for (const doc of page) {
       if (doc._creationTime > Date.now() - 1000 * 60 * 60 * 24 * daysInactive) {
         return;
@@ -27,26 +34,41 @@ export const deleteDebugFilesForInactiveChats = internalMutation({
         .order("desc")
         .first();
       if (storageState === null) {
-        throw new Error(`Chat ${doc.chatId} not found in chatMessagesStorageState`);
+        throw new Error(
+          `Chat ${doc.chatId} not found in chatMessagesStorageState`,
+        );
       }
-      if (storageState._creationTime < Date.now() - 1000 * 60 * 60 * 24 * daysInactive) {
-        const lastActiveDate = new Date(storageState._creationTime).toISOString();
+      if (
+        storageState._creationTime <
+        Date.now() - 1000 * 60 * 60 * 24 * daysInactive
+      ) {
+        const lastActiveDate = new Date(
+          storageState._creationTime,
+        ).toISOString();
         if (forReal) {
           ctx.storage.delete(doc.promptCoreMessagesStorageId);
           await ctx.db.delete(doc._id);
-          console.log(`Deleted debug file for chat ${doc.chatId} last active at ${lastActiveDate}`);
+          console.log(
+            `Deleted debug file for chat ${doc.chatId} last active at ${lastActiveDate}`,
+          );
         } else {
-          console.log(`Would delete debug file for chat ${doc.chatId} last active at ${lastActiveDate}`);
+          console.log(
+            `Would delete debug file for chat ${doc.chatId} last active at ${lastActiveDate}`,
+          );
         }
       }
     }
     if (shouldScheduleNext && !isDone) {
-      await ctx.scheduler.runAfter(delayInMs, internal.cleanup.deleteDebugFilesForInactiveChats, {
-        forReal,
-        cursor: continueCursor,
-        shouldScheduleNext,
-        daysInactive,
-      });
+      await ctx.scheduler.runAfter(
+        delayInMs,
+        internal.cleanup.deleteDebugFilesForInactiveChats,
+        {
+          forReal,
+          cursor: continueCursor,
+          shouldScheduleNext,
+          daysInactive,
+        },
+      );
     }
   },
 });

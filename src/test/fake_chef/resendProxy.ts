@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v } from "../../values";
 import { httpAction, internalMutation, mutation } from "./_generated/server";
 import { getCurrentMember } from "./sessions";
 import { internal } from "./_generated/api";
@@ -8,7 +8,9 @@ const MAX_RATELIMITER_WAIT = 60 * 1000;
 
 export const resendProxy = httpAction(async (ctx, req) => {
   if (!resendProxyEnabled()) {
-    return new Response(JSON.stringify("Convex Resend proxy is disabled."), { status: 400 });
+    return new Response(JSON.stringify("Convex Resend proxy is disabled."), {
+      status: 400,
+    });
   }
   if (!process.env.RESEND_API_KEY) {
     throw new Error("RESEND_API_KEY is not set");
@@ -16,7 +18,9 @@ export const resendProxy = httpAction(async (ctx, req) => {
 
   const url = new URL(req.url);
   if (url.pathname != "/resend-proxy/emails") {
-    return new Response(JSON.stringify("Only the /emails API is supported"), { status: 400 });
+    return new Response(JSON.stringify("Only the /emails API is supported"), {
+      status: 400,
+    });
   }
 
   const headers = new Headers(req.headers);
@@ -27,21 +31,33 @@ export const resendProxy = httpAction(async (ctx, req) => {
     recipientEmail = body.to;
   } else {
     if (!Array.isArray(body.to) || body.to.length !== 1) {
-      return new Response(JSON.stringify("Convex Resend proxy only supports one recipient."), { status: 400 });
+      return new Response(
+        JSON.stringify("Convex Resend proxy only supports one recipient."),
+        { status: 400 },
+      );
     }
     recipientEmail = body.to[0];
   }
 
   if (body.bcc || body.cc) {
-    return new Response(JSON.stringify("Convex Resend proxy does not support bcc or cc."), { status: 400 });
+    return new Response(
+      JSON.stringify("Convex Resend proxy does not support bcc or cc."),
+      { status: 400 },
+    );
   }
 
   if (body.scheduled_at) {
-    return new Response(JSON.stringify("Convex Resend proxy does not support scheduled emails."), { status: 400 });
+    return new Response(
+      JSON.stringify("Convex Resend proxy does not support scheduled emails."),
+      { status: 400 },
+    );
   }
 
   if (body.headers) {
-    return new Response(JSON.stringify("Convex Resend proxy does not support custom headers."), { status: 400 });
+    return new Response(
+      JSON.stringify("Convex Resend proxy does not support custom headers."),
+      { status: 400 },
+    );
   }
 
   const authHeader = headers.get("Authorization");
@@ -49,10 +65,15 @@ export const resendProxy = httpAction(async (ctx, req) => {
     return new Response(JSON.stringify("Unauthorized"), { status: 401 });
   }
   if (!authHeader.startsWith("Bearer ")) {
-    return new Response(JSON.stringify("Invalid authorization header"), { status: 401 });
+    return new Response(JSON.stringify("Invalid authorization header"), {
+      status: 401,
+    });
   }
   const token = authHeader.slice(7);
-  const result = await ctx.runMutation(internal.resendProxy.decrementToken, { token, recipientEmail });
+  const result = await ctx.runMutation(internal.resendProxy.decrementToken, {
+    token,
+    recipientEmail,
+  });
   if (!result.success) {
     return new Response(JSON.stringify(result.error), { status: 401 });
   }
@@ -67,15 +88,23 @@ export const resendProxy = httpAction(async (ctx, req) => {
     }
     const now = Date.now();
     if (now > deadline) {
-      return new Response(JSON.stringify("Rate limit exceeded"), { status: 429 });
+      return new Response(JSON.stringify("Rate limit exceeded"), {
+        status: 429,
+      });
     }
     const remainingTime = deadline - now;
-    const waitTime = Math.min(status.retryAfter * (1 + Math.random()), remainingTime);
+    const waitTime = Math.min(
+      status.retryAfter * (1 + Math.random()),
+      remainingTime,
+    );
     console.warn(`Rate limit exceeded, waiting ${waitTime}ms`);
     await new Promise((resolve) => setTimeout(resolve, waitTime));
   }
 
-  const deploymentName = process.env.CONVEX_CLOUD_URL?.replace("https://", "").replace(".convex.cloud", "");
+  const deploymentName = process.env.CONVEX_CLOUD_URL?.replace(
+    "https://",
+    "",
+  ).replace(".convex.cloud", "");
   return await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -113,7 +142,10 @@ export const decrementToken = internalMutation({
       return { success: false, error: "Invalid RESEND_API_TOKEN" };
     }
     if (token.requestsRemaining <= 0) {
-      return { success: false, error: "Resend API token has no requests remaining." };
+      return {
+        success: false,
+        error: "Resend API token has no requests remaining.",
+      };
     }
     if (token.verifiedEmail !== args.recipientEmail) {
       return {
