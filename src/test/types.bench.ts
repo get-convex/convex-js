@@ -17,11 +17,11 @@ bench.baseline(() => {
 });
 
 bench("Flat ApiFromModules", () => {
-  type Actual = EvaluateModules<ApiFromModules<Modules>>;
+  type Actual = ApiFromModules<Modules>;
 
-  return {} as Actual;
-  // original 24168
-}).types([24168, "instantiations"]);
+  return {} as EvaluateModules<Actual>;
+  // was 27312
+}).types([20041, "instantiations"]);
 
 export type SegmentedModules = {
   "a/b/c": Modules["admin"];
@@ -54,5 +54,6 @@ bench("Segmented ApiFromModules", () => {
   };
 
   const _equal: true = {} as Equals<Actual, Expected>;
-  return {} as Actual;
-}).types([1796, "instantiations"]);
+  return {} as EvaluateModules<Actual>;
+  // was 7780
+}).types([6681, "instantiations"]);

@@ -238,7 +238,7 @@ export type FunctionReferencesInModule<Module extends Record<string, any>> = {
   -readonly [ExportName in keyof Module as Module[ExportName]["isConvexFunction"] extends true
     ? ExportName
     : never]: FunctionReferenceFromExport<Module[ExportName]>;
-};
+} & unknown;
 
 /**
  * Given a path to a module and it's type, generate an API type for this module.
@@ -272,13 +272,17 @@ type ApiForModule<
  */
 export type ApiFromModules<AllModules extends Record<string, object>> =
   keyof AllModules & SegmentedPath extends never
-    ? // fast path for cases with no segmented modules
-      {
-        [ModulePath in keyof AllModules]: FunctionReferencesInModule<
-          AllModules[ModulePath]
-        >;
-      }
+    ? ApiFromNonSegmentedModules<AllModules>
     : ApiFromSegmentedModules<AllModules>;
+
+// fast path for cases with no segmented modules
+type ApiFromNonSegmentedModules<AllModules extends Record<string, object>> = {
+  [ModulePath in keyof AllModules as keyof FunctionReferencesInModule<
+    AllModules[ModulePath]
+  > extends never
+    ? never
+    : ModulePath]: FunctionReferencesInModule<AllModules[ModulePath]>;
+};
 
 type ApiFromSegmentedModules<AllModules extends Record<string, object>> =
   ExpandModulesAndDirs<
@@ -330,15 +334,16 @@ export type FilterApi<API, Predicate> = {
  * 2. This stops recursing when it hits a {@link FunctionReference}.
  * 3. This omits empty object properties
  */
-type ExpandModulesAndDirs<ObjectType> = ObjectType extends FunctionReference.Any
-  ? ObjectType
-  : {
-      [Key in keyof ObjectType as keyof ExpandModulesAndDirs<
-        ObjectType[Key]
-      > extends never
-        ? never
-        : Key]: ExpandModulesAndDirs<ObjectType[Key]>;
-    };
+type ExpandModulesAndDirs<ObjectType> =
+  ObjectType extends Record<string, FunctionReference.Any>
+    ? ObjectType
+    : {
+        [Key in keyof ObjectType as keyof ExpandModulesAndDirs<
+          ObjectType[Key]
+        > extends never
+          ? never
+          : Key]: ExpandModulesAndDirs<ObjectType[Key]>;
+      };
 
 /**
  * Given an api of type API and a FunctionReference subtype, return an api object
