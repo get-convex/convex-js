@@ -247,12 +247,17 @@ type FunctionReferencesInModule<Module extends Record<string, any>> = {
 type ApiForModule<
   ModulePath extends string,
   Module extends object,
+  LastPathWasSegmented extends boolean,
 > = OmitEmptyObjects<
-  ModulePath extends `${infer First}/${infer Second}`
+  ModulePath extends SegmentedPath<infer First, infer Rest>
     ? {
-        [_ in First]: ApiForModule<Second, Module>;
+        [_ in First]: ApiForModule<Rest, Module, true>;
       }
-    : FunctionReferencesInModule<Module>
+    : LastPathWasSegmented extends true
+      ? {
+          [_ in ModulePath]: FunctionReferencesInModule<Module>;
+        }
+      : FunctionReferencesInModule<Module>
 >;
 
 type OmitEmptyObjects<O extends object> = {
@@ -272,17 +277,21 @@ type OmitEmptyObjects<O extends object> = {
  */
 export type ApiFromModules<AllModules extends Record<string, object>> =
   OmitEmptyObjects<{
-    [ModulePath in keyof AllModules as FirstModuleSegment<ModulePath>]: ApiForModule<
-      SecondModuleSegment<ModulePath>,
-      AllModules[ModulePath]
-    >;
+    [ModulePath in keyof AllModules as FirstSegment<ModulePath>]: ModulePath extends SegmentedPath<
+      string,
+      infer Rest
+    >
+      ? ApiForModule<Rest, AllModules[ModulePath], true>
+      : ApiForModule<ModulePath & string, AllModules[ModulePath], false>;
   }>;
 
-type FirstModuleSegment<ModulePath> =
-  ModulePath extends `${infer First}/${string}` ? First : ModulePath & string;
+type SegmentedPath<
+  First extends string = string,
+  Rest extends string = string,
+> = `${First}/${Rest}`;
 
-type SecondModuleSegment<ModulePath> =
-  ModulePath extends `${string}/${infer Second}` ? Second : ModulePath & string;
+type FirstSegment<ModulePath> =
+  ModulePath extends SegmentedPath<infer First> ? First : ModulePath;
 
 /**
  * @public
