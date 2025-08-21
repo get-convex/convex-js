@@ -249,7 +249,7 @@ type ApiForModule<
   ModulePath extends string,
   Module extends object,
   LastPathWasSegmented extends boolean,
-> = OmitEmptyObjects<
+> =
   ModulePath extends SegmentedPath<infer First, infer Rest>
     ? {
         [_ in First]: ApiForModule<Rest, Module, true>;
@@ -258,13 +258,7 @@ type ApiForModule<
       ? {
           [_ in ModulePath]: FunctionReferencesInModule<Module>;
         }
-      : FunctionReferencesInModule<Module>
->;
-
-type OmitEmptyObjects<O extends object> = {
-  [K in keyof O as {} extends O[K] ? never : K]: O[K];
-  // equivalent to Expand without requiring another mapped type
-} & unknown;
+      : FunctionReferencesInModule<Module>;
 
 /**
  * Given the types of all modules in the `convex/` directory, construct the type
@@ -279,21 +273,24 @@ type OmitEmptyObjects<O extends object> = {
 export type ApiFromModules<AllModules extends Record<string, object>> =
   keyof AllModules & SegmentedPath extends never
     ? // fast path for cases with no segmented modules
-      OmitEmptyObjects<{
+      {
         [ModulePath in keyof AllModules]: FunctionReferencesInModule<
           AllModules[ModulePath]
         >;
-      }>
-    : OmitEmptyObjects<
-        IntersectUnionProperties<{
-          [ModulePath in keyof AllModules as FirstSegment<ModulePath>]: ModulePath extends SegmentedPath<
-            string,
-            infer Rest
-          >
-            ? ApiForModule<Rest, AllModules[ModulePath], true>
-            : ApiForModule<ModulePath & string, AllModules[ModulePath], false>;
-        }>
-      >;
+      }
+    : ApiFromSegmentedModules<AllModules>;
+
+type ApiFromSegmentedModules<AllModules extends Record<string, object>> =
+  ExpandModulesAndDirs<
+    IntersectUnionProperties<{
+      [ModulePath in keyof AllModules as FirstSegment<ModulePath>]: ModulePath extends SegmentedPath<
+        string,
+        infer Rest
+      >
+        ? ApiForModule<Rest, AllModules[ModulePath], true>
+        : ApiForModule<ModulePath & string, AllModules[ModulePath], false>;
+    }>
+  >;
 
 type IntersectUnionProperties<O extends object> = {
   [K in keyof O]: UnionToIntersection<O[K]>;
@@ -325,6 +322,23 @@ export type FilterApi<API, Predicate> = {
     : FilterApi<API[mod], Predicate>;
   // equivalent to Expand without requiring another mapped type
 } & unknown;
+
+/**
+ * Like {@link Expand}, this simplifies how TypeScript displays object types.
+ * The differences are:
+ * 1. This version is recursive.
+ * 2. This stops recursing when it hits a {@link FunctionReference}.
+ * 3. This omits empty object properties
+ */
+type ExpandModulesAndDirs<ObjectType> = ObjectType extends FunctionReference.Any
+  ? ObjectType
+  : {
+      [Key in keyof ObjectType as keyof ExpandModulesAndDirs<
+        ObjectType[Key]
+      > extends never
+        ? never
+        : Key]: ExpandModulesAndDirs<ObjectType[Key]>;
+    };
 
 /**
  * Given an api of type API and a FunctionReference subtype, return an api object
