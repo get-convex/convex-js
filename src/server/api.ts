@@ -233,11 +233,11 @@ export type FunctionReferenceFromExport<Export> =
  * This is written carefully to preserve jumping to function definitions using
  * cmd+click. If you edit it, please test that cmd+click still works.
  */
-type FunctionReferencesInModule<Module extends Record<string, any>> = {
+export type FunctionReferencesInModule<Module extends Record<string, any>> = {
   -readonly [ExportName in keyof Module as Module[ExportName]["isConvexFunction"] extends true
     ? ExportName
     : never]: FunctionReferenceFromExport<Module[ExportName]>;
-};
+} & unknown;
 
 /**
  * Given a path to a module and it's type, generate an API type for this module.
@@ -276,14 +276,21 @@ type OmitEmptyObjects<O extends object> = {
  * @public
  */
 export type ApiFromModules<AllModules extends Record<string, object>> =
-  OmitEmptyObjects<{
-    [ModulePath in keyof AllModules as FirstSegment<ModulePath>]: ModulePath extends SegmentedPath<
-      string,
-      infer Rest
-    >
-      ? ApiForModule<Rest, AllModules[ModulePath], true>
-      : ApiForModule<ModulePath & string, AllModules[ModulePath], false>;
-  }>;
+  keyof AllModules & SegmentedPath extends never
+    ? // fast path for cases with no segmented modules
+      OmitEmptyObjects<{
+        [ModulePath in keyof AllModules]: FunctionReferencesInModule<
+          AllModules[ModulePath]
+        >;
+      }>
+    : OmitEmptyObjects<{
+        [ModulePath in keyof AllModules as FirstSegment<ModulePath>]: ModulePath extends SegmentedPath<
+          string,
+          infer Rest
+        >
+          ? ApiForModule<Rest, AllModules[ModulePath], true>
+          : ApiForModule<ModulePath & string, AllModules[ModulePath], false>;
+      }>;
 
 type SegmentedPath<
   First extends string = string,

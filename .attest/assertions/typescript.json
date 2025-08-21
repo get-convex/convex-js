@@ -1,0 +1,20 @@
+{
+    "updates": [
+        {
+            "position": {
+                "method": "",
+                "file": "/home/ssalb/convex-js/src/test/types.bench.ts",
+                "line": 100,
+                "char": 4
+            },
+            "serializedValue": [
+                1796,
+                "instantiations"
+            ],
+            "snapFunctionName": "types",
+            "baselinePath": [
+                "Segmented ApiFromModules"
+            ]
+        }
+    ]
+}

@@ -1,5 +1,8 @@
 import { bench } from "@ark/attest";
-import type { ApiFromModules } from "../server/api.js";
+import type {
+  ApiFromModules,
+  FunctionReferencesInModule,
+} from "../server/api.js";
 
 import type * as admin from "./fake_chef/admin.js";
 import type * as apiKeys from "./fake_chef/apiKeys.js";
@@ -21,6 +24,7 @@ import type * as sessions from "./fake_chef/sessions.js";
 import type * as share from "./fake_chef/share.js";
 import type * as snapshot from "./fake_chef/snapshot.js";
 import type * as socialShare from "./fake_chef/socialShare.js";
+import type { Equals } from "./type_testing.js";
 
 export type Modules = {
   admin: typeof admin;
@@ -45,22 +49,52 @@ export type Modules = {
   socialShare: typeof socialShare;
 };
 
-// type ValueOf<T> = T[keyof T];
-
 // exclude overhead of loading first module to isolate
 // scaling performance as number of modules increases
 bench.baseline(() => {
+  type TransformModules<T> = {
+    [K in keyof T]: { [K1 in keyof T[K]]: T[K][K1] }[keyof T[K]];
+  }[keyof T];
+
   type Value = TransformModules<Modules>;
   return {} as ApiFromModules<{ admin: typeof admin }> | Value;
 });
 
-type TransformModules<T> = {
-  [K in keyof T]: { [K1 in keyof T[K]]: T[K][K1] }[keyof T[K]];
-}[keyof T];
+bench("Flat ApiFromModules", () => {
+  type Actual = ApiFromModules<Modules>;
 
-bench("ApiFromModules", () => {
-  type T = ApiFromModules<Modules>;
-
-  return {} as T;
+  return {} as Actual;
   // original 24168
 }).types([24168, "instantiations"]);
+
+export type SegmentedModules = {
+  "a/b/c": typeof admin;
+  "a/b/d": typeof apiKeys;
+  "b/c/d": typeof admin;
+  c: typeof cleanup;
+  // omitted
+  "b/c/e": typeof compressMessages;
+  d: typeof compressMessages;
+};
+
+type Expected = {
+  a: {
+    b: {
+      c: FunctionReferencesInModule<typeof admin>;
+      d: FunctionReferencesInModule<typeof apiKeys>;
+    };
+  };
+  b: {
+    c: {
+      d: FunctionReferencesInModule<typeof admin>;
+    };
+  };
+  c: FunctionReferencesInModule<typeof cleanup>;
+};
+
+bench("Segmented ApiFromModules", () => {
+  type Actual = ApiFromModules<SegmentedModules>;
+  const equal: true = {} as Equals<Actual, Expected>;
+
+  return {} as Actual;
+}).types([1796, "instantiations"]);
