@@ -1,6 +1,5 @@
 {
   "include": ["src", ".eslintrc.cjs"],
-  "exclude": ["src/test"],
   "compileOnSave": true,
   "compilerOptions": {
     /* Basic Options */

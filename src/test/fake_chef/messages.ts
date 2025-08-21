@@ -899,7 +899,7 @@ export const eraseMessageHistory = internalMutation({
       .withIndex("byChatId", (q) =>
         q
           .eq("chatId", share.chatId)
-          .eq("lastMessageRank", earliestMessageWithSnapshot.lastMessageRank),
+          .eq("lastMessageRank", earliestMessageWithSnapshot?.lastMessageRank!),
       )
       .order("desc")
       .first();
