@@ -24,7 +24,6 @@ import type * as sessions from "./fake_chef/sessions.js";
 import type * as share from "./fake_chef/share.js";
 import type * as snapshot from "./fake_chef/snapshot.js";
 import type * as socialShare from "./fake_chef/socialShare.js";
-import type { Equals } from "./type_testing.js";
 
 export type Modules = {
   admin: typeof admin;
@@ -92,9 +91,10 @@ type Expected = {
   c: FunctionReferencesInModule<typeof cleanup>;
 };
 
+type Equals<A, B> = [A, B] extends [B, A] ? true : false;
+
 bench("Segmented ApiFromModules", () => {
   type Actual = ApiFromModules<SegmentedModules>;
-  const equal: true = {} as Equals<Actual, Expected>;
-
+  const _equal: true = {} as Equals<Actual, Expected>;
   return {} as Actual;
 }).types([1796, "instantiations"]);

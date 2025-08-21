@@ -1,3 +1,4 @@
+import type { UnionToIntersection } from "../type_utils.js";
 import { getFunctionAddress } from "./components/paths.js";
 import { functionName } from "./functionName.js";
 import { PaginationOptions, PaginationResult } from "./pagination.js";
@@ -237,7 +238,7 @@ export type FunctionReferencesInModule<Module extends Record<string, any>> = {
   -readonly [ExportName in keyof Module as Module[ExportName]["isConvexFunction"] extends true
     ? ExportName
     : never]: FunctionReferenceFromExport<Module[ExportName]>;
-} & unknown;
+};
 
 /**
  * Given a path to a module and it's type, generate an API type for this module.
@@ -283,14 +284,20 @@ export type ApiFromModules<AllModules extends Record<string, object>> =
           AllModules[ModulePath]
         >;
       }>
-    : OmitEmptyObjects<{
-        [ModulePath in keyof AllModules as FirstSegment<ModulePath>]: ModulePath extends SegmentedPath<
-          string,
-          infer Rest
-        >
-          ? ApiForModule<Rest, AllModules[ModulePath], true>
-          : ApiForModule<ModulePath & string, AllModules[ModulePath], false>;
-      }>;
+    : OmitEmptyObjects<
+        IntersectUnionProperties<{
+          [ModulePath in keyof AllModules as FirstSegment<ModulePath>]: ModulePath extends SegmentedPath<
+            string,
+            infer Rest
+          >
+            ? ApiForModule<Rest, AllModules[ModulePath], true>
+            : ApiForModule<ModulePath & string, AllModules[ModulePath], false>;
+        }>
+      >;
+
+type IntersectUnionProperties<O extends object> = {
+  [K in keyof O]: UnionToIntersection<O[K]>;
+};
 
 type SegmentedPath<
   First extends string = string,
