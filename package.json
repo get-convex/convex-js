@@ -195,7 +195,8 @@
     "test": "vitest --silent",
     "test-not-silent": "vitest",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
-    "test-esm": "node ./scripts/test-esm.mjs && ./scripts/checkdeps.mjs && ./scripts/checkimports.mjs"
+    "test-esm": "node ./scripts/test-esm.mjs && ./scripts/checkdeps.mjs && ./scripts/checkimports.mjs",
+    "type-bench": "node ./src/test/types.bench.ts"
   },
   "files": [
     "bin",
@@ -258,6 +259,7 @@
     "a bundle."
   ],
   "devDependencies": {
+    "@ark/attest": "0.48.2",
     "@auth0/auth0-react": "2.3.0",
     "@babel/parser": "^7.27.1",
     "@babel/types": "^7.27.1",

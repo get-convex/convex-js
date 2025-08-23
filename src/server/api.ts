@@ -1,15 +1,15 @@
+import type { UnionToIntersection } from "../type_utils.js";
+import { getFunctionAddress } from "./components/paths.js";
+import { functionName } from "./functionName.js";
+import { PaginationOptions, PaginationResult } from "./pagination.js";
 import {
-  EmptyObject,
   DefaultFunctionArgs,
+  EmptyObject,
   FunctionVisibility,
   RegisteredAction,
   RegisteredMutation,
   RegisteredQuery,
 } from "./registration.js";
-import { Expand, UnionToIntersection } from "../type_utils.js";
-import { PaginationOptions, PaginationResult } from "./pagination.js";
-import { functionName } from "./functionName.js";
-import { getFunctionAddress } from "./components/paths.js";
 
 /**
  * The type of a Convex function.
@@ -63,6 +63,18 @@ export type FunctionReference<
   _componentPath: ComponentPath;
 };
 
+// useful pattern for a collection of utilities related to a type
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export declare namespace FunctionReference {
+  /**
+   * A {@link FunctionReference} of any type and any visibility with any
+   * arguments and any return type.
+   *
+   * @public
+   */
+  export type Any = FunctionReference<any, any>;
+}
+
 /**
  * Get the name of a function from a {@link FunctionReference}.
  *
@@ -76,7 +88,7 @@ export type FunctionReference<
  * @public
  */
 export function getFunctionName(
-  functionReference: AnyFunctionReference,
+  functionReference: FunctionReference.Any,
 ): string {
   const address = getFunctionAddress(functionReference);
 
@@ -222,11 +234,11 @@ export type FunctionReferenceFromExport<Export> =
  * This is written carefully to preserve jumping to function definitions using
  * cmd+click. If you edit it, please test that cmd+click still works.
  */
-type FunctionReferencesInModule<Module extends Record<string, any>> = {
+export type FunctionReferencesInModule<Module extends Record<string, any>> = {
   -readonly [ExportName in keyof Module as Module[ExportName]["isConvexFunction"] extends true
     ? ExportName
     : never]: FunctionReferenceFromExport<Module[ExportName]>;
-};
+} & unknown;
 
 /**
  * Given a path to a module and it's type, generate an API type for this module.
@@ -236,11 +248,17 @@ type FunctionReferencesInModule<Module extends Record<string, any>> = {
 type ApiForModule<
   ModulePath extends string,
   Module extends object,
-> = ModulePath extends `${infer First}/${infer Second}`
-  ? {
-      [_ in First]: ApiForModule<Second, Module>;
-    }
-  : { [_ in ModulePath]: FunctionReferencesInModule<Module> };
+  LastPathWasSegmented extends boolean,
+> =
+  ModulePath extends SegmentedPath<infer First, infer Rest>
+    ? {
+        [_ in First]: ApiForModule<Rest, Module, true>;
+      }
+    : LastPathWasSegmented extends true
+      ? {
+          [_ in ModulePath]: FunctionReferencesInModule<Module>;
+        }
+      : FunctionReferencesInModule<Module>;
 
 /**
  * Given the types of all modules in the `convex/` directory, construct the type
@@ -253,22 +271,42 @@ type ApiForModule<
  * @public
  */
 export type ApiFromModules<AllModules extends Record<string, object>> =
-  FilterApi<
-    ApiFromModulesAllowEmptyNodes<AllModules>,
-    FunctionReference<any, any, any, any>
+  keyof AllModules & SegmentedPath extends never
+    ? ApiFromNonSegmentedModules<AllModules>
+    : ApiFromSegmentedModules<AllModules>;
+
+// fast path for cases with no segmented modules
+type ApiFromNonSegmentedModules<AllModules extends Record<string, object>> = {
+  [ModulePath in keyof AllModules as keyof FunctionReferencesInModule<
+    AllModules[ModulePath]
+  > extends never
+    ? never
+    : ModulePath]: FunctionReferencesInModule<AllModules[ModulePath]>;
+};
+
+type ApiFromSegmentedModules<AllModules extends Record<string, object>> =
+  ExpandModulesAndDirs<
+    IntersectUnionProperties<{
+      [ModulePath in keyof AllModules as FirstSegment<ModulePath>]: ModulePath extends SegmentedPath<
+        string,
+        infer Rest
+      >
+        ? ApiForModule<Rest, AllModules[ModulePath], true>
+        : ApiForModule<ModulePath & string, AllModules[ModulePath], false>;
+    }>
   >;
 
-type ApiFromModulesAllowEmptyNodes<AllModules extends Record<string, object>> =
-  ExpandModulesAndDirs<
-    UnionToIntersection<
-      {
-        [ModulePath in keyof AllModules]: ApiForModule<
-          ModulePath & string,
-          AllModules[ModulePath]
-        >;
-      }[keyof AllModules]
-    >
-  >;
+type IntersectUnionProperties<O extends object> = {
+  [K in keyof O]: UnionToIntersection<O[K]>;
+};
+
+type SegmentedPath<
+  First extends string = string,
+  Rest extends string = string,
+> = `${First}/${Rest}`;
+
+type FirstSegment<ModulePath> =
+  ModulePath extends SegmentedPath<infer First> ? First : ModulePath;
 
 /**
  * @public
@@ -276,17 +314,36 @@ type ApiFromModulesAllowEmptyNodes<AllModules extends Record<string, object>> =
  * Filter a Convex deployment api object for functions which meet criteria,
  * for example all public queries.
  */
-export type FilterApi<API, Predicate> = Expand<{
+export type FilterApi<API, Predicate> = {
   [mod in keyof API as API[mod] extends Predicate
     ? mod
-    : API[mod] extends FunctionReference<any, any, any, any>
+    : API[mod] extends FunctionReference.Any
       ? never
-      : FilterApi<API[mod], Predicate> extends Record<string, never>
+      : {} extends FilterApi<API[mod], Predicate>
         ? never
         : mod]: API[mod] extends Predicate
     ? API[mod]
     : FilterApi<API[mod], Predicate>;
-}>;
+  // equivalent to Expand without requiring another mapped type
+} & unknown;
+
+/**
+ * Like {@link Expand}, this simplifies how TypeScript displays object types.
+ * The differences are:
+ * 1. This version is recursive.
+ * 2. This stops recursing when it hits a {@link FunctionReference}.
+ * 3. This omits empty object properties
+ */
+type ExpandModulesAndDirs<ObjectType> =
+  ObjectType extends Record<string, FunctionReference.Any>
+    ? ObjectType
+    : {
+        [Key in keyof ObjectType as keyof ExpandModulesAndDirs<
+          ObjectType[Key]
+        > extends never
+          ? never
+          : Key]: ExpandModulesAndDirs<ObjectType[Key]>;
+      };
 
 /**
  * Given an api of type API and a FunctionReference subtype, return an api object
@@ -360,29 +417,9 @@ export function justSchedulable<API>(
   return api as any;
 }
 
-/**
- * Like {@link Expand}, this simplifies how TypeScript displays object types.
- * The differences are:
- * 1. This version is recursive.
- * 2. This stops recursing when it hits a {@link FunctionReference}.
- */
-type ExpandModulesAndDirs<ObjectType> = ObjectType extends AnyFunctionReference
-  ? ObjectType
-  : {
-      [Key in keyof ObjectType]: ExpandModulesAndDirs<ObjectType[Key]>;
-    };
-
-/**
- * A {@link FunctionReference} of any type and any visibility with any
- * arguments and any return type.
- *
- * @public
- */
-export type AnyFunctionReference = FunctionReference<any, any>;
-
 type AnyModuleDirOrFunc = {
   [key: string]: AnyModuleDirOrFunc;
-} & AnyFunctionReference;
+} & FunctionReference.Any;
 
 /**
  * The type that Convex api objects extend. If you were writing an api from
@@ -399,7 +436,7 @@ export type AnyApi = Record<string, Record<string, AnyModuleDirOrFunc>>;
  * @public
  */
 export type PartialApi<API> = {
-  [mod in keyof API]?: API[mod] extends FunctionReference<any, any, any, any>
+  [mod in keyof API]?: API[mod] extends FunctionReference.Any
     ? API[mod]
     : PartialApi<API[mod]>;
 };
@@ -415,7 +452,7 @@ export type PartialApi<API> = {
  *
  * This supports accessing any path regardless of what directories and modules
  * are in your project. All function references are typed as
- * {@link AnyFunctionReference}.
+ * {@link FunctionReference.Any}.
  *
  *
  * If you're using code generation, use `api` from `convex/_generated/api`
@@ -432,7 +469,7 @@ export const anyApi: AnyApi = createApi() as any;
  * This is represented as an object mapping argument names to values.
  * @public
  */
-export type FunctionArgs<FuncRef extends AnyFunctionReference> =
+export type FunctionArgs<FuncRef extends FunctionReference.Any> =
   FuncRef["_args"];
 
 /**
@@ -443,7 +480,7 @@ export type FunctionArgs<FuncRef extends AnyFunctionReference> =
  *
  * @public
  */
-export type OptionalRestArgs<FuncRef extends AnyFunctionReference> =
+export type OptionalRestArgs<FuncRef extends FunctionReference.Any> =
   FuncRef["_args"] extends EmptyObject
     ? [args?: EmptyObject]
     : [args: FuncRef["_args"]];
@@ -458,7 +495,7 @@ export type OptionalRestArgs<FuncRef extends AnyFunctionReference> =
  * @public
  */
 export type ArgsAndOptions<
-  FuncRef extends AnyFunctionReference,
+  FuncRef extends FunctionReference.Any,
   Options,
 > = FuncRef["_args"] extends EmptyObject
   ? [args?: EmptyObject, options?: Options]
@@ -469,7 +506,7 @@ export type ArgsAndOptions<
  *
  * @public
  */
-export type FunctionReturnType<FuncRef extends AnyFunctionReference> =
+export type FunctionReturnType<FuncRef extends FunctionReference.Any> =
   FuncRef["_returnType"];
 
 type UndefinedToNull<T> = T extends void ? null : T;

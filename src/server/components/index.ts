@@ -1,10 +1,6 @@
 import { PropertyValidators, convexToJson } from "../../values/index.js";
 import { version } from "../../index.js";
-import {
-  AnyFunctionReference,
-  FunctionReference,
-  FunctionType,
-} from "../api.js";
+import { FunctionReference, FunctionType } from "../api.js";
 import { performAsyncSyscall } from "../impl/syscall.js";
 import { DefaultFunctionArgs } from "../registration.js";
 import {
@@ -71,7 +67,7 @@ export async function createFunctionHandle<
 }
 
 interface ComponentExports {
-  [key: string]: FunctionReference<any, any, any, any> | ComponentExports;
+  [key: string]: FunctionReference.Any | ComponentExports;
 }
 
 /**
@@ -396,7 +392,7 @@ export function defineApp(): AppDefinition {
 
 type AnyInterfaceType = {
   [key: string]: AnyInterfaceType;
-} & AnyFunctionReference;
+} & FunctionReference.Any;
 export type AnyComponentReference = Record<string, AnyInterfaceType>;
 
 export type AnyChildComponents = Record<string, AnyComponentReference>;
