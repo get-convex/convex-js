@@ -110,14 +110,17 @@ function makeServer(options: McpOptions) {
       const ctx = new RequestContext(options);
       await initializeBigBrainAuth(ctx, options);
       try {
-        const authorized = await checkAuthorization(ctx, false);
-        if (!authorized) {
-          await ctx.crash({
-            exitCode: 1,
-            errorType: "fatal",
-            printedMessage:
-              "Not Authorized: Run `npx convex dev` to login to your Convex project.",
-          });
+        const auth = ctx.bigBrainAuth();
+        if (auth !== null) {
+          const authorized = await checkAuthorization(ctx, false);
+          if (!authorized) {
+            await ctx.crash({
+              exitCode: 1,
+              errorType: "fatal",
+              printedMessage:
+                "Not Authorized: Run `npx convex dev` to login to your Convex project.",
+            });
+          }
         }
         if (!request.params.arguments) {
           await ctx.crash({
