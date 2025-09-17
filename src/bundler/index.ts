@@ -342,17 +342,20 @@ export function loadConvexIgnore(ctx: Context, projectRoot: string) {
     path.join(projectRoot, ".convexignore"),
     path.join(projectRoot, "convex", ".convexignore"),
   ];
-  let foundAny = false;
-  for (const p of candidates) {
-    if (ctx.fs.exists(p)) {
+
+  const existingFiles = candidates
+    .filter(p => ctx.fs.exists(p))
+    .map(p => {
       logVerbose(chalk.green(`Loading .convexignore from ${p}`));
-      ig.add(ctx.fs.readUtf8File(p));
-      foundAny = true;
-    }
-  }
-  if (!foundAny) {
+      return ctx.fs.readUtf8File(p);
+    });
+
+  if (existingFiles.length === 0) {
     logVerbose(chalk.gray("No .convexignore file found, all files will be processed"));
+  } else {
+    existingFiles.forEach(patterns => ig.add(patterns));
   }
+
   return ig;
 }
 

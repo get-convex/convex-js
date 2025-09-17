@@ -1,0 +1,10 @@
+# Ignore test files
+*.test.ts
+*.spec.js
+
+# Ignore temporary files
+tmp/
+*.tmp
+
+# Ignore specific file
+ignored-file.ts
