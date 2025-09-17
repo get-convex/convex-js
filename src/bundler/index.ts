@@ -15,6 +15,7 @@ import {
   findExactVersionAndDependencies,
 } from "./external.js";
 import { innerEsbuild, isEsbuildBuildError } from "./debugBundle.js";
+import ignore from "ignore";
 export { nodeFs, RecordingFs } from "./fs.js";
 export type { Filesystem } from "./fs.js";
 
@@ -147,9 +148,9 @@ async function doEsbuild(
       // all the relevant information.
       printedMessage: recommendUseNode
         ? `\nIt looks like you are using Node APIs from a file without the "use node" directive.\n` +
-          `Split out actions using Node.js APIs like this into a new file only containing actions that uses "use node" ` +
-          `so these actions will run in a Node.js environment.\n` +
-          `For more information see https://docs.convex.dev/functions/runtimes#nodejs-runtime\n`
+        `Split out actions using Node.js APIs like this into a new file only containing actions that uses "use node" ` +
+        `so these actions will run in a Node.js environment.\n` +
+        `For more information see https://docs.convex.dev/functions/runtimes#nodejs-runtime\n`
         : null,
     });
   }
@@ -335,6 +336,26 @@ export async function doesImportConvexHttpRouter(source: string) {
   }
 }
 
+export function loadConvexIgnore(ctx: Context, projectRoot: string) {
+  const ig = ignore();
+  const candidates = [
+    path.join(projectRoot, ".convexignore"),
+    path.join(projectRoot, "convex", ".convexignore"),
+  ];
+  let foundAny = false;
+  for (const p of candidates) {
+    if (ctx.fs.exists(p)) {
+      logVerbose(chalk.green(`Loading .convexignore from ${p}`));
+      ig.add(ctx.fs.readUtf8File(p));
+      foundAny = true;
+    }
+  }
+  if (!foundAny) {
+    logVerbose(chalk.gray("No .convexignore file found, all files will be processed"));
+  }
+  return ig;
+}
+
 const ENTRY_POINT_EXTENSIONS = [
   // ESBuild js loader
   ".js",
@@ -357,11 +378,22 @@ export async function entryPoints(
 ): Promise<string[]> {
   const entryPoints = [];
 
+  // Load .convexignore patterns
+  const projectRoot = path.dirname(dir);
+  const ig = loadConvexIgnore(ctx, projectRoot);
+
   for (const { isDir, path: fpath, depth } of walkDir(ctx.fs, dir)) {
     if (isDir) {
       continue;
     }
     const relPath = path.relative(dir, fpath);
+
+    // Check if file should be ignored based on .convexignore
+    if (ig.ignores(relPath)) {
+      logVerbose(chalk.yellow(`Skipping ignored file ${fpath}`));
+      continue;
+    }
+
     const parsedPath = path.parse(fpath);
     const base = parsedPath.base;
     const extension = parsedPath.ext.toLowerCase();
