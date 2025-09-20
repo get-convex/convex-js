@@ -347,7 +347,7 @@ async function _getDeploymentSelection(
     };
   }
 
-  if (cliArgs.envFile === undefined) {
+  if (cliArgs.envFile !== undefined) {
     // If an `--env-file` is specified, it must contain enough information for both auth and deployment selection.
     logVerbose(`Checking env file: ${cliArgs.envFile}`);
     const existingFile = ctx.fs.exists(cliArgs.envFile)
