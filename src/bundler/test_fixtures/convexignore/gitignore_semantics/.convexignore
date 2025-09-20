@@ -1,0 +1,14 @@
+# Leading slash for root-only matches
+/root-only.ts
+
+# Trailing slash for directories only
+logs/
+
+# Double asterisk for any depth
+**/generated/**
+
+# Single asterisk for any characters
+*.test.*
+
+# Question mark for single character
+file?.ts
