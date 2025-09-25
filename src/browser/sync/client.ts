@@ -8,7 +8,7 @@ import {
   logFatalError,
   Logger,
 } from "../logging.js";
-import { LocalSyncState } from "./local_state.js";
+import { AuthState, LocalSyncState } from "./local_state.js";
 import { RequestManager } from "./request_manager.js";
 import {
   OptimisticLocalStore,
@@ -615,6 +615,15 @@ export class BaseConvexClient {
     this._onTransitionFns.set(id, fn);
     return () => this._onTransitionFns.delete(id);
   }
+
+  /**
+   * Get the authentication token to be used for subsequent queries and mutations.
+   * @returns The authentication state.
+   */
+  getAuth(): AuthState | undefined {
+    return this.state.getAuth();
+  }
+
 
   /**
    * Set the authentication token to be used for subsequent queries and mutations.
