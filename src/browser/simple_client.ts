@@ -14,6 +14,7 @@ import {
 import { getFunctionName } from "../server/api.js";
 import { AuthTokenFetcher } from "./sync/authentication_manager.js";
 import { ConnectionState } from "./sync/client.js";
+import { AuthState } from "./sync/local_state.js";
 
 // In Node.js builds this points to a bundled WebSocket implementation. If no
 // WebSocket implementation is manually specified or globally available,
@@ -252,6 +253,15 @@ export class ConvexClient {
     this.listeners.clear();
     this._closed = true;
     return this.client.close();
+  }
+
+  /**
+   * Get the authentication token to be used for subsequent queries and mutations.
+   * @returns The authentication state.
+   */
+  getAuth(): AuthState | undefined {
+    if (this.disabled) return;
+    return this.client.getAuth();
   }
 
   /**
