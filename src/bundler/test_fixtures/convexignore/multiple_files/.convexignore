@@ -1,0 +1,8 @@
+# Ignore private files
+_*.ts
+
+# Ignore test helpers
+helpers/*.ts
+
+# Specific files
+old-api.ts

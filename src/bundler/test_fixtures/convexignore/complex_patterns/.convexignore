@@ -1,0 +1,23 @@
+# Empty lines and comments should be ignored
+
+# Glob patterns
+**/*.test.ts
+**/test/**
+node_modules/
+
+# Negation patterns
+!important.test.ts
+
+# Directory patterns
+build/
+dist/
+.next/
+
+# Extension patterns
+*.log
+*.tmp
+*.bak
+
+# Hidden files
+.*
+!.env.local
