@@ -149,7 +149,10 @@ export async function runPush(ctx: Context, options: PushOptions) {
   const { configPath, projectConfig } = await readProjectConfig(ctx);
   const convexDir = functionsDir(configPath, projectConfig);
   const componentRootPath = await findComponentRootPath(ctx, convexDir);
-  if (ctx.fs.exists(componentRootPath)) {
+  if (
+    ctx.fs.exists(componentRootPath) ||
+    process.env.USE_COMPONENTS_PUSH === "true"
+  ) {
     await runComponentsPush(ctx, options, configPath, projectConfig);
   } else {
     await runNonComponentsPush(ctx, options, configPath, projectConfig);
@@ -168,11 +171,11 @@ async function startComponentsPushAndCodegen(
     url: string;
     deploymentName: string | null;
     verbose: boolean;
-    debugBundlePath?: string;
+    debugBundlePath?: string | undefined;
     dryRun: boolean;
     generateCommonJSApi?: boolean;
     debug: boolean;
-    writePushRequest?: string;
+    writePushRequest?: string | undefined;
     codegen: boolean;
     liveComponentSources?: boolean;
     debugNodeApis: boolean;
@@ -445,7 +448,7 @@ export async function runComponentsPush(
     options.verbose,
   );
 
-  changeSpinner("Diffing local code and deployment state");
+  changeSpinner("Diffing local code and deployment state...");
   const { diffString } = diffConfig(
     remoteConfigWithModuleHashes,
     localConfig,

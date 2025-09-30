@@ -41,6 +41,7 @@ export { type AuthTokenFetcher } from "./authentication_manager.js";
 import { getMarksReport, mark, MarkName } from "./metrics.js";
 import { parseArgs, validateDeploymentUrl } from "../../common/index.js";
 import { ConvexError } from "../../values/errors.js";
+import { jwtDecode } from "../../vendor/jwt-decode/index.js";
 
 /**
  * Options for {@link BaseConvexClient}.
@@ -182,7 +183,7 @@ export interface SubscribeOptions {
   /**
    * @internal
    */
-  componentPath?: string;
+  componentPath?: string | undefined;
 }
 
 /**
@@ -197,7 +198,7 @@ export interface MutationOptions {
    * An optimistic update locally updates queries while a mutation is pending.
    * Once the mutation completes, the update will be rolled back.
    */
-  optimisticUpdate?: OptimisticUpdate<any>;
+  optimisticUpdate?: OptimisticUpdate<any> | undefined;
 }
 
 /**
@@ -379,7 +380,10 @@ export class BaseConvexClient {
           // browsers but we tried.
           const confirmationMessage =
             "Are you sure you want to leave? Your changes may not be saved.";
-          (e || window.event).returnValue = confirmationMessage;
+          // Recommended method for legacy (IE) browsers.
+          // casts to avoid deprecation notices
+          ((e || (window as any).event) as any).returnValue =
+            confirmationMessage;
           return confirmationMessage;
         }
       });
@@ -497,6 +501,7 @@ export class BaseConvexClient {
       webSocketConstructor,
       this.logger,
       this.markConnectionStateDirty,
+      this.debug,
     );
     this.mark("convexClientConstructed");
 
@@ -610,6 +615,26 @@ export class BaseConvexClient {
     const id = this._transitionHandlerCounter++;
     this._onTransitionFns.set(id, fn);
     return () => this._onTransitionFns.delete(id);
+  }
+
+  /**
+   * Get the current JWT auth token and decoded claims.
+   */
+  getCurrentAuthClaims():
+    | { token: string; decoded: Record<string, any> }
+    | undefined {
+    const authToken = this.state.getAuth();
+    let decoded: Record<string, any> = {};
+    if (authToken && authToken.tokenType === "User") {
+      try {
+        decoded = authToken ? jwtDecode(authToken.value) : {};
+      } catch {
+        decoded = {};
+      }
+    } else {
+      return undefined;
+    }
+    return { token: authToken.value, decoded };
   }
 
   /**

@@ -2,7 +2,7 @@
  * @vitest-environment custom-vitest-environment.ts
  */
 import { expect, vi, test, describe } from "vitest";
-import jwtEncode from "jwt-encode";
+import { jwtEncode } from "../vendor/jwt-encode/index.js";
 import {
   nodeWebSocket,
   withInMemoryWebSocket,
@@ -10,7 +10,7 @@ import {
 import { ConvexReactClient, ConvexReactClientOptions } from "./index.js";
 import waitForExpect from "wait-for-expect";
 import { anyApi } from "../server/index.js";
-import { Long } from "../browser/long.js";
+import { Long } from "../vendor/long.js";
 import {
   AuthError,
   ClientMessage,
@@ -28,7 +28,7 @@ const testReactClient = (address: string, options?: ConvexReactClientOptions) =>
 // https://linear.app/convex/issue/ENG-7052/re-enable-auth-websocket-client-tests
 
 // On Linux these can retry forever due to EADDRINUSE so run then sequentially.
--describe.sequential.skip("auth websocket tests", () => {
+describe.sequential.skip("auth websocket tests", () => {
   // This is the path usually taken on page load after a user logged in,
   // with a constant token provider.
   test("Authenticate via valid static token", async () => {

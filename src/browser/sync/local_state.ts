@@ -23,9 +23,20 @@ type LocalQuery = {
   canonicalizedUdfPath: string;
   args: Record<string, Value>;
   numSubscribers: number;
-  journal?: QueryJournal;
-  componentPath?: string;
+  journal?: QueryJournal | undefined;
+  componentPath?: string | undefined;
 };
+
+export type AuthState =
+  | {
+      tokenType: "User";
+      value: string;
+    }
+  | {
+      tokenType: "Admin";
+      value: string;
+      impersonating?: UserIdentityAttributes | undefined;
+    };
 
 export class LocalSyncState {
   private nextQueryId: QueryId;
@@ -33,11 +44,7 @@ export class LocalSyncState {
   private readonly querySet: Map<QueryToken, LocalQuery>;
   private readonly queryIdToToken: Map<QueryId, QueryToken>;
   private identityVersion: IdentityVersion;
-  private auth?: {
-    tokenType: "Admin" | "User";
-    value: string;
-    impersonating?: UserIdentityAttributes;
-  };
+  private auth: AuthState | undefined;
   private readonly outstandingQueriesOlderThanRestart: Set<QueryId>;
   private outstandingAuthOlderThanRestart: boolean;
   private paused: boolean;
@@ -69,8 +76,8 @@ export class LocalSyncState {
   subscribe(
     udfPath: string,
     args: Record<string, Value>,
-    journal?: QueryJournal,
-    componentPath?: string,
+    journal?: QueryJournal | undefined,
+    componentPath?: string | undefined,
   ): {
     queryToken: QueryToken;
     modification: QuerySetModification | null;
@@ -178,9 +185,13 @@ export class LocalSyncState {
     return version >= this.identityVersion;
   }
 
+  getAuth(): AuthState | undefined {
+    return this.auth;
+  }
+
   setAuth(value: string): Authenticate {
     this.auth = {
-      tokenType: "User",
+      tokenType: "User" as const,
       value: value,
     };
     const baseVersion = this.identityVersion;
@@ -265,7 +276,7 @@ export class LocalSyncState {
 
   restart(
     oldRemoteQueryResults: Set<QueryId>,
-  ): [QuerySetModification, Authenticate?] {
+  ): [QuerySetModification, (Authenticate | undefined)?] {
     // Restart works whether we are paused or unpaused.
     // The `this.pendingQuerySetModifications` is not used
     // when restarting as the AddQuery and RemoveQuery are computed
@@ -315,7 +326,7 @@ export class LocalSyncState {
     this.paused = true;
   }
 
-  resume(): [QuerySetModification?, Authenticate?] {
+  resume(): [QuerySetModification | undefined, Authenticate | undefined] {
     const querySet: QuerySetModification | undefined =
       this.pendingQuerySetModifications.size > 0
         ? {

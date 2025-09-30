@@ -29,6 +29,7 @@ import {
   deprecationCheckWarning,
   logAndHandleFetchError,
   ThrowingFetchError,
+  currentPackageHomepage,
 } from "./utils/utils.js";
 import { createHash } from "crypto";
 import { promisify } from "util";
@@ -41,6 +42,7 @@ import {
   printLocalDeploymentOnError,
 } from "./localDeployment/errors.js";
 import { debugIsolateBundlesSerially } from "../../bundler/debugBundle.js";
+import { ensureWorkosEnvironmentProvisioned } from "./workos/workos.js";
 export { productionProvisionHost, provisionHost } from "./utils/utils.js";
 
 const brotli = promisify(zlib.brotliCompress);
@@ -62,11 +64,11 @@ export interface ProjectConfig {
   };
   generateCommonJSApi: boolean;
   // deprecated
-  project?: string;
+  project?: string | undefined;
   // deprecated
-  team?: string;
+  team?: string | undefined;
   // deprecated
-  prodUrl?: string;
+  prodUrl?: string | undefined;
   // deprecated
   authInfo?: AuthInfo[];
 
@@ -83,7 +85,7 @@ export interface Config {
   nodeDependencies: NodeDependency[];
   schemaId?: string;
   udfServerVersion?: string;
-  nodeVersion?: string;
+  nodeVersion?: string | undefined;
 }
 
 export interface ConfigWithModuleHashes {
@@ -798,8 +800,8 @@ export async function pushConfig(
     adminKey: string;
     url: string;
     deploymentName: string | null;
-    pushMetrics?: PushMetrics;
-    schemaId?: string;
+    pushMetrics?: PushMetrics | undefined;
+    schemaId?: string | undefined;
     bundledModuleInfos?: BundledModuleInfo[];
   },
 ): Promise<void> {
@@ -841,6 +843,11 @@ export async function pushConfig(
       error,
       "Error: Unable to push deployment config to " + options.url,
       options.deploymentName,
+      {
+        adminKey: options.adminKey,
+        deploymentUrl: options.url,
+        deploymentNotice: "",
+      },
     );
   }
 }
@@ -995,7 +1002,7 @@ export function diffConfig(
   // We don't want to diff modules on the components push path
   // because it has its own diffing logic.
   shouldDiffModules: boolean,
-): { diffString: string; stats?: ModuleDiffStats } {
+): { diffString: string; stats?: ModuleDiffStats | undefined } {
   let diff = "";
   let stats: ModuleDiffStats | undefined;
   if (shouldDiffModules) {
@@ -1087,13 +1094,61 @@ export async function handlePushConfigError(
   error: unknown,
   defaultMessage: string,
   deploymentName: string | null,
-) {
+  deployment?: {
+    deploymentUrl: string;
+    adminKey: string;
+    deploymentNotice: string;
+  },
+): Promise<never> {
   const data: ErrorData | undefined =
     error instanceof ThrowingFetchError ? error.serverErrorData : undefined;
   if (data?.code === "AuthConfigMissingEnvironmentVariable") {
     const errorMessage = data.message || "(no error message given)";
     const [, variableName] =
       errorMessage.match(/Environment variable (\S+)/i) ?? [];
+
+    // WORKOS_CLIENT_ID is a special environment variable because cloud Convex
+    // deployments may be able to supply it by provisioning a fresh WorkOS
+    // environment on demand.
+    if (variableName === "WORKOS_CLIENT_ID" && deploymentName && deployment) {
+      // Initially only specific templates create WorkOS environments on demand
+      // because the local environemnt variables are hardcoded for Vite and Next.js.
+      const homepage = await currentPackageHomepage(ctx);
+      const autoProvisionIfWorkOSTeamAssociated = !!(
+        homepage &&
+        [
+          "https://github.com/workos/template-convex-nextjs-authkit/#readme",
+          "https://github.com/workos/template-convex-react-vite-authkit/#readme",
+          "https://github.com:workos/template-convex-react-vite-authkit/#readme",
+        ].includes(homepage)
+      );
+      // Initially only specific templates offer team creation.
+      // Until this changes it can be done manually with a CLI command.
+      const offerToAssociateWorkOSTeam = autoProvisionIfWorkOSTeamAssociated;
+      // Initialy only specific template auto-configure WorkOS environments
+      // with AuthKit config because these values are currently heuristics.
+      // This will be some more explicit opt-in in the future.
+      const autoConfigureAuthkitConfig = autoProvisionIfWorkOSTeamAssociated;
+
+      const result = await ensureWorkosEnvironmentProvisioned(
+        ctx,
+        deploymentName,
+        deployment,
+        {
+          offerToAssociateWorkOSTeam,
+          autoProvisionIfWorkOSTeamAssociated,
+          autoConfigureAuthkitConfig,
+        },
+      );
+      if (result === "ready") {
+        return await ctx.crash({
+          exitCode: 1,
+          errorType: "already handled",
+          printedMessage: null,
+        });
+      }
+    }
+
     const envVarMessage =
       `Environment variable ${chalk.bold(
         variableName,

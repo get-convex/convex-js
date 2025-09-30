@@ -4,6 +4,7 @@ import {
   encodeClientMessage,
   parseServerMessage,
   ServerMessage,
+  Transition,
 } from "./protocol.js";
 
 const CLOSE_NORMAL = 1000;
@@ -194,11 +195,12 @@ export class WebSocketManager {
       onOpen: (reconnectMetadata: ReconnectMetadata) => void;
       onResume: () => void;
       onMessage: (message: ServerMessage) => OnMessageResponse;
-      onServerDisconnectError?: (message: string) => void;
+      onServerDisconnectError?: ((message: string) => void) | undefined;
     },
     webSocketConstructor: typeof WebSocket,
     logger: Logger,
     private readonly markConnectionStateDirty: () => void,
+    private readonly debug: boolean,
   ) {
     this.webSocketConstructor = webSocketConstructor;
     this.socket = { state: "disconnected" };
@@ -312,40 +314,11 @@ export class WebSocketManager {
       const messageLength = message.data.length;
       const serverMessage = parseServerMessage(JSON.parse(message.data));
       this._logVerbose(`received ws message with type ${serverMessage.type}`);
-      if (
-        serverMessage.type === "Transition" &&
-        serverMessage.clientClockSkew !== undefined &&
-        serverMessage.serverTs !== undefined
-      ) {
-        const transitionTransitTime =
-          monotonicMillis() - // client time now
-          // clientClockSkew = (server time + upstream latency) - client time
-          // clientClockSkew is "how many milliseconds behind (slow) is the client clock"
-          // but the latency of the Connect message inflates this, making it appear further behind
-          serverMessage.clientClockSkew -
-          serverMessage.serverTs / 1_000_000; // server time when transition was sent
-        const prettyTransitionTime = `${Math.round(transitionTransitTime)}ms`;
-        const prettyMessageMB = `${Math.round(messageLength / 10_000) / 100}MB`;
-        const bytesPerSecond = messageLength / (transitionTransitTime / 1000);
-        const prettyBytesPerSecond = `${Math.round(bytesPerSecond / 10_000) / 100}MB per second`;
-        this._logVerbose(
-          `received ${prettyMessageMB} transition in ${prettyTransitionTime} at ${prettyBytesPerSecond}`,
-        );
-
-        // Warnings that will show up for *all users*, so these are not very aggressive goals.
-        if (transitionTransitTime > 10_000 && messageLength > 10_000_000) {
-          this.logger.log(
-            `received query results totalling more than 10MB (${prettyMessageMB}) which took more than 10s (${prettyTransitionTime}) to arrive`,
-          );
-        } else if (messageLength > 20_000_000) {
-          this.logger.log(
-            `received query results totalling more that 20MB (${prettyMessageMB}) which will take a long time to download on slower connections`,
-          );
-        } else if (transitionTransitTime > 20_000) {
-          this.logger.log(
-            `received query results totalling ${prettyMessageMB} which took more than 20s to arrive (${prettyTransitionTime})`,
-          );
-        }
+      if (serverMessage.type === "Transition") {
+        this.reportLargeTransition({
+          messageLength,
+          transition: serverMessage,
+        });
       }
       const response = this.onMessage(serverMessage);
       if (response.hasSyncedPastLastReconnect) {
@@ -685,5 +658,61 @@ export class WebSocketManager {
     const actualBackoff = Math.min(baseBackoff, this.maxBackoff);
     const jitter = actualBackoff * (Math.random() - 0.5);
     return actualBackoff + jitter;
+  }
+
+  private reportLargeTransition({
+    transition,
+    messageLength,
+  }: {
+    transition: Transition;
+    messageLength: number;
+  }) {
+    if (
+      transition.clientClockSkew === undefined ||
+      transition.serverTs === undefined
+    ) {
+      return;
+    }
+
+    const transitionTransitTime =
+      monotonicMillis() - // client time now
+      // clientClockSkew = (server time + upstream latency) - client time
+      // clientClockSkew is "how many milliseconds behind (slow) is the client clock"
+      // but the latency of the Connect message inflates this, making it appear further behind
+      transition.clientClockSkew -
+      transition.serverTs / 1_000_000; // server time when transition was sent
+    const prettyTransitionTime = `${Math.round(transitionTransitTime)}ms`;
+    const prettyMessageMB = `${Math.round(messageLength / 10_000) / 100}MB`;
+    const bytesPerSecond = messageLength / (transitionTransitTime / 1000);
+    const prettyBytesPerSecond = `${Math.round(bytesPerSecond / 10_000) / 100}MB per second`;
+    this._logVerbose(
+      `received ${prettyMessageMB} transition in ${prettyTransitionTime} at ${prettyBytesPerSecond}`,
+    );
+
+    // Warnings that will show up for *all users*, so don't be too aggressive.
+    // These can be silenced (along with reconnection messages) by setting `logger: false` in client options.
+    if (messageLength > 20_000_000) {
+      // Big enough that the developer should be made aware of this.
+      this.logger.log(
+        `received query results totaling more that 20MB (${prettyMessageMB}) which will take a long time to download on slower connections`,
+      );
+    } else if (transitionTransitTime > 20_000) {
+      // Long enough that a pattern of these should be interesting to a developer, but be aware that
+      // weak connections, putting clients to sleep, backgrounding etc. could all cause this too.
+      this.logger.log(
+        `received query results totaling ${prettyMessageMB} which took more than 20s to arrive (${prettyTransitionTime})`,
+      );
+    }
+
+    if (this.debug) {
+      // debug means "reportDebugInfoToConvex" is set so this can be aggressive.
+      if (transitionTransitTime > 2_000) {
+        this.sendMessage({
+          type: "Event",
+          eventType: "ClientReceivedTransition",
+          event: { transitionTransitTime, messageLength },
+        });
+      }
+    }
   }
 }

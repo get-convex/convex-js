@@ -56,9 +56,9 @@ import * as dotenv from "dotenv";
 export async function initializeBigBrainAuth(
   ctx: Context,
   initialArgs: {
-    url?: string;
-    adminKey?: string;
-    envFile?: string;
+    url?: string | undefined;
+    adminKey?: string | undefined;
+    envFile?: string | undefined;
   },
 ): Promise<void> {
   if (initialArgs.url !== undefined && initialArgs.adminKey !== undefined) {
@@ -259,9 +259,9 @@ export type ProjectSelection =
 export async function getDeploymentSelection(
   ctx: Context,
   cliArgs: {
-    url?: string;
-    adminKey?: string;
-    envFile?: string;
+    url?: string | undefined;
+    adminKey?: string | undefined;
+    envFile?: string | undefined;
   },
 ): Promise<DeploymentSelection> {
   const metadata = await _getDeploymentSelection(ctx, cliArgs);
@@ -269,7 +269,7 @@ export async function getDeploymentSelection(
   return metadata;
 }
 
-function logDeploymentSelection(ctx: Context, selection: DeploymentSelection) {
+function logDeploymentSelection(_ctx: Context, selection: DeploymentSelection) {
   switch (selection.kind) {
     case "existingDeployment": {
       logVerbose(
@@ -326,16 +326,16 @@ function prettyProjectSelection(selection: ProjectSelection) {
 async function _getDeploymentSelection(
   ctx: Context,
   cliArgs: {
-    url?: string;
-    adminKey?: string;
-    envFile?: string;
+    url?: string | undefined;
+    adminKey?: string | undefined;
+    envFile?: string | undefined;
   },
 ): Promise<DeploymentSelection> {
   /*
    - url + adminKey specified via CLI
    - Do not check any env vars (including ones relevant for auth)
   */
-  if (cliArgs.url && cliArgs.adminKey) {
+  if (cliArgs.url !== undefined && cliArgs.adminKey !== undefined) {
     return {
       kind: "existingDeployment",
       deploymentToActOn: {
@@ -347,7 +347,7 @@ async function _getDeploymentSelection(
     };
   }
 
-  if (cliArgs.envFile) {
+  if (cliArgs.envFile !== undefined) {
     // If an `--env-file` is specified, it must contain enough information for both auth and deployment selection.
     logVerbose(`Checking env file: ${cliArgs.envFile}`);
     const existingFile = ctx.fs.exists(cliArgs.envFile)
@@ -634,8 +634,10 @@ export const deploymentNameAndTypeFromSelection = (
     case "anonymous": {
       return null;
     }
+    default: {
+      selection satisfies never;
+    }
   }
-  selection satisfies never;
   return null;
 };
 

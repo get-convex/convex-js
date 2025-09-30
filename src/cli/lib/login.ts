@@ -39,7 +39,7 @@ custom.setHttpOptionsDefaults({
 interface AuthorizeArgs {
   authnToken: string;
   deviceName: string;
-  anonymousId?: string;
+  anonymousId?: string | undefined;
 }
 
 export async function checkAuthorization(
@@ -285,21 +285,21 @@ export async function performLogin(
     vercel,
     vercelOverride,
   }: {
-    overrideAuthUrl?: string;
-    overrideAuthClient?: string;
-    overrideAuthUsername?: string;
-    overrideAuthPassword?: string;
-    overrideAccessToken?: string;
-    loginFlow?: "auto" | "paste" | "poll";
+    overrideAuthUrl?: string | undefined;
+    overrideAuthClient?: string | undefined;
+    overrideAuthUsername?: string | undefined;
+    overrideAuthPassword?: string | undefined;
+    overrideAccessToken?: string | undefined;
+    loginFlow?: "auto" | "paste" | "poll" | undefined;
     // default `true`
-    open?: boolean;
+    open?: boolean | undefined;
     // default `false`
-    acceptOptIns?: boolean;
-    dumpAccessToken?: boolean;
-    deviceName?: string;
-    anonymousId?: string;
-    vercel?: boolean;
-    vercelOverride?: string;
+    acceptOptIns?: boolean | undefined;
+    dumpAccessToken?: boolean | undefined;
+    deviceName?: string | undefined;
+    anonymousId?: string | undefined;
+    vercel?: boolean | undefined;
+    vercelOverride?: string | undefined;
   } = {},
 ) {
   loginFlow = loginFlow || "auto";
@@ -490,25 +490,14 @@ async function optins(ctx: Context, acceptOptIns: boolean): Promise<boolean> {
   return true;
 }
 
-export async function getTeamsForUser(ctx: Context) {
-  const teams = await bigBrainAPI<{ id: number; name: string; slug: string }[]>(
-    {
-      ctx,
-      method: "GET",
-      url: "teams",
-    },
-  );
-  return teams;
-}
-
 export async function ensureLoggedIn(
   ctx: Context,
   options?: {
-    message?: string;
-    overrideAuthUrl?: string;
-    overrideAuthClient?: string;
-    overrideAuthUsername?: string;
-    overrideAuthPassword?: string;
+    message?: string | undefined;
+    overrideAuthUrl?: string | undefined;
+    overrideAuthClient?: string | undefined;
+    overrideAuthUsername?: string | undefined;
+    overrideAuthPassword?: string | undefined;
   },
 ) {
   const isLoggedIn = await checkAuthorization(ctx, false);

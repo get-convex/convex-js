@@ -28,14 +28,14 @@ export type PushOptions = {
   typecheck: "enable" | "try" | "disable";
   typecheckComponents: boolean;
   debug: boolean;
-  debugBundlePath?: string;
+  debugBundlePath?: string | undefined;
   debugNodeApis: boolean;
   codegen: boolean;
   url: string;
   deploymentName: string | null;
-  writePushRequest?: string;
+  writePushRequest?: string | undefined;
   liveComponentSources: boolean;
-  logManager?: LogManager;
+  logManager?: LogManager | undefined;
 };
 
 export async function runNonComponentsPush(
@@ -92,7 +92,7 @@ export async function runNonComponentsPush(
 
   if (options.debugBundlePath) {
     await handleDebugBundlePath(ctx, options.debugBundlePath, localConfig);
-    logMessage(
+    logFinishedStep(
       `Wrote bundle and metadata to ${options.debugBundlePath}. Skipping rest of push.`,
     );
     return;
@@ -117,7 +117,7 @@ export async function runNonComponentsPush(
     options.adminKey,
   );
 
-  changeSpinner("Diffing local code and deployment state");
+  changeSpinner("Diffing local code and deployment state...");
   const { diffString, stats } = diffConfig(
     remoteConfigWithModuleHashes,
     localConfig,

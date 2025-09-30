@@ -16,6 +16,7 @@ import JSON5 from "json5";
 import path from "path";
 import { readProjectConfig } from "./config.js";
 import { watchAndPush } from "./dev.js";
+import { Logger, DefaultLogger } from "../../browser/logging.js";
 
 export async function runFunctionAndLog(
   ctx: Context,
@@ -24,14 +25,18 @@ export async function runFunctionAndLog(
     adminKey: string;
     functionName: string;
     argsString: string;
-    identityString?: string;
-    componentPath?: string;
-    callbacks?: {
-      onSuccess?: () => void;
-    };
+    identityString?: string | undefined;
+    componentPath?: string | undefined;
+    callbacks?:
+      | {
+          onSuccess?: () => void | undefined;
+        }
+      | undefined;
   },
 ) {
-  const client = new ConvexHttpClient(args.deploymentUrl);
+  const client = new ConvexHttpClient(args.deploymentUrl, {
+    logger: instantiateStderrLogger(),
+  });
   const identity = args.identityString
     ? await getFakeIdentity(ctx, args.identityString)
     : undefined;
@@ -332,7 +337,7 @@ export async function subscribeAndLog(
     adminKey: string;
     functionName: string;
     argsString: string;
-    identityString?: string;
+    identityString?: string | undefined;
     componentPath: string | undefined;
   },
 ) {
@@ -372,20 +377,22 @@ export async function subscribeAndLog(
 }
 
 export async function subscribe(
-  ctx: Context,
+  _ctx: Context,
   args: {
     deploymentUrl: string;
     adminKey: string;
-    identity?: UserIdentityAttributes;
+    identity?: UserIdentityAttributes | undefined;
     parsedFunctionName: string;
     parsedFunctionArgs: Record<string, Value>;
     componentPath: string | undefined;
     until: Promise<unknown>;
-    callbacks?: {
-      onStart?: () => void;
-      onChange?: (result: Value) => void;
-      onStop?: () => void;
-    };
+    callbacks?:
+      | {
+          onStart?: () => void;
+          onChange?: (result: Value) => void;
+          onStop?: () => void;
+        }
+      | undefined;
   },
 ) {
   const client = new BaseConvexClient(
@@ -448,7 +455,7 @@ export async function runInDeployment(
     deploymentName: string | null;
     functionName: string;
     argsString: string;
-    identityString?: string;
+    identityString?: string | undefined;
     push: boolean;
     watch: boolean;
     typecheck: "enable" | "try" | "disable";
@@ -486,4 +493,13 @@ export async function runInDeployment(
     return await subscribeAndLog(ctx, args);
   }
   return await runFunctionAndLog(ctx, args);
+}
+
+function instantiateStderrLogger(): Logger {
+  const logger = new DefaultLogger({ verbose: false });
+  logger.addLogLineListener((_level, ...args) => {
+    // eslint-disable-next-line no-console
+    console.error(...args);
+  });
+  return logger;
 }

@@ -40,11 +40,12 @@ export async function devAgainstDeployment(
     once: boolean;
     untilSuccess: boolean;
     run?:
-      | { kind: "function"; name: string; component?: string }
-      | { kind: "shell"; command: string };
+      | { kind: "function"; name: string; component?: string | undefined }
+      | { kind: "shell"; command: string }
+      | undefined;
     tailLogs: LogMode;
     traceEvents: boolean;
-    debugBundlePath?: string;
+    debugBundlePath?: string | undefined;
     debugNodeApis: boolean;
     liveComponentSources: boolean;
   },
@@ -89,8 +90,9 @@ export async function watchAndPush(
   options: PushOptions,
   cmdOptions: {
     run?:
-      | { kind: "function"; name: string; component?: string }
-      | { kind: "shell"; command: string };
+      | { kind: "function"; name: string; component?: string | undefined }
+      | { kind: "shell"; command: string }
+      | undefined;
     once: boolean;
     untilSuccess: boolean;
     traceEvents: boolean;
@@ -187,16 +189,18 @@ export async function watchAndPush(
         break;
       }
       // Retry after an exponential backoff if we hit a transient error.
-      if (e.errorType === "transient") {
+      if (e.errorType === "transient" || e.errorType === "already handled") {
         const delay = nextBackoff(numFailures);
         numFailures += 1;
-        logWarning(
-          chalk.yellow(
-            `Failed due to network error, retrying in ${formatDuration(
-              delay,
-            )}...`,
-          ),
-        );
+        if (e.errorType === "transient") {
+          logWarning(
+            chalk.yellow(
+              `Failed due to network error, retrying in ${formatDuration(
+                delay,
+              )}...`,
+            ),
+          );
+        }
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
