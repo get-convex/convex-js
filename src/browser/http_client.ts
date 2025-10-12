@@ -576,4 +576,7 @@ function forwardErrorData(errorData: JSONValue, error: ConvexError<string>) {
 /**
  * @internal
  */
-type FetchOptions = { cache: "force-cache" | "no-store" };
+type FetchOptions = {
+  cache: "force-cache" | "no-store";
+  signal?: AbortSignal;
+};
