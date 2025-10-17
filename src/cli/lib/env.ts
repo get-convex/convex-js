@@ -35,6 +35,24 @@ export async function envSetInDeployment(
   }
 }
 
+export async function envSetFromFileInDeployment(
+  ctx: Context,
+  deployment: {
+    deploymentUrl: string;
+    adminKey: string;
+    deploymentNotice: string;
+  },
+  file: string,
+) {
+  const changes = await parseEnvFile(ctx, file);
+  if (changes.length === 0) {
+    logMessage(`No environment variables to set in file "${file}".`);
+    return;
+  }
+  await callUpdateEnvironmentVariables(ctx, deployment, changes);
+  logFinishedStep(`Successfully set ${chalk.bold(changes.length.toString())} environment variable(s) from file "${file}"${deployment.deploymentNotice}`);
+}
+
 async function allowEqualsSyntax(
   ctx: Context,
   name: string,
@@ -64,6 +82,49 @@ async function allowEqualsSyntax(
     }
   }
   return [name, value];
+}
+
+async function parseEnvFile(
+  ctx: Context,
+  file: string,
+): Promise<EnvVarChange[]> {
+  let fileContents: string;
+  try {
+    fileContents = ctx.fs.readUtf8File(file);
+  } catch (e) {
+    return await ctx.crash({
+      exitCode: 1,
+      errorType: "fatal",
+      printedMessage: `error: failed to read file "${file}": ${e instanceof Error ? e.message : String(e)}`,
+    });
+  }
+  const changes: EnvVarChange[] = [];
+  const lines = fileContents.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line === "" || line.startsWith("#")) {
+      continue;
+    }
+    const eqIndex = line.indexOf("=");
+    if (eqIndex === -1) {
+      return await ctx.crash({
+        exitCode: 1,
+        errorType: "fatal",
+        printedMessage: `error: invalid line ${i + 1} in file "${file}": missing '=' separator`,
+      });
+    }
+    const name = line.slice(0, eqIndex).trim();
+    const value = line.slice(eqIndex + 1).trim();
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+      return await ctx.crash({
+        exitCode: 1,
+        errorType: "fatal",
+        printedMessage: `error: invalid environment variable name "${name}" on line ${i + 1} in file "${file}"`,
+      });
+    }
+    changes.push({ name, value });
+  }
+  return changes;
 }
 
 export async function envGetInDeploymentAction(
