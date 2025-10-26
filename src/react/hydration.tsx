@@ -26,14 +26,19 @@ export type Preloaded<Query extends FunctionReference<"query">> = {
  * Throws an error if not used under {@link ConvexProvider}.
  *
  * @param preloadedQuery - The `Preloaded` query payload from a Server Component.
+ * @param options - Options for the query, including whether to skip it.
  * @returns the result of the query. Initially returns the result fetched
  * by the Server Component. Subsequently returns the result fetched by the client.
+ * If the query is skipped, returns `undefined`.
  *
  * @public
  */
 export function usePreloadedQuery<Query extends FunctionReference<"query">>(
   preloadedQuery: Preloaded<Query>,
-): Query["_returnType"] {
+  options?: { skip?: boolean },
+): Query["_returnType"] | undefined {
+  const skip = options?.skip ?? false;
+
   const args = useMemo(
     () => jsonToConvex(preloadedQuery._argsJSON),
     [preloadedQuery._argsJSON],
@@ -42,9 +47,10 @@ export function usePreloadedQuery<Query extends FunctionReference<"query">>(
     () => jsonToConvex(preloadedQuery._valueJSON),
     [preloadedQuery._valueJSON],
   );
+
   const result = useQuery(
     makeFunctionReference(preloadedQuery._name) as Query,
-    args,
+    skip ? ("skip" as const) : args,
   );
-  return result === undefined ? preloadedResult : result;
+  return skip ? undefined : result === undefined ? preloadedResult : result;
 }
