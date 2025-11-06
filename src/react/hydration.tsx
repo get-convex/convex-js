@@ -34,8 +34,16 @@ export type Preloaded<Query extends FunctionReference<"query">> = {
  * @public
  */
 export function usePreloadedQuery<Query extends FunctionReference<"query">>(
+  preloadedQuery: Preloaded<Query>,
+): Query["_returnType"];
+
+export function usePreloadedQuery<Query extends FunctionReference<"query">>(
   preloadedQuery: Preloaded<Query> | "skip",
-): Query["_returnType"] | undefined {
+): Query["_returnType"] | undefined;
+
+export function usePreloadedQuery<Query extends FunctionReference<"query">>(
+  preloadedQuery: Preloaded<Query> | "skip",
+) {
   const skip = preloadedQuery === "skip";
 
   const args = useMemo(
