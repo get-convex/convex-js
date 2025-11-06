@@ -34,23 +34,29 @@ export type Preloaded<Query extends FunctionReference<"query">> = {
  * @public
  */
 export function usePreloadedQuery<Query extends FunctionReference<"query">>(
-  preloadedQuery: Preloaded<Query>,
-  options?: { skip?: boolean },
+  preloadedQuery: Preloaded<Query> | "skip",
 ): Query["_returnType"] | undefined {
-  const skip = options?.skip ?? false;
+  const skip = preloadedQuery === "skip";
 
   const args = useMemo(
-    () => jsonToConvex(preloadedQuery._argsJSON),
-    [preloadedQuery._argsJSON],
-  ) as Query["_args"];
+    () =>
+      (skip
+        ? undefined
+        : jsonToConvex(preloadedQuery._argsJSON)) as Query["_args"],
+    [preloadedQuery, skip],
+  );
+
   const preloadedResult = useMemo(
-    () => jsonToConvex(preloadedQuery._valueJSON),
-    [preloadedQuery._valueJSON],
+    () => (skip ? undefined : jsonToConvex(preloadedQuery._valueJSON)),
+    [preloadedQuery, skip],
   );
 
   const result = useQuery(
-    makeFunctionReference(preloadedQuery._name) as Query,
+    skip
+      ? (makeFunctionReference("_skip") as Query)
+      : (makeFunctionReference(preloadedQuery._name) as Query),
     skip ? ("skip" as const) : args,
   );
+
   return skip ? undefined : result === undefined ? preloadedResult : result;
 }
