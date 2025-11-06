@@ -25,11 +25,11 @@ export type Preloaded<Query extends FunctionReference<"query">> = {
  *
  * Throws an error if not used under {@link ConvexProvider}.
  *
- * @param preloadedQuery - The `Preloaded` query payload from a Server Component.
- * @param options - Options for the query, including whether to skip it.
+ * @param preloadedQuery - The `Preloaded` query payload from a Server Component,
+ * or the string `"skip"` to skip the query.
  * @returns the result of the query. Initially returns the result fetched
  * by the Server Component. Subsequently returns the result fetched by the client.
- * If the query is skipped, returns `undefined`.
+ * If the query is skipped (by passing `"skip"`), returns `undefined`.
  *
  * @public
  */
