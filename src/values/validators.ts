@@ -437,7 +437,8 @@ export class VObject<
   }
 
   /**
-   * Create a new VObject with all fields marked as required & the object marked as required.
+   * Create a new VObject with all fields marked as required & the object marked as required. 
+   * (Recursive for nested vObjects)
    */
   required(): VObject<
     ObjectType<{ [K in keyof Fields]: VRequired<Fields[K]> }>,
@@ -446,7 +447,15 @@ export class VObject<
   > {
     const newFields: Record<string, GenericValidator> = {};
     for (const [key, validator] of globalThis.Object.entries(this.fields)) {
-      newFields[key] = validator.asRequired();
+      if (validator.kind === "object") {
+        // Make required with recursion
+        const nestedObj = validator as VObject<any, any>;
+        newFields[key] = nestedObj.required();
+      } else if (validator.isOptional === "required") {
+        newFields[key] = validator; // already required
+      } else {
+        newFields[key] = validator.asRequired(); // make required
+      }
     }
     return new VObject({
       isOptional: "required",

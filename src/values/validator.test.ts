@@ -580,7 +580,7 @@ describe("v.object utility methods", () => {
       expect(required.fields.any.kind).toBe("any");
     });
 
-    test("works with nested objects", () => {
+    test("works recursively with nested objects", () => {
       const original = v.object({
         nested: v.optional(v.object({
           inner: v.optional(v.string()),
@@ -597,15 +597,23 @@ describe("v.object utility methods", () => {
         nested: { inner: "hello", required: 42 },
         simple: 42,
       };
+      const _test2: Result = {
+        nested: { required: 42 },
+        simple: 42,
+      };
 
-      // Runtime checks
+      // Runtime checks - top level
       expect(required.fields.nested.isOptional).toBe("required");
       expect(required.fields.simple.isOptional).toBe("required");
       
-      // The nested object fields themselves are not changed by the parent's required()
+      // Runtime checks - nested object fields are also made required recursively
       const nestedObj = required.fields.nested as any;
-      expect(nestedObj.fields.inner.isOptional).toBe("optional");
+      expect(nestedObj.fields.inner.isOptional).toBe("required");
       expect(nestedObj.fields.required.isOptional).toBe("required");
+      
+      // Verify underlying validator types are preserved
+      expect(nestedObj.fields.inner.kind).toBe("string");
+      expect(nestedObj.fields.required.kind).toBe("float64");
     });
 
     test("works with complex nested structures", () => {
@@ -626,19 +634,30 @@ describe("v.object utility methods", () => {
 
       const required = original.required();
 
-      // Runtime checks - only top-level fields should be made required
+      // Runtime checks
       expect(required.fields.user.isOptional).toBe("required");
       expect(required.fields.metadata.isOptional).toBe("required");
       expect(required.fields.tags.isOptional).toBe("required");
 
-      // Verify nested structure is preserved
+      // Verify nested objects are also recursively made required
       const userObj = required.fields.user as any;
-      expect(userObj.fields.profile.isOptional).toBe("optional");
+      expect(userObj.fields.profile.isOptional).toBe("required");
       expect(userObj.fields.settings.isOptional).toBe("required");
       
       const profileObj = userObj.fields.profile;
-      expect(profileObj.fields.name.isOptional).toBe("optional");
+      expect(profileObj.fields.name.isOptional).toBe("required");
       expect(profileObj.fields.age.isOptional).toBe("required");
+      
+      const settingsObj = userObj.fields.settings;
+      expect(settingsObj.fields.theme.isOptional).toBe("required");
+      expect(settingsObj.fields.notifications.isOptional).toBe("required");
+      
+      // Verify underlying validator types and properties are preserved through recursion
+      expect(profileObj.fields.name.kind).toBe("string");
+      expect(profileObj.fields.age.kind).toBe("float64");
+      expect(settingsObj.fields.theme.kind).toBe("literal");
+      expect((settingsObj.fields.theme as any).value).toBe("dark");
+      expect(settingsObj.fields.notifications.kind).toBe("boolean");
     });
 
     test("empty object", () => {
