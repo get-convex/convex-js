@@ -660,6 +660,50 @@ describe("v.object utility methods", () => {
       expect(settingsObj.fields.notifications.kind).toBe("boolean");
     });
 
+    test("recursion works with already-required nested objects", () => {
+      const VNestedObjectRaw = v.object({
+        id: v.string(),
+        profile: v.object({
+          displayName: v.optional(v.string()),
+          isPublic: v.optional(v.boolean())
+        }),
+        tags: v.array(v.string())
+      });
+      
+      const requiredTest = VNestedObjectRaw.required();
+
+      // Type checks - nested fields should be required
+      type Result = Infer<typeof requiredTest>;
+      const _test: Result = {
+        id: "123",
+        profile: {
+          displayName: "John",
+          isPublic: true
+        },
+        tags: ["tag1"]
+      };
+
+      const _testShouldError: Result = {
+        id: "123", 
+        // @ts-expect-error - displayName should be required after recursion
+        profile: {
+          isPublic: true
+          // missing displayName
+        },
+        tags: ["tag1"]
+      };
+
+      // Runtime checks - verify recursion into already-required objects
+      expect(requiredTest.fields.profile.isOptional).toBe("required");
+      const profileObj = requiredTest.fields.profile as any;
+      expect(profileObj.fields.displayName.isOptional).toBe("required");
+      expect(profileObj.fields.isPublic.isOptional).toBe("required");
+      
+      // Verify other fields unchanged
+      expect(requiredTest.fields.id.isOptional).toBe("required");
+      expect(requiredTest.fields.tags.isOptional).toBe("required");
+    });
+
     test("empty object", () => {
       const original = v.object({});
       const required = original.required();

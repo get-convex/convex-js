@@ -441,8 +441,8 @@ export class VObject<
    * (Recursive for nested vObjects)
    */
   required(): VObject<
-    ObjectType<{ [K in keyof Fields]: VRequired<Fields[K]> }>,
-    { [K in keyof Fields]: VRequired<Fields[K]> },
+    DeepVRequired<Type>,
+    DeepVRequiredFields<Fields>,
     "required"
   > {
     const newFields: Record<string, GenericValidator> = {};
@@ -459,9 +459,7 @@ export class VObject<
     }
     return new VObject({
       isOptional: "required",
-      fields: newFields as {
-        [K in keyof Fields]: VRequired<Fields[K]>;
-      },
+      fields: newFields as DeepVRequiredFields<Fields>,
     });
   }
 
@@ -754,6 +752,20 @@ export type VOptional<T extends Validator<any, OptionalProperty, any>> =
   : T extends VUnion<infer Type, infer Members, OptionalProperty, infer FieldPaths>
     ? VUnion<Type | undefined, Members, "optional", FieldPaths>
   : never
+
+// Recursive type that properly transforms nested object types
+type DeepVRequired<T> = {
+  [K in keyof T]-?: T[K] extends object 
+    ? DeepVRequired<T[K]>
+    : Exclude<T[K], undefined>
+};
+
+// Use the same approach as ObjectType but with deep transformation
+type DeepVRequiredFields<Fields extends Record<string, GenericValidator>> = {
+  [K in keyof Fields]: Fields[K] extends VObject<any, any, any, any>
+    ? VObject<any, any, "required", any>
+    : VRequired<Fields[K]>
+};
 
 // prettier-ignore
 export type VRequired<T extends Validator<any, OptionalProperty, any>> =
