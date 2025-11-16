@@ -441,8 +441,8 @@ export class VObject<
    * (Recursive for nested vObjects)
    */
   required(): VObject<
-    ObjectType<DeepRequiredObjectFields<Fields>>,
-    DeepRequiredObjectFields<Fields>,
+    ObjectType<DeepVRequired<Fields>>,
+    DeepVRequired<Fields>,
     "required"
   > {
     const newFields: Record<string, GenericValidator> = {};
@@ -457,7 +457,7 @@ export class VObject<
     }
     return new VObject({
       isOptional: "required",
-      fields: newFields as DeepRequiredObjectFields<Fields>,
+      fields: newFields as DeepVRequired<Fields>,
     });
   }
 
@@ -751,15 +751,9 @@ export type VOptional<T extends Validator<any, OptionalProperty, any>> =
     ? VUnion<Type | undefined, Members, "optional", FieldPaths>
   : never
 
-type DeepRequiredObjectType<T> = {
-  [K in keyof T]-?: T[K] extends object 
-    ? DeepRequiredObjectType<T[K]>
-    : Exclude<T[K], undefined>
-};
-
-type DeepRequiredObjectFields<Fields extends Record<string, GenericValidator>> = {
-  [K in keyof Fields]: Fields[K] extends VObject<any, any, any, any>
-    ? VObject<any, any, "required", any>
+type DeepVRequired<Fields extends Record<string, GenericValidator>> = {
+  [K in keyof Fields]: Fields[K] extends VObject<infer ObjType, any, any, infer FieldPaths>
+    ? VObject<{ [P in keyof ObjType]-?: Exclude<ObjType[P], undefined> }, any, "required", FieldPaths>
     : VRequired<Fields[K]>
 };
 

@@ -597,7 +597,9 @@ describe("v.object utility methods", () => {
         nested: { inner: "hello", required: 42 },
         simple: 42,
       };
+
       const _test2: Result = {
+      // @ts-expect-error - missing required property "inner"
         nested: { required: 42 },
         simple: 42,
       };
