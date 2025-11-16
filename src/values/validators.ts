@@ -46,6 +46,8 @@ abstract class BaseValidator<
   abstract asOptional(): Validator<Type | undefined, "optional", FieldPaths>;
   /** @internal */
   abstract asRequired(): Validator<Exclude<Type, undefined>, "required", FieldPaths>;
+  /** @internal */
+  abstract asRequired(): Validator<Exclude<Type, undefined>, "required", FieldPaths>;
 }
 
 /**
@@ -99,6 +101,13 @@ export class VId<
       tableName: this.tableName,
     });
   }
+  /** @internal */
+  asRequired() {
+    return new VId<Exclude<Type, undefined>, "required">({
+      isOptional: "required",
+      tableName: this.tableName,
+    });
+  }
 }
 
 /**
@@ -122,6 +131,12 @@ export class VFloat64<
   asOptional() {
     return new VFloat64<Type | undefined, "optional">({
       isOptional: "optional",
+    });
+  }
+  /** @internal */
+  asRequired() {
+    return new VFloat64<Exclude<Type, undefined>, "required">({
+      isOptional: "required",
     });
   }
   /** @internal */
@@ -157,6 +172,10 @@ export class VInt64<
   asRequired() {
     return new VInt64<Exclude<Type, undefined>, "required">({ isOptional: "required" });
   }
+  /** @internal */
+  asRequired() {
+    return new VInt64<Exclude<Type, undefined>, "required">({ isOptional: "required" });
+  }
 }
 
 /**
@@ -187,6 +206,12 @@ export class VBoolean<
       isOptional: "required",
     });
   }
+  /** @internal */
+  asRequired() {
+    return new VBoolean<Exclude<Type, undefined>, "required">({
+      isOptional: "required",
+    });
+  }
 }
 
 /**
@@ -208,6 +233,10 @@ export class VBytes<
   /** @internal */
   asOptional() {
     return new VBytes<Type | undefined, "optional">({ isOptional: "optional" });
+  }
+  /** @internal */
+  asRequired() {
+    return new VBytes<Exclude<Type, undefined>, "required">({ isOptional: "required" });
   }
   /** @internal */
   asRequired() {
@@ -243,6 +272,12 @@ export class VString<
       isOptional: "required",
     });
   }
+  /** @internal */
+  asRequired() {
+    return new VString<Exclude<Type, undefined>, "required">({
+      isOptional: "required",
+    });
+  }
 }
 
 /**
@@ -264,6 +299,10 @@ export class VNull<
   /** @internal */
   asOptional() {
     return new VNull<Type | undefined, "optional">({ isOptional: "optional" });
+  }
+  /** @internal */
+  asRequired() {
+    return new VNull<Exclude<Type, undefined>, "required">({ isOptional: "required" });
   }
   /** @internal */
   asRequired() {
@@ -294,6 +333,12 @@ export class VAny<
   asOptional() {
     return new VAny<Type | undefined, "optional", FieldPaths>({
       isOptional: "optional",
+    });
+  }
+  /** @internal */
+  asRequired() {
+    return new VAny<Exclude<Type, undefined>, "required", FieldPaths>({
+      isOptional: "required",
     });
   }
   /** @internal */
@@ -363,9 +408,18 @@ export class VObject<
   }
   /** @internal */
   /** Only marks the object as optional. Fields are left unchanged. If you want the fields to be optional use .partial() */
+  /** Only marks the object as optional. Fields are left unchanged. If you want the fields to be optional use .partial() */
   asOptional() {
     return new VObject<Type | undefined, Fields, "optional", FieldPaths>({
       isOptional: "optional",
+      fields: this.fields,
+    });
+  }
+  /** @internal */
+    /** Only marks the object as required. Fields are left unchanged. If you want the fields and object to be required use .required() */
+  asRequired() {
+    return new VObject<Exclude<Type, undefined>, Fields, "required", FieldPaths>({
+      isOptional: "required",
       fields: this.fields,
     });
   }
@@ -437,10 +491,35 @@ export class VObject<
   }
 
   /**
-   * Create a new VObject with all fields marked as required & the object marked as required. 
-   * (Recursive for nested vObjects)
+   * Create a new VObject with all top-level fields marked as required & the object marked as required.
+   * Nested objects are not affected (shallow operation).
+   * 
+   * See also {@link deepRequired} for a recursive (deep) version of this method.
    */
   required(): VObject<
+    ObjectType<{ [K in keyof Fields]: VRequired<Fields[K]> }>,
+    { [K in keyof Fields]: VRequired<Fields[K]> },
+    "required"
+  > {
+    const newFields: Record<string, GenericValidator> = {};
+    for (const [key, validator] of globalThis.Object.entries(this.fields)) {
+      if (validator.isOptional === "required") {
+        newFields[key] = validator; // already required
+      } else {
+        newFields[key] = validator.asRequired(); // make required with validators method
+      }
+    }
+    return new VObject({
+      isOptional: "required",
+      fields: newFields as { [K in keyof Fields]: VRequired<Fields[K]> },
+    });
+  }
+
+  /**
+   * Create a new VObject with all fields marked as required & the object marked as required.
+   * Recursively makes nested objects required (deep operation).
+   */
+  deepRequired(): VObject<
     ObjectType<DeepVRequired<Fields>>,
     DeepVRequired<Fields>,
     "required"
@@ -448,7 +527,7 @@ export class VObject<
     const newFields: Record<string, GenericValidator> = {};
     for (const [key, validator] of globalThis.Object.entries(this.fields)) {
       if (validator.kind === "object") {
-        newFields[key] = validator.required(); // make required with recursion
+        newFields[key] = validator.deepRequired(); // make required with recursion
       } else if (validator.isOptional === "required") {
         newFields[key] = validator; // already required
       } else {
@@ -532,6 +611,13 @@ export class VLiteral<
       value: this.value as Exclude<Type, undefined>,
     });
   }
+  /** @internal */
+  asRequired() {
+    return new VLiteral<Exclude<Type, undefined>, "required">({
+      isOptional: "required",
+      value: this.value as Exclude<Type, undefined>,
+    });
+  }
 }
 
 /**
@@ -576,6 +662,13 @@ export class VArray<
   asOptional() {
     return new VArray<Type | undefined, Element, "optional">({
       isOptional: "optional",
+      element: this.element,
+    });
+  }
+  /** @internal */
+  asRequired() {
+    return new VArray<Exclude<Type, undefined>, Element, "required">({
+      isOptional: "required",
       element: this.element,
     });
   }
@@ -654,6 +747,14 @@ export class VRecord<
   asOptional() {
     return new VRecord<Type | undefined, Key, Value, "optional", FieldPaths>({
       isOptional: "optional",
+      key: this.key,
+      value: this.value,
+    });
+  }
+  /** @internal */
+  asRequired() {
+    return new VRecord<Exclude<Type, undefined>, Key, Value, "required", FieldPaths>({
+      isOptional: "required",
       key: this.key,
       value: this.value,
     });
@@ -749,51 +850,6 @@ export type VOptional<T extends Validator<any, OptionalProperty, any>> =
     ? VRecord<Type | undefined, Key, Value, "optional", FieldPaths>
   : T extends VUnion<infer Type, infer Members, OptionalProperty, infer FieldPaths>
     ? VUnion<Type | undefined, Members, "optional", FieldPaths>
-  : never
-
-// type DeepVRequired<Fields extends Record<string, GenericValidator>> = {
-//   [K in keyof Fields]: Fields[K] extends VObject<infer ObjType, any, any, infer FieldPaths>
-//     ? VObject<{ [P in keyof ObjType]-?: Exclude<ObjType[P], undefined> }, any, "required", FieldPaths>
-//     : VRequired<Fields[K]>
-// };
-type DeepVRequired<Fields extends Record<string, GenericValidator>> = {
-  [K in keyof Fields]: Fields[K] extends VObject<infer ObjType, infer InnerFields, any, infer FieldPaths>
-    ? VObject<
-        { [P in keyof ObjType]-?: Exclude<ObjType[P], undefined> },
-        DeepVRequired<InnerFields>,
-        "required",
-        FieldPaths
-      >
-    : VRequired<Fields[K]>
-};
-
-// prettier-ignore
-export type VRequired<T extends Validator<any, OptionalProperty, any>> =
-  T extends VId<infer Type, OptionalProperty> ? VId<Exclude<Type, undefined>, "required">
-  : T extends VString<infer Type, OptionalProperty>
-    ? VString<Exclude<Type, undefined>, "required">
-  : T extends VFloat64<infer Type, OptionalProperty>
-    ? VFloat64<Exclude<Type, undefined>, "required">
-  : T extends VInt64<infer Type, OptionalProperty>
-    ? VInt64<Exclude<Type, undefined>, "required">
-  : T extends VBoolean<infer Type, OptionalProperty>
-    ? VBoolean<Exclude<Type, undefined>, "required">
-  : T extends VNull<infer Type, OptionalProperty>
-    ? VNull<Exclude<Type, undefined>, "required">
-  : T extends VAny<infer Type, OptionalProperty>
-    ? VAny<Exclude<Type, undefined>, "required">
-  : T extends VLiteral<infer Type, OptionalProperty>
-    ? VLiteral<Exclude<Type, undefined>, "required">
-  : T extends VBytes<infer Type, OptionalProperty>
-    ? VBytes<Exclude<Type, undefined>, "required">
-  : T extends VObject< infer Type, infer Fields, OptionalProperty, infer FieldPaths>
-    ? VObject<Exclude<Type, undefined>, Fields, "required", FieldPaths>
-  : T extends VArray<infer Type, infer Element, OptionalProperty>
-    ? VArray<Exclude<Type, undefined>, Element, "required">
-  : T extends VRecord< infer Type, infer Key, infer Value, OptionalProperty, infer FieldPaths>
-    ? VRecord<Exclude<Type, undefined>, Key, Value, "required", FieldPaths>
-  : T extends VUnion<infer Type, infer Members, OptionalProperty, infer FieldPaths>
-    ? VUnion<Exclude<Type, undefined>, Members, "required", FieldPaths>
   : never
 
 /**
