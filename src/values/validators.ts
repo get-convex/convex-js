@@ -751,9 +751,19 @@ export type VOptional<T extends Validator<any, OptionalProperty, any>> =
     ? VUnion<Type | undefined, Members, "optional", FieldPaths>
   : never
 
+// type DeepVRequired<Fields extends Record<string, GenericValidator>> = {
+//   [K in keyof Fields]: Fields[K] extends VObject<infer ObjType, any, any, infer FieldPaths>
+//     ? VObject<{ [P in keyof ObjType]-?: Exclude<ObjType[P], undefined> }, any, "required", FieldPaths>
+//     : VRequired<Fields[K]>
+// };
 type DeepVRequired<Fields extends Record<string, GenericValidator>> = {
-  [K in keyof Fields]: Fields[K] extends VObject<infer ObjType, any, any, infer FieldPaths>
-    ? VObject<{ [P in keyof ObjType]-?: Exclude<ObjType[P], undefined> }, any, "required", FieldPaths>
+  [K in keyof Fields]: Fields[K] extends VObject<infer ObjType, infer InnerFields, any, infer FieldPaths>
+    ? VObject<
+        { [P in keyof ObjType]-?: Exclude<ObjType[P], undefined> },
+        DeepVRequired<InnerFields>,
+        "required",
+        FieldPaths
+      >
     : VRequired<Fields[K]>
 };
 
