@@ -441,7 +441,7 @@ export class VObject<
    * (Recursive for nested vObjects)
    */
   required(): VObject<
-    DeepRequiredObjectType<Type>,
+    ObjectType<DeepRequiredObjectFields<Fields>>,
     DeepRequiredObjectFields<Fields>,
     "required"
   > {
