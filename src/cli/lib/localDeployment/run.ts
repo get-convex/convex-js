@@ -143,34 +143,50 @@ export async function assertLocalBackendRunning(
     deploymentName: string;
   },
 ): Promise<void> {
-  logVerbose(`Checking local backend at ${args.url} is running`);
+  const candidates: string[] = [];
+  const add = (u: string | null | undefined) => {
+    if (!u) return;
+    if (!candidates.includes(u)) candidates.push(u);
+  };
+  add(args.url);
+  // If CONVEX_URL is set in the environment, try it as well.
+  add(process.env.CONVEX_URL);
+  // Try swapping localhost and 127.0.0.1 for the primary URL.
   try {
-    const resp = await fetch(`${args.url}/instance_name`);
-    if (resp.status === 200) {
-      const text = await resp.text();
-      if (text !== args.deploymentName) {
-        return await ctx.crash({
-          exitCode: 1,
-          errorType: "fatal",
-          printedMessage: `A different local backend ${text} is running at ${args.url}`,
-        });
-      } else {
+    const u = new URL(args.url);
+    const swappedHost = u.hostname === "127.0.0.1" ? "localhost" : u.hostname === "localhost" ? "127.0.0.1" : null;
+    if (swappedHost) {
+      u.hostname = swappedHost;
+      add(u.toString());
+    }
+  } catch { }
+
+  for (const base of candidates) {
+    logVerbose(`Checking local backend at ${base} is running`);
+    try {
+      const resp = await fetch(`${base.replace(/\/$/, "")}/instance_name`);
+      if (resp.status === 200) {
+        const text = await resp.text();
+        if (text !== args.deploymentName) {
+          return await ctx.crash({
+            exitCode: 1,
+            errorType: "fatal",
+            printedMessage: `A different local backend ${text} is running at ${base}`,
+          });
+        }
+        // Found the correct backend
         return;
       }
-    } else {
-      return await ctx.crash({
-        exitCode: 1,
-        errorType: "fatal",
-        printedMessage: `Error response code received from local backend ${resp.status} ${resp.statusText}`,
-      });
+    } catch {
+      // Try next candidate
     }
-  } catch {
-    return await ctx.crash({
-      exitCode: 1,
-      errorType: "fatal",
-      printedMessage: `Local backend isn't running. (it's not listening at ${args.url})\nRun \`npx convex dev\` in another terminal first.`,
-    });
   }
+  const tried = candidates.join(", ");
+  return await ctx.crash({
+    exitCode: 1,
+    errorType: "fatal",
+    printedMessage: `Local backend isn't running. Tried: ${tried}\nRun \`npx convex dev\` in another terminal first.`,
+  });
 }
 
 /** Wait for up to maxTimeSecs for the correct local backend to be running on the expected port. */
