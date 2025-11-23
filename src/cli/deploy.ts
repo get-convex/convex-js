@@ -17,6 +17,9 @@ import {
   CONVEX_SELF_HOSTED_URL_VAR_NAME,
   CONVEX_DEPLOYMENT_ENV_VAR_NAME,
   bigBrainAPI,
+  bigBrainAPIMaybeThrows,
+  logAndHandleFetchError,
+  ThrowingFetchError,
 } from "./lib/utils/utils.js";
 import { runFunctionAndLog } from "./lib/run.js";
 import { usageStateWarning } from "./lib/usage.js";
@@ -27,6 +30,49 @@ import { deployToDeployment, runCommand } from "./lib/deploy2.js";
 import { getDeploymentSelection } from "./lib/deploymentSelection.js";
 import { deploymentNameAndTypeFromSelection } from "./lib/deploymentSelection.js";
 import { checkVersion } from "./lib/updates.js";
+
+async function checkPreviewDeploymentExists(
+  ctx: Context,
+  previewName: string,
+  projectSelection: {
+    kind: "teamAndProjectSlugs";
+    teamSlug: string;
+    projectSlug: string;
+  },
+): Promise<{
+  adminKey: string;
+  url: string;
+  deploymentName: string;
+} | null> {
+  try {
+    const result = await bigBrainAPIMaybeThrows({
+      ctx,
+      method: "POST",
+      url: "deployment/authorize_preview",
+      data: {
+        previewName: previewName,
+        projectSelection: projectSelection,
+      },
+    });
+    return {
+      adminKey: result.adminKey,
+      url: result.url,
+      deploymentName: result.deploymentName,
+    };
+  } catch (err) {
+    // Only return null for the specific "PreviewNotFound" code
+    const isNotFoundError =
+      err instanceof ThrowingFetchError &&
+      err.response.status === 404 &&
+      err.serverErrorData?.code === "PreviewNotFound";
+    if (isNotFoundError) {
+      return null;
+    }
+
+    return await logAndHandleFetchError(ctx, err);
+  }
+}
+
 export const deploy = new Command("deploy")
   .summary("Deploy to your prod deployment")
   .description(
@@ -43,8 +89,8 @@ export const deploy = new Command("deploy")
   )
   .addOption(
     new Option(
-      "--preview-create <name>",
-      "The name to associate with this deployment if deploying to a newly created preview deployment. Defaults to the current Git branch name in Vercel, Netlify and GitHub CI. This is ignored if deploying to a production deployment.",
+      "--preview-deploy <name>",
+      "The name to associate with this deployment if deploying to a preview deployment. Creates a new preview deployment if it doesn't exist, or updates an existing one. Defaults to the current Git branch name in Vercel, Netlify and GitHub CI. This is ignored if deploying to a production deployment.",
     ).conflicts("preview-name"),
   )
   .addOption(
@@ -61,11 +107,19 @@ export const deploy = new Command("deploy")
   .addOption(new Option("--url <url>").hideHelp())
   .addOption(
     new Option(
-      "--preview-name <name>",
-      "[deprecated] Use `--preview-create` instead. The name to associate with this deployment if deploying to a preview deployment.",
+      "--preview-create <name>",
+      "[deprecated] Use `--preview-deploy` instead. The name to associate with this deployment if deploying to a newly created preview deployment.",
     )
       .hideHelp()
-      .conflicts("preview-create"),
+      .conflicts("preview-deploy"),
+  )
+  .addOption(
+    new Option(
+      "--preview-name <name>",
+      "[deprecated] Use `--preview-deploy` instead. The name to associate with this deployment if deploying to a preview deployment.",
+    )
+      .hideHelp()
+      .conflicts("preview-deploy"),
   )
   .addOption(
     new Option(
@@ -119,12 +173,31 @@ Same format as .env.local or .env files, and overrides them.`,
     if (deploymentSelection.kind === "preview") {
       // TODO -- add usage state warnings here too once we can do it without a deployment name
       // await usageStateWarning(ctx);
+      if (cmdOptions.previewCreate !== undefined) {
+        await ctx.crash({
+          exitCode: 1,
+          errorType: "fatal",
+          printedMessage:
+            "The `--preview-create` flag has been deprecated in favor of `--preview-deploy`. Please re-run the command using `--preview-deploy` instead.",
+        });
+      }
       if (cmdOptions.previewName !== undefined) {
         await ctx.crash({
           exitCode: 1,
           errorType: "fatal",
           printedMessage:
-            "The `--preview-name` flag has been deprecated in favor of `--preview-create`. Please re-run the command using `--preview-create` instead.",
+            "The `--preview-name` flag has been deprecated in favor of `--preview-deploy`. Please re-run the command using `--preview-deploy` instead.",
+        });
+      }
+
+      const previewName =
+        cmdOptions.previewDeploy ?? gitBranchFromEnvironment();
+      if (previewName === null) {
+        await ctx.crash({
+          exitCode: 1,
+          errorType: "fatal",
+          printedMessage:
+            "`npx convex deploy` to a preview deployment could not determine the preview name. Provide one using `--preview-deploy`",
         });
       }
 
@@ -132,20 +205,45 @@ Same format as .env.local or .env files, and overrides them.`,
         ctx,
         deploymentSelection.previewDeployKey,
       );
-      await deployToNewPreviewDeployment(
+
+      const existingPreview = await checkPreviewDeploymentExists(
         ctx,
+        previewName!, // checked above
         {
-          previewDeployKey: deploymentSelection.previewDeployKey,
-          projectSelection: {
-            kind: "teamAndProjectSlugs",
-            teamSlug: teamAndProjectSlugs.teamSlug,
-            projectSlug: teamAndProjectSlugs.projectSlug,
-          },
-        },
-        {
-          ...cmdOptions,
+          kind: "teamAndProjectSlugs",
+          teamSlug: teamAndProjectSlugs.teamSlug,
+          projectSlug: teamAndProjectSlugs.projectSlug,
         },
       );
+
+      if (existingPreview) {
+        logMessage(
+          `Preview deployment "${previewName}" exists. Updating deployment.`,
+        );
+        await deployToExistingDeployment(ctx, {
+          ...cmdOptions,
+          adminKey: existingPreview.adminKey,
+          url: existingPreview.url,
+        });
+      } else {
+        logMessage(
+          `Preview deployment "${previewName}" does not exist. Creating new deployment.`,
+        );
+        await deployToPreviewDeployment(
+          ctx,
+          {
+            previewDeployKey: deploymentSelection.previewDeployKey,
+            projectSelection: {
+              kind: "teamAndProjectSlugs",
+              teamSlug: teamAndProjectSlugs.teamSlug,
+              projectSlug: teamAndProjectSlugs.projectSlug,
+            },
+          },
+          {
+            ...cmdOptions,
+          },
+        );
+      }
     } else {
       await deployToExistingDeployment(ctx, {
         ...cmdOptions,
@@ -155,7 +253,7 @@ Same format as .env.local or .env files, and overrides them.`,
     }
   });
 
-async function deployToNewPreviewDeployment(
+async function deployToPreviewDeployment(
   ctx: Context,
   deploymentSelection: {
     previewDeployKey: string;
@@ -167,7 +265,7 @@ async function deployToNewPreviewDeployment(
   },
   options: {
     dryRun?: boolean | undefined;
-    previewCreate?: string | undefined;
+    previewDeploy?: string | undefined;
     previewRun?: string | undefined;
     cmdUrlEnvVarName?: string | undefined;
     cmd?: string | undefined;
@@ -180,19 +278,19 @@ async function deployToNewPreviewDeployment(
     debugBundlePath?: string | undefined;
   },
 ) {
-  const previewName = options.previewCreate ?? gitBranchFromEnvironment();
+  const previewName = options.previewDeploy ?? gitBranchFromEnvironment();
   if (previewName === null) {
     await ctx.crash({
       exitCode: 1,
       errorType: "fatal",
       printedMessage:
-        "`npx convex deploy` to a preview deployment could not determine the preview name. Provide one using `--preview-create`",
+        "`npx convex deploy` to a preview deployment could not determine the preview name. Provide one using `--preview-deploy`",
     });
   }
 
   if (options.dryRun) {
     logFinishedStep(
-      `Would have claimed preview deployment for "${previewName}"`,
+      `Would have deployed to preview deployment "${previewName}"`,
     );
     await runCommand(ctx, {
       cmdUrlEnvVarName: options.cmdUrlEnvVarName,
@@ -202,7 +300,7 @@ async function deployToNewPreviewDeployment(
       adminKey: "preview-deployment-admin-key",
     });
     logFinishedStep(
-      `Would have deployed Convex functions to preview deployment for "${previewName}"`,
+      `Would have deployed Convex functions to preview deployment "${previewName}"`,
     );
     if (options.previewRun !== undefined) {
       logMessage(`Would have run function "${options.previewRun}"`);
