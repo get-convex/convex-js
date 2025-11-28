@@ -25,26 +25,46 @@ export type Preloaded<Query extends FunctionReference<"query">> = {
  *
  * Throws an error if not used under {@link ConvexProvider}.
  *
- * @param preloadedQuery - The `Preloaded` query payload from a Server Component.
+ * @param preloadedQuery - The `Preloaded` query payload from a Server Component,
+ * or the string `"skip"` to skip the query.
  * @returns the result of the query. Initially returns the result fetched
  * by the Server Component. Subsequently returns the result fetched by the client.
+ * If the query is skipped (by passing `"skip"`), returns `undefined`.
  *
  * @public
  */
 export function usePreloadedQuery<Query extends FunctionReference<"query">>(
   preloadedQuery: Preloaded<Query>,
-): Query["_returnType"] {
+): Query["_returnType"];
+
+export function usePreloadedQuery<Query extends FunctionReference<"query">>(
+  preloadedQuery: Preloaded<Query> | "skip",
+): Query["_returnType"] | undefined;
+
+export function usePreloadedQuery<Query extends FunctionReference<"query">>(
+  preloadedQuery: Preloaded<Query> | "skip",
+) {
+  const skip = preloadedQuery === "skip";
+
   const args = useMemo(
-    () => jsonToConvex(preloadedQuery._argsJSON),
-    [preloadedQuery._argsJSON],
-  ) as Query["_args"];
+    () =>
+      (skip
+        ? undefined
+        : jsonToConvex(preloadedQuery._argsJSON)) as Query["_args"],
+    [preloadedQuery, skip],
+  );
+
   const preloadedResult = useMemo(
-    () => jsonToConvex(preloadedQuery._valueJSON),
-    [preloadedQuery._valueJSON],
+    () => (skip ? undefined : jsonToConvex(preloadedQuery._valueJSON)),
+    [preloadedQuery, skip],
   );
+
   const result = useQuery(
-    makeFunctionReference(preloadedQuery._name) as Query,
-    args,
+    skip
+      ? (makeFunctionReference("_skip") as Query)
+      : (makeFunctionReference(preloadedQuery._name) as Query),
+    skip ? ("skip" as const) : args,
   );
-  return result === undefined ? preloadedResult : result;
+
+  return skip ? undefined : result === undefined ? preloadedResult : result;
 }
