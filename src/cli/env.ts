@@ -12,6 +12,7 @@ import {
   envGetInDeploymentAction,
   envListInDeployment,
   envRemoveInDeployment,
+  envSetFromFileInDeployment,
   envSetInDeployment,
 } from "./lib/env.js";
 import { getDeploymentSelection } from "./lib/deploymentSelection.js";
@@ -34,6 +35,23 @@ const envSet = new Command("set")
     const { ctx, deployment } = await selectEnvDeployment(options);
     await ensureHasConvexDependency(ctx, "env set");
     await envSetInDeployment(ctx, deployment, originalName, originalValue);
+  });
+
+const envSetFromFile = new Command("set-from-file")
+  .usage("[options] <file>")
+  .arguments("<file>")
+  .summary("Set variables from a file")
+  .description(
+    "Set variables from a file: `npx convex env set-from-file FILE`\n" +
+      "The file should contain lines of the form `NAME=value`."
+  )
+  .configureHelp({ showGlobalOptions: true })
+  .allowExcessArguments(false)
+  .action(async (file, _options, cmd) => {
+    const options = cmd.optsWithGlobals();
+    const { ctx, deployment } = await selectEnvDeployment(options);
+    await ensureHasConvexDependency(ctx, "env set-from-file");
+    await envSetFromFileInDeployment(ctx, deployment, file);
   });
 
 async function selectEnvDeployment(
@@ -127,6 +145,7 @@ export const env = new Command("env")
       "By default, this sets and views variables on your dev deployment.",
   )
   .addCommand(envSet)
+  .addCommand(envSetFromFile)
   .addCommand(envGet)
   .addCommand(envRemove)
   .addCommand(envList)
