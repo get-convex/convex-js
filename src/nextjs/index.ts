@@ -84,6 +84,12 @@ export type NextjsOptions = {
    * The default value is `false`
    */
   skipConvexDeploymentUrlCheck?: boolean;
+  /**
+   * AbortSignal to cancel the request.
+   *
+   * Use with React 19.2's cacheSignal() to abort fetches when cache lifetime ends.
+   */
+  signal?: AbortSignal | null;
 };
 
 /**
@@ -199,7 +205,10 @@ function setupClient(options: NextjsOptions) {
   if (options.adminToken !== undefined) {
     client.setAdminAuth(options.adminToken);
   }
-  client.setFetchOptions({ cache: "no-store" });
+  client.setFetchOptions({
+    cache: "no-store",
+    signal: options.signal ?? undefined,
+  });
   return client;
 }
 
