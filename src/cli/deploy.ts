@@ -17,6 +17,9 @@ import {
   CONVEX_SELF_HOSTED_URL_VAR_NAME,
   CONVEX_DEPLOYMENT_ENV_VAR_NAME,
   bigBrainAPI,
+  bigBrainAPIMaybeThrows,
+  logAndHandleFetchError,
+  ThrowingFetchError,
 } from "./lib/utils/utils.js";
 import { runFunctionAndLog } from "./lib/run.js";
 import { usageStateWarning } from "./lib/usage.js";
@@ -45,7 +48,13 @@ export const deploy = new Command("deploy")
     new Option(
       "--preview-create <name>",
       "The name to associate with this deployment if deploying to a newly created preview deployment. Defaults to the current Git branch name in Vercel, Netlify and GitHub CI. This is ignored if deploying to a production deployment.",
-    ).conflicts("preview-name"),
+    ).conflicts(["preview-name", "preview-deploy-or-create"]),
+  )
+  .addOption(
+    new Option(
+      "--preview-deploy-or-create <name>",
+      "Updates existing preview deployment if it exists, otherwise creates a new preview deployment. The name to associate with this deployment if deploying to a newly created preview deployment. Defaults to the current Git branch name in Vercel, Netlify and GitHub CI. This is ignored if deploying to a production deployment.",
+    ).conflicts(["preview-name", "preview-create"]),
   )
   .addOption(
     new Option(
@@ -126,7 +135,8 @@ Same format as .env.local or .env files, and overrides them.`,
         ctx,
         deploymentSelection.previewDeployKey,
       );
-      await deployToNewPreviewDeployment(
+
+      await deployToPreviewDeployment(
         ctx,
         {
           previewDeployKey: deploymentSelection.previewDeployKey,
@@ -145,7 +155,7 @@ Same format as .env.local or .env files, and overrides them.`,
     }
   });
 
-async function deployToNewPreviewDeployment(
+async function deployToPreviewDeployment(
   ctx: Context,
   deploymentSelection: {
     previewDeployKey: string;
@@ -158,6 +168,7 @@ async function deployToNewPreviewDeployment(
   options: {
     dryRun?: boolean | undefined;
     previewCreate?: string | undefined;
+    previewDeployOrCreate?: string | undefined;
     previewRun?: string | undefined;
     cmdUrlEnvVarName?: string | undefined;
     cmd?: string | undefined;
@@ -170,9 +181,46 @@ async function deployToNewPreviewDeployment(
     debugBundlePath?: string | undefined;
   },
 ) {
-  const previewName = options.previewCreate ?? gitBranchFromEnvironment();
-  if (previewName === null) {
+  if (options.previewCreate && options.previewDeployOrCreate) {
     await ctx.crash({
+      exitCode: 1,
+      errorType: "fatal",
+      printedMessage:
+        "`npx convex deploy` to a preview deployment cannot have both `--preview-create` and `--preview-deploy-or-create options`",
+    });
+  }
+
+  const { previewStrategy, previewName } = (() => {
+    if (options.previewCreate) {
+      return {
+        previewStrategy: "create" as const,
+        previewName: options.previewCreate ?? gitBranchFromEnvironment(),
+      };
+    }
+
+    if (options.previewDeployOrCreate) {
+      return {
+        previewStrategy: "updateOrCreate" as const,
+        previewName:
+          options.previewDeployOrCreate ?? gitBranchFromEnvironment(),
+      };
+    }
+
+    return {
+      previewStrategy: null,
+      previewName: null,
+    };
+  })();
+  if (!previewStrategy) {
+    return await ctx.crash({
+      exitCode: 1,
+      errorType: "fatal",
+      printedMessage:
+        "`npx convex deploy` to a preview deployment could not whether you wanted to create a preview deployment or update a previous preview deployment. Use either `--preview-create or --preview-deploy-or-create`",
+    });
+  }
+  if (!previewName) {
+    return await ctx.crash({
       exitCode: 1,
       errorType: "fatal",
       printedMessage:
@@ -180,6 +228,7 @@ async function deployToNewPreviewDeployment(
     });
   }
 
+  // Dry run
   if (options.dryRun) {
     logFinishedStep(
       `Would have claimed preview deployment for "${previewName}"`,
@@ -199,6 +248,46 @@ async function deployToNewPreviewDeployment(
     }
     return;
   }
+
+  // Try deploying to existing preview - if does not exist will fall through to preview create deployment
+
+  if (previewStrategy === "updateOrCreate") {
+    try {
+      const result = await bigBrainAPIMaybeThrows({
+        ctx,
+        method: "POST",
+        url: "deployment/authorize_preview",
+        data: {
+          previewName: previewName,
+          projectSelection: deploymentSelection.projectSelection,
+        },
+      });
+
+      logMessage(
+        `Existing preview deployment found. Deploying to previous preview...`,
+      );
+      return await deployToExistingDeployment(ctx, {
+        ...options,
+        adminKey: result.adminKey,
+        url: result.url,
+      });
+    } catch (err) {
+      const isNotFoundError =
+        err instanceof ThrowingFetchError &&
+        err.response.status === 404 &&
+        err.serverErrorData?.code === "PreviewNotFound";
+
+      if (isNotFoundError) {
+        logMessage(
+          `Existing preview deployment NOT FOUND. Deploy to NEW preview...`,
+        );
+      } else {
+        return await logAndHandleFetchError(ctx, err);
+      }
+    }
+  }
+
+  // Create new preview deployment
   const data = await bigBrainAPI({
     ctx,
     method: "POST",
