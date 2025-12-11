@@ -154,6 +154,8 @@ Same format as .env.local or .env files, and overrides them.`,
         },
         {
           ...cmdOptions,
+          allowDeletingLargeIndexes:
+            cmdOptions.allowDeletingLargeIndexes ?? false,
         },
       );
     } else {
@@ -205,6 +207,7 @@ async function deployToPreviewDeployment(
 
     debug?: boolean | undefined;
     debugBundlePath?: string | undefined;
+    allowDeletingLargeIndexes: boolean;
   },
 ) {
   if (options.previewCreate && options.previewDeployOrCreate) {
@@ -296,6 +299,7 @@ async function deployToPreviewDeployment(
         ...options,
         adminKey: result.adminKey,
         url: result.url,
+        allowDeletingLargeIndexes: options.allowDeletingLargeIndexes,
       });
     } catch (err) {
       const isNotFoundError =
