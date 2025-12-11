@@ -1,4 +1,4 @@
-import chalk from "chalk";
+import { chalkStderr } from "chalk";
 import { OneoffCtx } from "../../bundler/context.js";
 import {
   logError,
@@ -13,7 +13,7 @@ import { runPush } from "./components.js";
 import { performance } from "perf_hooks";
 import path from "path";
 import { LogManager, LogMode, watchLogs } from "./logs.js";
-import { PushOptions } from "./push.js";
+import { PushOptions } from "./components.js";
 import {
   formatDuration,
   getCurrentTimeString,
@@ -77,6 +77,7 @@ export async function devAgainstDeployment(
         codegen: devOptions.codegen,
         liveComponentSources: devOptions.liveComponentSources,
         logManager, // Pass logManager to control logs during deploy
+        largeIndexDeletionCheck: "no verification", // `convex dev` can’t push to prod
       },
       devOptions,
     ),
@@ -194,7 +195,7 @@ export async function watchAndPush(
         numFailures += 1;
         if (e.errorType === "transient") {
           logWarning(
-            chalk.yellow(
+            chalkStderr.yellow(
               `Failed due to network error, retrying in ${formatDuration(
                 delay,
               )}...`,

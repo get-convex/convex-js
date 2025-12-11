@@ -1,5 +1,5 @@
 import path from "path";
-import chalk from "chalk";
+import { chalkStderr } from "chalk";
 import esbuild from "esbuild";
 import { parse as parseAST } from "@babel/parser";
 import { Identifier, ImportSpecifier } from "@babel/types";
@@ -26,14 +26,18 @@ export const actionsDir = "actions";
 export function* walkDir(
   fs: Filesystem,
   dirPath: string,
+  shouldSkipDir?: (dirPath: string) => boolean,
   depth?: number,
 ): Generator<{ isDir: boolean; path: string; depth: number }, void, void> {
   depth = depth ?? 0;
   for (const dirEntry of fs.listDir(dirPath).sort(consistentPathSort)) {
     const childPath = path.join(dirPath, dirEntry.name);
     if (dirEntry.isDirectory()) {
+      if (shouldSkipDir && shouldSkipDir(childPath)) {
+        continue;
+      }
       yield { isDir: true, path: childPath, depth };
-      yield* walkDir(fs, childPath, depth + 1);
+      yield* walkDir(fs, childPath, shouldSkipDir, depth + 1);
     } else if (dirEntry.isFile()) {
       yield { isDir: false, path: childPath, depth };
     }
@@ -195,7 +199,7 @@ export async function bundle(
     });
   }
   for (const warning of result.warnings) {
-    logWarning(chalk.yellow(`esbuild warning: ${warning.text}`));
+    logWarning(chalkStderr.yellow(`esbuild warning: ${warning.text}`));
   }
   const sourceMaps = new Map();
   const modules: Bundle[] = [];
@@ -301,13 +305,13 @@ export async function bundleAuthConfig(ctx: Context, dir: string) {
     : authConfigPath;
   if (!ctx.fs.exists(chosenPath)) {
     logVerbose(
-      chalk.yellow(
+      chalkStderr.yellow(
         `Found no auth config file at ${authConfigTsPath} or ${authConfigPath} so there are no configured auth providers`,
       ),
     );
     return [];
   }
-  logVerbose(chalk.yellow(`Bundling auth config found at ${chosenPath}`));
+  logVerbose(chalkStderr.yellow(`Bundling auth config found at ${chosenPath}`));
   const result = await bundle(ctx, dir, [chosenPath], true, "browser");
   return result.modules;
 }
@@ -357,7 +361,22 @@ export async function entryPoints(
 ): Promise<string[]> {
   const entryPoints = [];
 
-  for (const { isDir, path: fpath, depth } of walkDir(ctx.fs, dir)) {
+  // Don't deploy directories in convex/ that define components
+  // as this leads to double-deploying.
+  const looksLikeNestedComponent = (dirPath: string): boolean => {
+    const config = path.join(dirPath, "convex.config.ts");
+    const isComponentDefinition = ctx.fs.exists(config);
+    if (isComponentDefinition) {
+      logVerbose(chalkStderr.yellow(`Skipping component directory ${dirPath}`));
+    }
+    return isComponentDefinition;
+  };
+
+  for (const { isDir, path: fpath, depth } of walkDir(
+    ctx.fs,
+    dir,
+    looksLikeNestedComponent,
+  )) {
     if (isDir) {
       continue;
     }
@@ -378,7 +397,7 @@ export async function entryPoints(
       const source = ctx.fs.readUtf8File(fpath);
       if (await doesImportConvexHttpRouter(source))
         logWarning(
-          chalk.yellow(
+          chalkStderr.yellow(
             `Found ${fpath}. HTTP action routes will not be imported from this file. Did you mean to include http${extension}?`,
           ),
         );
@@ -390,25 +409,27 @@ export async function entryPoints(
 
     // This should match isEntryPoint in the convex eslint plugin.
     if (!ENTRY_POINT_EXTENSIONS.some((ext) => relPath.endsWith(ext))) {
-      logVerbose(chalk.yellow(`Skipping non-JS file ${fpath}`));
+      logVerbose(chalkStderr.yellow(`Skipping non-JS file ${fpath}`));
     } else if (relPath.startsWith("_generated" + path.sep)) {
-      logVerbose(chalk.yellow(`Skipping ${fpath}`));
+      logVerbose(chalkStderr.yellow(`Skipping ${fpath}`));
     } else if (base.startsWith(".")) {
-      logVerbose(chalk.yellow(`Skipping dotfile ${fpath}`));
+      logVerbose(chalkStderr.yellow(`Skipping dotfile ${fpath}`));
     } else if (base.startsWith("#")) {
-      logVerbose(chalk.yellow(`Skipping likely emacs tempfile ${fpath}`));
+      logVerbose(chalkStderr.yellow(`Skipping likely emacs tempfile ${fpath}`));
     } else if (base === "schema.ts" || base === "schema.js") {
-      logVerbose(chalk.yellow(`Skipping ${fpath}`));
+      logVerbose(chalkStderr.yellow(`Skipping ${fpath}`));
     } else if ((base.match(/\./g) || []).length > 1) {
       // `auth.config.ts` and `convex.config.ts` are important not to bundle.
       // `*.test.ts` `*.spec.ts` are common in developer code.
-      logVerbose(chalk.yellow(`Skipping ${fpath} that contains multiple dots`));
+      logVerbose(
+        chalkStderr.yellow(`Skipping ${fpath} that contains multiple dots`),
+      );
     } else if (relPath.includes(" ")) {
       logVerbose(
-        chalk.yellow(`Skipping ${relPath} because it contains a space`),
+        chalkStderr.yellow(`Skipping ${relPath} because it contains a space`),
       );
     } else {
-      logVerbose(chalk.green(`Preparing ${fpath}`));
+      logVerbose(chalkStderr.green(`Preparing ${fpath}`));
       entryPoints.push(fpath);
     }
   }
@@ -425,7 +446,7 @@ export async function entryPoints(
       return true;
     }
     logVerbose(
-      chalk.yellow(
+      chalkStderr.yellow(
         `Skipping ${fpath} because it has no export or import to make it a valid TypeScript module`,
       ),
     );

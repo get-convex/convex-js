@@ -1,5 +1,127 @@
 # Changelog
 
+## 1.31.0
+
+- `db.get`, `db.patch`, `db.replace`, and `db.delete` now accept a table name as
+  the first argument (e.g. `db.get("messages", messageId)` instead of
+  `db.get(messageId)`). This new syntax is more ergonomic, safer, and will allow
+  developers to customize IDs in the future. We recommend that all developers
+  migrate to the new syntax, using the ESLint rule
+  [`@convex-dev/explicit-table-ids`](https://docs.convex.dev/eslint#explicit-table-ids)
+  or our standalone codemod tool
+  (`npx @convex-dev/codemod@latest explicit-ids`).
+  [**Learn more on news.convex.dev**](https://news.convex.dev/db-table-name/)
+
+## 1.30.0
+
+- The `--preview-create` parameter for `npx convex deploy` will now error if
+  used with a deploy key that is not a preview deploy key. Previously, the flag
+  would be ignored in this situation, and `npx convex deploy` would deploy to
+  the production deployment. If you were depending on this behavior, make sure
+  to remove the `--preview-create` flag when deploying to production.
+
+## 1.29.3
+
+- Revert ApiFromModules type changes introduced in 1.29.0 which sometimes caused
+  type mismatches due to `FunctionReference` sometimes missing properties.
+
+- Don't warn when `"$schema"` is present in convex.json.
+
+- Replace ProxyAgent with EnvHttpProxyAgent in the CLI so the `NO_PROXY`
+  environment variable is respected.
+
+## 1.29.2
+
+- When running `npx convex deploy`, the CLI will now ask for explicit
+  confirmation before deleting large indexes. This change is helpful for
+  avoiding situations where an index is accidentally deleted and backfilling it
+  takes a long time.
+
+## 1.29.1
+
+- Support for special error and no-op values of `CONVEX_DEPLOY_KEY` environment
+  variable used by the Convex Vercel integration.
+
+## 1.29.0
+
+- Code generation changes: modules and functions are sorted in more situations,
+  some unused imports have been removed, and some docstrings have been updated.
+  Expect to need to commit a larger-than-usual change to generated files after
+  upgrading to this version of Convex.
+
+- Add .pick(), .omit(), .partial(), and .extend() methods to v.objects()
+  validators. This makes reusing validator with small changes simpler. See
+  https://docs.convex.dev/functions/validation#reusing-and-extending-validators
+  for more.
+
+- Add a pagination result validation helper
+  `paginationResultValidator(itemValidator)` describing and validating the
+  return value of a paginated query.
+
+- New `npx convex codegen --component-dir ../path/to/component` flag for
+  component authors to generate code only for a component.
+
+- New `convex.json` configuration property `codegen.fileType` (`"dts/js"` or
+  `"ts"`, default `"dts/js"`) Default for applications is still "dts/js" but for
+  components generated files always use "ts" file extensions.
+
+- New `convex.json` configuration property `codegen.legacyComponentApi` (default
+  true) which can be set to false to opt into importing the API of a component
+  directly from its package or directory instead of inlining the result of
+  analyzing a component in parent component that uses it.
+
+- Improved TypeScript inference performance for `ApiFromModules`, the workhorse
+  type that transforms modules of Convex functions into a tree of
+  `FunctionReference` types for the `api` object. Thanks to David Blass, the
+  maintainer of ArkType, for working with us on these improvements.
+
+## 1.28.2
+
+- Bundling fix: don't double-deploy components in the convex/ directory.
+
+## 1.28.1
+
+- Add json schema to package.json.
+
+## 1.28.0
+
+- Deploy code path unification: all deploys now use a codepath that supports
+  components, whether or not any components are used in the project. Generating
+  the files in `convex/_generated/` now requires a deployment to be present and
+  for all environment variables used in convex/auth.config.ts to be set.
+
+  Scripts that call `npx convex codegen` are the most likely to be affected by
+  this change, and `npx convex codgen` no longer works for any projects in
+  preview deployments because preview deployments may not exist until the
+  deploy.
+
+  Committing generated code is recommended and this change makes this
+  recommendation more important.
+
+- WebSocket sync protocol support for TransitionChunk messages: just splitting a
+  Transition (containing new query results) into multiple WebSocket messages in
+  order prevent the server from appearing non-responsive.
+
+## 1.27.5
+
+- Export an `AuthConfig` type to describe the object exported from
+  `convex/auth.config.ts`.
+
+## 1.27.4
+
+- Add a `getAuth()` method to the client which returns the current token and
+  claims. This method is intended for instrumentation purposes like adding this
+  information to a reported Sentry error or event.
+
+- Change to CLI `--admin-key` and `--url` arg parsing logic to avoid coercing
+  empty strings to booleans.
+
+- Vendor jwt-decode along with a few other dependnecies; this brings the number
+  of runtime dependencies for Convex from 3 to 2: esbuild (binary) and prettier.
+
+- Fix ConvexProviderWithClerk to catch `getToken()` errors. This could cause
+  changes in behavior of refreshing Clerk tokens, we'll be watching this one.
+
 ## 1.27.3
 
 - Convex CLI now respects `HTTPS_PROXY` / `HTTP_PROXY` environment variables.

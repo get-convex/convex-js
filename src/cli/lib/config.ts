@@ -1,7 +1,8 @@
-import chalk from "chalk";
+import { chalkStderr } from "chalk";
 import equal from "deep-equal";
 import { EOL } from "os";
 import path from "path";
+import { z } from "zod";
 import { Context } from "../../bundler/context.js";
 import {
   changeSpinner,
@@ -32,8 +33,6 @@ import {
   currentPackageHomepage,
 } from "./utils/utils.js";
 import { createHash } from "crypto";
-import { promisify } from "util";
-import zlib from "zlib";
 import { recursivelyDelete } from "./fsUtils.js";
 import { NodeDependency } from "./deployApi/modules.js";
 import { ComponentDefinitionPath } from "./components/definition/directoryStructure.js";
@@ -45,8 +44,6 @@ import { debugIsolateBundlesSerially } from "../../bundler/debugBundle.js";
 import { ensureWorkosEnvironmentProvisioned } from "./workos/workos.js";
 export { productionProvisionHost, provisionHost } from "./utils/utils.js";
 
-const brotli = promisify(zlib.brotliCompress);
-
 /** Type representing auth configuration. */
 export interface AuthInfo {
   // Provider-specific application identifier. Corresponds to the `aud` field in an OIDC token.
@@ -55,12 +52,29 @@ export interface AuthInfo {
   domain: string;
 }
 
+/**
+ * convex.json file parsing and rewriting notes
+ * - Unknown fields at the top level and in node and codegen are preserved
+ *   so that older CLI versions can deploy new projects (this functionality
+ *   will be removed in the future).
+ * - Deprecated values are tracked only so that we can delete them, or
+ *   (for authInfo) migrate to a convex/auth.config.ts and delete.
+ * - Default values for properties with an obvious default are removed in order
+ *   to keep the config file small so we can delete the file if it only has
+ *   deprecated properties or obvious defaults.
+ * - convex.json does not allow comments, it will be rewritten
+ *   automatically. This could change in the future, a property config
+ *   file makes more sense. Previously automatically set values like
+ *   productionUrl were written to it, but it's becoming more like a config file.
+ */
+
 /** Type representing Convex project configuration. */
 export interface ProjectConfig {
   functions: string;
   node: {
     externalPackages: string[];
-    nodeVersion?: string;
+    // nodeVersion has no default value, its presence/absence is meaningful
+    nodeVersion?: string | undefined;
   };
   generateCommonJSApi: boolean;
   // deprecated
@@ -70,14 +84,23 @@ export interface ProjectConfig {
   // deprecated
   prodUrl?: string | undefined;
   // deprecated
-  authInfo?: AuthInfo[];
+  authInfo?: AuthInfo[] | undefined;
 
-  // These are beta flags for using static codegen from the `api.d.ts` and `dataModel.d.ts` files.
   codegen: {
     staticApi: boolean;
     staticDataModel: boolean;
+    legacyComponentApi?: boolean;
+    fileType?: "ts" | "js/dts";
   };
 }
+
+/** Type written to convex.json (where we elide deleted default values)  */
+type DefaultsRemovedProjectConfig = Partial<
+  Omit<ProjectConfig, "node" | "codegen"> & {
+    node: Partial<ProjectConfig["node"]>;
+    codegen: Partial<ProjectConfig["codegen"]>;
+  }
+>;
 
 export interface Config {
   projectConfig: ProjectConfig;
@@ -98,6 +121,16 @@ export interface ConfigWithModuleHashes {
 
 const DEFAULT_FUNCTIONS_PATH = "convex/";
 
+/** Whether .ts file extensions should be used for generated code (default is false). */
+export function usesTypeScriptCodegen(projectConfig: ProjectConfig): boolean {
+  return projectConfig.codegen.fileType === "ts";
+}
+
+/** Whether the new component API import style should be used (default is false) */
+export function usesComponentApiImports(projectConfig: ProjectConfig): boolean {
+  return projectConfig.codegen.legacyComponentApi === false;
+}
+
 /** Check if object is of AuthInfo type. */
 function isAuthInfo(object: any): object is AuthInfo {
   return (
@@ -115,111 +148,195 @@ function isAuthInfos(object: any): object is AuthInfo[] {
 /** Error parsing ProjectConfig representation. */
 class ParseError extends Error {}
 
+// Zod schema for ProjectConfig
+const AuthInfoSchema = z.object({
+  applicationID: z.string(),
+  domain: z.string(),
+});
+
+// Separate Node and Codegen schemas so we can parse these loose or strict
+const NodeSchema = z.object({
+  externalPackages: z
+    .array(z.string())
+    .default([])
+    .describe(
+      "list of npm packages to install at deploy time instead of bundling. Packages with binaries should be added here.",
+    ),
+  nodeVersion: z
+    .string()
+    .optional()
+    .describe("The Node.js version to use for Node.js functions"),
+});
+
+const CodegenSchema = z.object({
+  staticApi: z
+    .boolean()
+    .default(false)
+    .describe(
+      "Use Convex function argument validators and return value validators to generate a typed API object",
+    ),
+  staticDataModel: z.boolean().default(false),
+  // These optional fields have no defaults - their presence/absence is meaningful
+  legacyComponentApi: z.boolean().optional(),
+  fileType: z.enum(["ts", "js/dts"]).optional(),
+});
+
+const refineToObject = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.refine((val) => val !== null && !Array.isArray(val), {
+    message: "Expected `convex.json` to contain an object",
+  });
+
+// Factory function to create schema with strict or passthrough behavior
+const createProjectConfigSchema = (strict: boolean) => {
+  const nodeSchema = strict ? NodeSchema.strict() : NodeSchema.passthrough();
+  const codegenSchema = strict
+    ? CodegenSchema.strict()
+    : CodegenSchema.passthrough();
+
+  const baseObject = z.object({
+    functions: z
+      .string()
+      .default(DEFAULT_FUNCTIONS_PATH)
+      .describe("Relative file path to the convex directory"),
+    node: nodeSchema.default({ externalPackages: [] }),
+    codegen: codegenSchema.default({
+      staticApi: false,
+      staticDataModel: false,
+    }),
+    generateCommonJSApi: z.boolean().default(false),
+
+    // Optional $schema field for JSON schema validation in editors
+    $schema: z.string().optional(),
+
+    // Deprecated fields that have been deprecated for years, only here so we
+    // know it's safe to delete them.
+    project: z.string().optional(),
+    team: z.string().optional(),
+    prodUrl: z.string().optional(),
+    authInfo: z.array(AuthInfoSchema).optional(),
+  });
+
+  // Apply strict or passthrough BEFORE refine
+  const withStrictness = strict
+    ? baseObject.strict()
+    : baseObject.passthrough();
+
+  // Now apply the refinement
+  return withStrictness.refine(
+    (data) => {
+      // Validate that generateCommonJSApi is not true when using TypeScript codegen
+      if (data.generateCommonJSApi && data.codegen.fileType === "ts") {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        'Cannot use `generateCommonJSApi: true` with `codegen.fileType: "ts"`. ' +
+        "CommonJS modules require JavaScript generation. " +
+        'Either set `codegen.fileType: "js/dts"` or remove `generateCommonJSApi`.',
+      path: ["generateCommonJSApi"],
+    },
+  );
+};
+
+// Parse allowing extra fields (for forward compatibility)
+const ProjectConfigSchema = refineToObject(createProjectConfigSchema(false));
+
+// Strict schema warn about extra keys
+const ProjectConfigSchemaStrict = refineToObject(
+  createProjectConfigSchema(true),
+);
+
+const warnedUnknownKeys = new Set<string>();
+export function resetUnknownKeyWarnings() {
+  warnedUnknownKeys.clear();
+}
+
 /** Parse object to ProjectConfig. */
 export async function parseProjectConfig(
   ctx: Context,
   obj: any,
 ): Promise<ProjectConfig> {
-  if (typeof obj !== "object") {
+  if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     return await ctx.crash({
       exitCode: 1,
       errorType: "invalid filesystem data",
       printedMessage: "Expected `convex.json` to contain an object",
     });
   }
-  if (typeof obj.node === "undefined") {
-    obj.node = {
-      externalPackages: [],
-    };
-  } else {
-    if (typeof obj.node.externalPackages === "undefined") {
-      obj.node.externalPackages = [];
-    } else if (
-      !Array.isArray(obj.node.externalPackages) ||
-      !obj.node.externalPackages.every((item: any) => typeof item === "string")
-    ) {
-      return await ctx.crash({
-        exitCode: 1,
-        errorType: "invalid filesystem data",
-        printedMessage:
-          "Expected `node.externalPackages` in `convex.json` to be an array of strings",
-      });
+
+  try {
+    // Try strict parse first to detect unknown keys
+    return ProjectConfigSchemaStrict.parse(obj);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      // Check if all issues are unrecognized_keys issues
+      const unknownKeyIssues = error.issues.filter(
+        (issue) => issue.code === "unrecognized_keys",
+      );
+
+      if (
+        unknownKeyIssues.length > 0 &&
+        unknownKeyIssues.length === error.issues.length
+      ) {
+        // All errors are just unknown keys - warn about them
+        for (const issue of unknownKeyIssues) {
+          if (issue.code === "unrecognized_keys") {
+            const pathPrefix =
+              issue.path.length > 0 ? issue.path.join(".") + "." : "";
+            const unknownKeys = issue.keys as string[];
+            const newUnknownKeys = unknownKeys.filter(
+              (key) => !warnedUnknownKeys.has(pathPrefix + key),
+            );
+
+            if (newUnknownKeys.length > 0) {
+              const fullPath =
+                issue.path.length > 0
+                  ? `\`${issue.path.join(".")}\``
+                  : "`convex.json`";
+              logMessage(
+                chalkStderr.yellow(
+                  `Warning: Unknown ${newUnknownKeys.length === 1 ? "property" : "properties"} in ${fullPath}: ${newUnknownKeys.map((k) => `\`${k}\``).join(", ")}`,
+                ),
+              );
+              logMessage(
+                chalkStderr.gray(
+                  "  These properties will be preserved but are not recognized by this version of Convex.",
+                ),
+              );
+
+              // Track that we've warned about these keys
+              newUnknownKeys.forEach((key) =>
+                warnedUnknownKeys.add(pathPrefix + key),
+              );
+            }
+          }
+        }
+        // Re-parse with passthrough schema to preserve unknown keys
+        return ProjectConfigSchema.parse(obj);
+      }
+
+      // Handle validation errors we won't ignore
+      if (error instanceof z.ZodError) {
+        const issue = error.issues[0];
+        const pathStr = issue.path.join(".");
+        const message = pathStr
+          ? `\`${pathStr}\` in \`convex.json\`: ${issue.message}`
+          : `\`convex.json\`: ${issue.message}`;
+        return await ctx.crash({
+          exitCode: 1,
+          errorType: "invalid filesystem data",
+          printedMessage: message,
+        });
+      }
     }
-
-    if (
-      typeof obj.node.nodeVersion !== "undefined" &&
-      typeof obj.node.nodeVersion !== "string"
-    ) {
-      return await ctx.crash({
-        exitCode: 1,
-        errorType: "invalid filesystem data",
-        printedMessage:
-          "Expected `node.nodeVersion` in `convex.json` to be a string",
-      });
-    }
-  }
-  if (typeof obj.generateCommonJSApi === "undefined") {
-    obj.generateCommonJSApi = false;
-  } else if (typeof obj.generateCommonJSApi !== "boolean") {
     return await ctx.crash({
       exitCode: 1,
       errorType: "invalid filesystem data",
-      printedMessage:
-        "Expected `generateCommonJSApi` in `convex.json` to be true or false",
+      printedMessage: (error as any).toString(),
     });
   }
-
-  if (typeof obj.functions === "undefined") {
-    obj.functions = DEFAULT_FUNCTIONS_PATH;
-  } else if (typeof obj.functions !== "string") {
-    return await ctx.crash({
-      exitCode: 1,
-      errorType: "invalid filesystem data",
-      printedMessage: "Expected `functions` in `convex.json` to be a string",
-    });
-  }
-
-  // Allow the `authInfo` key to be omitted, treating it as an empty list of providers.
-  if (obj.authInfo !== undefined) {
-    if (!isAuthInfos(obj.authInfo)) {
-      return await ctx.crash({
-        exitCode: 1,
-        errorType: "invalid filesystem data",
-        printedMessage:
-          "Expected `authInfo` in `convex.json` to be type AuthInfo[]",
-      });
-    }
-  }
-
-  if (typeof obj.codegen === "undefined") {
-    obj.codegen = {};
-  }
-  if (typeof obj.codegen !== "object") {
-    return await ctx.crash({
-      exitCode: 1,
-      errorType: "invalid filesystem data",
-      printedMessage: "Expected `codegen` in `convex.json` to be an object",
-    });
-  }
-  if (typeof obj.codegen.staticApi === "undefined") {
-    obj.codegen.staticApi = false;
-  }
-  if (typeof obj.codegen.staticDataModel === "undefined") {
-    obj.codegen.staticDataModel = false;
-  }
-  if (
-    typeof obj.codegen.staticApi !== "boolean" ||
-    typeof obj.codegen.staticDataModel !== "boolean"
-  ) {
-    return await ctx.crash({
-      exitCode: 1,
-      errorType: "invalid filesystem data",
-      printedMessage:
-        "Expected `codegen.staticApi` and `codegen.staticDataModel` in `convex.json` to be booleans",
-    });
-  }
-
-  return obj;
 }
 
 // Parse a deployment config returned by the backend, picking out
@@ -274,7 +391,7 @@ export async function configFilepath(ctx: Context): Promise<string> {
   const preferredLocationExists = ctx.fs.exists(preferredLocation);
   const wrongLocationExists = ctx.fs.exists(wrongLocation);
   if (preferredLocationExists && wrongLocationExists) {
-    const message = `${chalk.red(`Error: both ${preferredLocation} and ${wrongLocation} files exist!`)}\nConsolidate these and remove ${wrongLocation}.`;
+    const message = `${chalkStderr.red(`Error: both ${preferredLocation} and ${wrongLocation} files exist!`)}\nConsolidate these and remove ${wrongLocation}.`;
     return await ctx.crash({
       exitCode: 1,
       errorType: "invalid filesystem data",
@@ -333,15 +450,15 @@ export async function readProjectConfig(ctx: Context): Promise<{
     );
   } catch (err) {
     if (err instanceof ParseError || err instanceof SyntaxError) {
-      logError(chalk.red(`Error: Parsing "${configPath}" failed`));
-      logMessage(chalk.gray(err.toString()));
+      logError(chalkStderr.red(`Error: Parsing "${configPath}" failed`));
+      logMessage(chalkStderr.gray(err.toString()));
     } else {
       logFailure(
         `Error: Unable to read project config file "${configPath}"\n` +
           "  Are you running this command from the root directory of a Convex project? If so, run `npx convex dev` first.",
       );
       if (err instanceof Error) {
-        logError(chalk.red(err.message));
+        logError(chalkStderr.red(err.message));
       }
     }
     return await ctx.crash({
@@ -372,7 +489,7 @@ export async function enforceDeprecatedConfigField(
     exitCode: 1,
     errorType: "invalid filesystem data",
     errForSentry: err,
-    printedMessage: `Error: Parsing convex.json failed:\n${chalk.gray(err.toString())}`,
+    printedMessage: `Error: Parsing convex.json failed:\n${chalkStderr.gray(err.toString())}`,
   });
 }
 
@@ -563,7 +680,7 @@ export async function upgradeOldAuthInfoToAuthConfig(
   };`,
       );
       logMessage(
-        chalk.yellowBright(
+        chalkStderr.yellowBright(
           `Moved auth config from config.json to \`${authConfigRelativePath}\``,
         ),
       );
@@ -600,7 +717,7 @@ export async function writeProjectConfig(
   } else if (deleteIfAllDefault && ctx.fs.exists(configPath)) {
     ctx.fs.unlink(configPath);
     logMessage(
-      chalk.yellowBright(
+      chalkStderr.yellowBright(
         `Deleted ${configPath} since it completely matched defaults`,
       ),
     );
@@ -610,37 +727,48 @@ export async function writeProjectConfig(
   });
 }
 
-function stripDefaults(projectConfig: ProjectConfig): any {
-  const stripped: any = { ...projectConfig };
+function stripDefaults(
+  projectConfig: ProjectConfig,
+): DefaultsRemovedProjectConfig {
+  const stripped: DefaultsRemovedProjectConfig = JSON.parse(
+    JSON.stringify(projectConfig),
+  );
   if (stripped.functions === DEFAULT_FUNCTIONS_PATH) {
     delete stripped.functions;
   }
   if (Array.isArray(stripped.authInfo) && stripped.authInfo.length === 0) {
     delete stripped.authInfo;
   }
-  if (stripped.node.externalPackages.length === 0) {
-    delete stripped.node.externalPackages;
+  if (stripped.node!.externalPackages!.length === 0) {
+    delete stripped.node!.externalPackages;
   }
   if (stripped.generateCommonJSApi === false) {
     delete stripped.generateCommonJSApi;
   }
   // Remove "node" field if it has nothing nested under it
-  if (Object.keys(stripped.node).length === 0) {
+  if (Object.keys(stripped!.node!).length === 0) {
     delete stripped.node;
   }
-  if (stripped.codegen.staticApi === false) {
-    delete stripped.codegen.staticApi;
+  if (stripped.codegen!.staticApi === false) {
+    delete stripped.codegen!.staticApi;
   }
-  if (stripped.codegen.staticDataModel === false) {
-    delete stripped.codegen.staticDataModel;
+  if (stripped.codegen!.staticDataModel === false) {
+    delete stripped.codegen!.staticDataModel;
   }
-  if (Object.keys(stripped.codegen).length === 0) {
+
+  // `"fileType"` and `"legacyComponentApi"` are optional and undefined by
+  // default, and the behavior of undefined may change in the future for these
+  // so we don't want to strip them.
+
+  if (Object.keys(stripped.codegen!).length === 0) {
     delete stripped.codegen;
   }
   return stripped;
 }
 
-function filterWriteableConfig(projectConfig: any) {
+function filterWriteableConfig(
+  projectConfig: DefaultsRemovedProjectConfig,
+): DefaultsRemovedProjectConfig {
   const writeable: any = { ...projectConfig };
   delete writeable.project;
   delete writeable.team;
@@ -755,114 +883,6 @@ export type AppDefinitionSpecWithoutImpls = Omit<
   AppDefinitionSpec,
   "schema" | "functions" | "auth"
 >;
-
-export function configJSON(
-  config: Config,
-  adminKey: string,
-  schemaId?: string,
-  pushMetrics?: PushMetrics,
-  bundledModuleInfos?: BundledModuleInfo[],
-) {
-  // Override origin with the url
-  const projectConfig = {
-    projectSlug: config.projectConfig.project,
-    teamSlug: config.projectConfig.team,
-    functions: config.projectConfig.functions,
-    authInfo: config.projectConfig.authInfo,
-  };
-  return {
-    config: projectConfig,
-    modules: config.modules,
-    nodeDependencies: config.nodeDependencies,
-    udfServerVersion: config.udfServerVersion,
-    schemaId,
-    adminKey,
-    pushMetrics,
-    bundledModuleInfos,
-    nodeVersion: config.nodeVersion,
-  };
-}
-
-// Time in seconds of various spans of time during a push.
-export type PushMetrics = {
-  typecheck: number;
-  bundle: number;
-  schemaPush: number;
-  codePull: number;
-  totalBeforePush: number;
-};
-
-/** Push configuration to the given remote origin. */
-export async function pushConfig(
-  ctx: Context,
-  config: Config,
-  options: {
-    adminKey: string;
-    url: string;
-    deploymentName: string | null;
-    pushMetrics?: PushMetrics | undefined;
-    schemaId?: string | undefined;
-    bundledModuleInfos?: BundledModuleInfo[];
-  },
-): Promise<void> {
-  const serializedConfig = configJSON(
-    config,
-    options.adminKey,
-    options.schemaId,
-    options.pushMetrics,
-    options.bundledModuleInfos,
-  );
-  const fetch = deploymentFetch(ctx, {
-    deploymentUrl: options.url,
-    adminKey: options.adminKey,
-  });
-  try {
-    if (config.nodeDependencies.length > 0) {
-      changeSpinner(
-        "Installing external packages and deploying source code...",
-      );
-    } else {
-      changeSpinner("Analyzing and deploying source code...");
-    }
-    await fetch("/api/push_config", {
-      body: await brotli(JSON.stringify(serializedConfig), {
-        params: {
-          [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
-          [zlib.constants.BROTLI_PARAM_QUALITY]: 4,
-        },
-      }),
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Encoding": "br",
-      },
-    });
-  } catch (error: unknown) {
-    await handlePushConfigError(
-      ctx,
-      error,
-      "Error: Unable to push deployment config to " + options.url,
-      options.deploymentName,
-      {
-        adminKey: options.adminKey,
-        deploymentUrl: options.url,
-        deploymentNotice: "",
-      },
-    );
-  }
-}
-
-type Files = { source: string; filename: string }[];
-
-export type CodegenResponse =
-  | {
-      success: true;
-      files: Files;
-    }
-  | {
-      success: false;
-      error: string;
-    };
 
 function renderModule(module: {
   path: string;
@@ -1089,6 +1109,17 @@ export function diffConfig(
   return { diffString: diff, stats };
 }
 
+/** Handle an error from
+ * legacy push path:
+ * - /api/push_config
+ * modern push paths:
+ * - /api/deploy2/evaluate_push
+ * - /api/deploy2/start_push
+ * - /api/deploy2/finish_push
+ *
+ * finish_push errors are different from start_push errors and in theory could
+ * be handled differently, but starting over works for all of them.
+ */
 export async function handlePushConfigError(
   ctx: Context,
   error: unknown,
@@ -1117,9 +1148,12 @@ export async function handlePushConfigError(
       const autoProvisionIfWorkOSTeamAssociated = !!(
         homepage &&
         [
+          // FIXME: We don't want to rely on `homepage` from `package.json` for this
+          // because it's brittle, and because AuthKit templates are now in get-convex/templates
           "https://github.com/workos/template-convex-nextjs-authkit/#readme",
           "https://github.com/workos/template-convex-react-vite-authkit/#readme",
           "https://github.com:workos/template-convex-react-vite-authkit/#readme",
+          "https://github.com/workos/template-convex-tanstack-start-authkit/#readme",
         ].includes(homepage)
       );
       // Initially only specific templates offer team creation.
@@ -1150,7 +1184,7 @@ export async function handlePushConfigError(
     }
 
     const envVarMessage =
-      `Environment variable ${chalk.bold(
+      `Environment variable ${chalkStderr.bold(
         variableName,
       )} is used in auth config file but ` + `its value was not set.`;
     let setEnvVarInstructions =
@@ -1164,7 +1198,7 @@ export async function handlePushConfigError(
         deploymentName,
         `/settings/environment-variables${variableQuery}`,
       );
-      setEnvVarInstructions = `Go to:\n\n    ${chalk.bold(
+      setEnvVarInstructions = `Go to:\n\n    ${chalkStderr.bold(
         dashboardUrl,
       )}\n\n  to set it up. `;
     }
@@ -1173,6 +1207,19 @@ export async function handlePushConfigError(
       errorType: "invalid filesystem or env vars",
       errForSentry: error,
       printedMessage: envVarMessage + "\n" + setEnvVarInstructions,
+    });
+  }
+
+  if (data?.code === "RaceDetected") {
+    // Environment variables or schema changed during push. This is a transient
+    // error that should be retried immediately with exponential backoff.
+    const message =
+      data.message || "Schema or environment variables changed during push";
+    return await ctx.crash({
+      exitCode: 1,
+      errorType: "transient",
+      errForSentry: error,
+      printedMessage: chalkStderr.yellow(message),
     });
   }
 

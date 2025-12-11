@@ -21,7 +21,6 @@ import {
   waitForSchema,
 } from "./deploy2.js";
 import { version } from "../version.js";
-import { PushOptions, runNonComponentsPush } from "./push.js";
 import { ensureHasConvexDependency, functionsDir } from "./utils/utils.js";
 import {
   bundleDefinitions,
@@ -43,35 +42,38 @@ import {
 import { typeCheckFunctionsInMode, TypeCheckMode } from "./typecheck.js";
 import { withTmpDir } from "../../bundler/fs.js";
 import { handleDebugBundlePath } from "./debugBundlePath.js";
-import chalk from "chalk";
+import { chalkStderr } from "chalk";
 import { StartPushRequest, StartPushResponse } from "./deployApi/startPush.js";
 import {
   deploymentSelectionWithinProjectFromOptions,
   loadSelectedDeploymentCredentials,
 } from "./api.js";
-import {
-  FinishPushDiff,
-  DeveloperIndexConfig,
-} from "./deployApi/finishPush.js";
+import { FinishPushDiff } from "./deployApi/finishPush.js";
 import { Reporter, Span } from "./tracing.js";
-import {
-  DEFINITION_FILENAME_JS,
-  DEFINITION_FILENAME_TS,
-} from "./components/constants.js";
+import { DEFINITION_FILENAME_TS } from "./components/constants.js";
 import { DeploymentSelection } from "./deploymentSelection.js";
 import { deploymentDashboardUrlPage } from "./dashboard.js";
-async function findComponentRootPath(ctx: Context, functionsDir: string) {
-  // Default to `.ts` but fallback to `.js` if not present.
-  let componentRootPath = path.resolve(
-    path.join(functionsDir, DEFINITION_FILENAME_TS),
-  );
-  if (!ctx.fs.exists(componentRootPath)) {
-    componentRootPath = path.resolve(
-      path.join(functionsDir, DEFINITION_FILENAME_JS),
-    );
-  }
-  return componentRootPath;
-}
+import { formatIndex, LargeIndexDeletionCheck } from "./indexes.js";
+import { checkForLargeIndexDeletion } from "./checkForLargeIndexDeletion.js";
+import { LogManager } from "./logs.js";
+
+export type PushOptions = {
+  adminKey: string;
+  verbose: boolean;
+  dryRun: boolean;
+  typecheck: "enable" | "try" | "disable";
+  typecheckComponents: boolean;
+  debug: boolean;
+  debugBundlePath?: string | undefined;
+  debugNodeApis: boolean;
+  codegen: boolean;
+  url: string;
+  deploymentName: string | null;
+  writePushRequest?: string | undefined;
+  liveComponentSources: boolean;
+  logManager?: LogManager | undefined;
+  largeIndexDeletionCheck: LargeIndexDeletionCheck;
+};
 
 export async function runCodegen(
   ctx: Context,
@@ -84,12 +86,14 @@ export async function runCodegen(
   const { configPath, projectConfig } = await readProjectConfig(ctx);
   const functionsDirectoryPath = functionsDir(configPath, projectConfig);
 
-  const componentRootPath = await findComponentRootPath(
-    ctx,
-    functionsDirectoryPath,
-  );
+  if (options.init) {
+    await doInitCodegen(ctx, functionsDirectoryPath, false, {
+      dryRun: options.dryRun,
+      debug: options.debug,
+    });
+  }
 
-  if (ctx.fs.exists(componentRootPath)) {
+  if (!options.systemUdfs) {
     // Early exit for a better error message trying to use a preview key.
     if (deploymentSelection.kind === "preview") {
       return await ctx.crash({
@@ -118,7 +122,7 @@ export async function runCodegen(
         url: credentials.url,
         adminKey: credentials.adminKey,
         generateCommonJSApi: options.commonjs,
-        verbose: options.dryRun,
+        verbose: !!process.env.CONVEX_VERBOSE,
         codegen: true,
         liveComponentSources: options.liveComponentSources,
         typecheckComponents: false,
@@ -126,15 +130,8 @@ export async function runCodegen(
       },
     );
   } else {
-    if (options.init) {
-      await doInitCodegen(ctx, functionsDirectoryPath, false, {
-        dryRun: options.dryRun,
-        debug: options.debug,
-      });
-    }
-
     if (options.typecheck !== "disable") {
-      logMessage(chalk.gray("Running TypeScript typecheck…"));
+      logMessage(chalkStderr.gray("Running TypeScript typecheck…"));
     }
 
     await doCodegen(ctx, functionsDirectoryPath, options.typecheck, {
@@ -147,13 +144,7 @@ export async function runCodegen(
 
 export async function runPush(ctx: Context, options: PushOptions) {
   const { configPath, projectConfig } = await readProjectConfig(ctx);
-  const convexDir = functionsDir(configPath, projectConfig);
-  const componentRootPath = await findComponentRootPath(ctx, convexDir);
-  if (ctx.fs.exists(componentRootPath)) {
-    await runComponentsPush(ctx, options, configPath, projectConfig);
-  } else {
-    await runNonComponentsPush(ctx, options, configPath, projectConfig);
-  }
+  await runComponentsPush(ctx, options, configPath, projectConfig);
 }
 
 async function startComponentsPushAndCodegen(
@@ -176,6 +167,8 @@ async function startComponentsPushAndCodegen(
     codegen: boolean;
     liveComponentSources?: boolean;
     debugNodeApis: boolean;
+    largeIndexDeletionCheck: LargeIndexDeletionCheck;
+    codegenOnlyThisComponent?: string | undefined;
   },
 ): Promise<StartPushResponse | null> {
   const convexDir = await getFunctionsDirectoryPath(ctx);
@@ -195,7 +188,34 @@ async function startComponentsPushAndCodegen(
       printedMessage: `Invalid component root directory (${isComponent.why}): ${convexDir}`,
     });
   }
-  const rootComponent = isComponent.component;
+
+  let rootComponent = isComponent.component;
+  if (options.codegenOnlyThisComponent) {
+    const absolutePath = path.resolve(options.codegenOnlyThisComponent);
+    let componentConfigPath: string;
+
+    // Must be a directory containing a convex.config.ts
+    componentConfigPath = path.join(absolutePath, DEFINITION_FILENAME_TS);
+    if (!ctx.fs.exists(componentConfigPath)) {
+      return await ctx.crash({
+        exitCode: 1,
+        errorType: "invalid filesystem data",
+        printedMessage: `Only directories with convex.config.ts files are supported, this directory does not: ${absolutePath}`,
+      });
+    }
+
+    const syntheticConfigPath = path.join(
+      rootComponent.path,
+      DEFINITION_FILENAME_TS,
+    );
+    rootComponent = {
+      isRoot: true,
+      path: rootComponent.path,
+      definitionPath: syntheticConfigPath,
+      isRootWithoutConfig: false,
+      syntheticComponentImport: componentConfigPath,
+    };
+  }
 
   changeSpinner("Finding component definitions...");
   // Create a list of relevant component directories. These are just for knowing
@@ -213,12 +233,29 @@ async function startComponentsPushAndCodegen(
       ),
   );
 
+  // Initial codegen is everything we need to get code runnable:
+  // root components and other components need a basic _generated/api.ts etc.
+  // just to make the code bundleable and runnable so we can analyze.
   if (options.codegen) {
     changeSpinner("Generating server code...");
     await parentSpan.enterAsync("doInitialComponentCodegen", () =>
       withTmpDir(async (tmpDir) => {
-        await doInitialComponentCodegen(ctx, tmpDir, rootComponent, options);
+        // Skip the root in component cases
+        if (!rootComponent.syntheticComponentImport) {
+          // Do root first so if a component fails, we'll at least have a working root.
+          await doInitialComponentCodegen(ctx, tmpDir, rootComponent, options);
+        }
         for (const directory of components.values()) {
+          if (directory.isRoot) {
+            continue;
+          }
+          // When --component-dir is used, only generate code for the target component
+          if (
+            rootComponent.syntheticComponentImport &&
+            directory.definitionPath !== rootComponent.syntheticComponentImport
+          ) {
+            continue;
+          }
           await doInitialComponentCodegen(ctx, tmpDir, directory, options);
         }
       }),
@@ -239,6 +276,7 @@ async function startComponentsPushAndCodegen(
       // Note that this *includes* the root component.
       [...components.values()],
       !!options.liveComponentSources,
+      options.verbose,
     ),
   );
 
@@ -256,7 +294,8 @@ async function startComponentsPushAndCodegen(
       bundleImplementations(
         ctx,
         rootComponent,
-        [...components.values()],
+        // When running codegen for a specific component, don't bundle the root.
+        [...components.values()].filter((dir) => !dir.syntheticComponentImport),
         projectConfig.node.externalPackages,
         options.liveComponentSources ? ["@convex-dev/component-source"] : [],
         options.verbose,
@@ -327,6 +366,19 @@ async function startComponentsPushAndCodegen(
   }
   logStartPushSizes(parentSpan, startPushRequest);
 
+  if (options.largeIndexDeletionCheck !== "no verification") {
+    await parentSpan.enterAsync("checkForLargeIndexDeletion", (span) =>
+      checkForLargeIndexDeletion({
+        ctx,
+        span,
+        request: startPushRequest,
+        options,
+        askForConfirmation:
+          options.largeIndexDeletionCheck === "ask for confirmation",
+      }),
+    );
+  }
+
   changeSpinner("Uploading functions to Convex...");
   const startPushResponse = await parentSpan.enterAsync("startPush", (span) =>
     startPush(ctx, span, startPushRequest, options),
@@ -340,21 +392,38 @@ async function startComponentsPushAndCodegen(
     changeSpinner("Generating TypeScript bindings...");
     await parentSpan.enterAsync("doFinalComponentCodegen", () =>
       withTmpDir(async (tmpDir) => {
-        await doFinalComponentCodegen(
-          ctx,
-          tmpDir,
-          rootComponent,
-          rootComponent,
-          startPushResponse,
-          options,
-        );
+        // TODO generating code for the root component last might be better DX
+        // When running codegen for a specific component, don't generate types for the root
+        if (!rootComponent.syntheticComponentImport) {
+          // Do the root first
+          await doFinalComponentCodegen(
+            ctx,
+            tmpDir,
+            rootComponent,
+            rootComponent,
+            startPushResponse,
+            components,
+            options,
+          );
+        }
         for (const directory of components.values()) {
+          if (directory.isRoot) {
+            continue;
+          }
+          // When --component-dir is used, only generate code for the target component
+          if (
+            rootComponent.syntheticComponentImport &&
+            directory.definitionPath !== rootComponent.syntheticComponentImport
+          ) {
+            continue;
+          }
           await doFinalComponentCodegen(
             ctx,
             tmpDir,
             rootComponent,
             directory,
             startPushResponse,
+            components,
             options,
           );
         }
@@ -364,9 +433,33 @@ async function startComponentsPushAndCodegen(
 
   changeSpinner("Running TypeScript...");
   await parentSpan.enterAsync("typeCheckFunctionsInMode", async () => {
-    await typeCheckFunctionsInMode(ctx, options.typecheck, rootComponent.path);
+    // When running codegen for a specific component, don't typecheck the root
+    if (!rootComponent.syntheticComponentImport) {
+      await typeCheckFunctionsInMode(
+        ctx,
+        options.typecheck,
+        rootComponent.path,
+      );
+    }
     if (options.typecheckComponents) {
       for (const directory of components.values()) {
+        if (!directory.isRoot) {
+          await typeCheckFunctionsInMode(
+            ctx,
+            options.typecheck,
+            directory.path,
+          );
+        }
+      }
+    } else if (rootComponent.syntheticComponentImport) {
+      // When running codegen for a specific component, only typecheck that component.
+      for (const directory of components.values()) {
+        if (
+          directory.isRoot ||
+          directory.definitionPath !== rootComponent.syntheticComponentImport
+        ) {
+          continue;
+        }
         await typeCheckFunctionsInMode(ctx, options.typecheck, directory.path);
       }
     }
@@ -497,7 +590,7 @@ function printDiff(
       msg = msg.slice(0, -1); // strip last new line
       logFinishedStep(msg);
     }
-    const addedStaged = rootDiff.added_indexes.filter((i) => i.staged);
+
     const addedEnabled = rootDiff.added_indexes.filter((i) => !i.staged);
     if (addedEnabled.length > 0) {
       let msg = `${opts.dryRun ? "Would add" : "Added"} table indexes:\n`;
@@ -507,6 +600,8 @@ function printDiff(
       msg = msg.slice(0, -1); // strip last new line
       logFinishedStep(msg);
     }
+
+    const addedStaged = rootDiff.added_indexes.filter((i) => i.staged);
     if (addedStaged.length > 0) {
       let msg = `${opts.dryRun ? "Would add" : "Added"} staged table indexes:\n`;
       for (const index of addedStaged) {
@@ -515,11 +610,13 @@ function printDiff(
           opts.deploymentName,
           `/data?table=${table}&showIndexes=true`,
         );
-        msg += `  [+] ${formatIndex(index)}, see progress: ${progressLink}\n`;
+        msg += `  [+] ${formatIndex(index)}\n`;
+        msg += `      See progress: ${progressLink}\n`;
       }
       msg = msg.slice(0, -1); // strip last new line
       logFinishedStep(msg);
     }
+
     if (rootDiff.enabled_indexes && rootDiff.enabled_indexes.length > 0) {
       let msg = opts.dryRun
         ? `These indexes would be enabled:\n`
@@ -530,6 +627,7 @@ function printDiff(
       msg = msg.slice(0, -1); // strip last new line
       logFinishedStep(msg);
     }
+
     if (rootDiff.disabled_indexes && rootDiff.disabled_indexes.length > 0) {
       let msg = opts.dryRun
         ? `These indexes would be staged:\n`
@@ -557,8 +655,4 @@ function printDiff(
       logFinishedStep(`Remounted component ${componentPath}.`);
     }
   }
-}
-
-function formatIndex(index: DeveloperIndexConfig) {
-  return `${index.name}`;
 }

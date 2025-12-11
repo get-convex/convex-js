@@ -1,3 +1,15 @@
+/**
+ * The local state of the client:
+ * - which queries are subscribed to
+ * - the "Query Set Version," used to produce QuerySetModification messages
+ * - the current auth token and "Identity Version"
+ *
+ * Local state does not include:
+ * - query results (see RemoteQuerySet)
+ * - locally made "optimistic update" modifications to query results (see OptimisticQueryResults)
+ * - any query results at all
+ **/
+
 import { convexToJson, Value } from "../../values/index.js";
 import {
   AddQuery,
@@ -27,23 +39,24 @@ type LocalQuery = {
   componentPath?: string | undefined;
 };
 
+export type AuthState =
+  | {
+      tokenType: "User";
+      value: string;
+    }
+  | {
+      tokenType: "Admin";
+      value: string;
+      impersonating?: UserIdentityAttributes | undefined;
+    };
+
 export class LocalSyncState {
   private nextQueryId: QueryId;
   private querySetVersion: QuerySetVersion;
   private readonly querySet: Map<QueryToken, LocalQuery>;
   private readonly queryIdToToken: Map<QueryId, QueryToken>;
   private identityVersion: IdentityVersion;
-  private auth:
-    | {
-        tokenType: "User";
-        value: string;
-      }
-    | {
-        tokenType: "Admin";
-        value: string;
-        impersonating?: UserIdentityAttributes | undefined;
-      }
-    | undefined;
+  private auth: AuthState | undefined;
   private readonly outstandingQueriesOlderThanRestart: Set<QueryId>;
   private outstandingAuthOlderThanRestart: boolean;
   private paused: boolean;
@@ -184,6 +197,10 @@ export class LocalSyncState {
     return version >= this.identityVersion;
   }
 
+  getAuth(): AuthState | undefined {
+    return this.auth;
+  }
+
   setAuth(value: string): Authenticate {
     this.auth = {
       tokenType: "User" as const,
@@ -261,7 +278,7 @@ export class LocalSyncState {
     return null;
   }
 
-  queryToken(queryId: QueryId): string | null {
+  queryToken(queryId: QueryId): QueryToken | null {
     return this.queryIdToToken.get(queryId) ?? null;
   }
 

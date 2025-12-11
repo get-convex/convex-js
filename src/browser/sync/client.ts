@@ -1,3 +1,12 @@
+/**
+ * BaseConvexClient should not be used directly and does not provide a stable
+ * interface. It is a "Base" client not because it expects to be inherited from
+ * but because other clients are built around it.
+ *
+ * BaseConvexClient is not Convex Function type-aware: it deals
+ * with queries as functions that return Value, not the specific value.
+ * Use a higher-level library to get types.
+ */
 import { version } from "../../index.js";
 import { convexToJson, Value } from "../../values/index.js";
 import {
@@ -23,8 +32,8 @@ import {
   MutationRequest,
   QueryId,
   QueryJournal,
-  RequestId,
   ServerMessage,
+  RequestId,
   TS,
   UserIdentityAttributes,
 } from "./protocol.js";
@@ -41,6 +50,7 @@ export { type AuthTokenFetcher } from "./authentication_manager.js";
 import { getMarksReport, mark, MarkName } from "./metrics.js";
 import { parseArgs, validateDeploymentUrl } from "../../common/index.js";
 import { ConvexError } from "../../values/errors.js";
+import { jwtDecode } from "../../vendor/jwt-decode/index.js";
 
 /**
  * Options for {@link BaseConvexClient}.
@@ -484,8 +494,6 @@ export class BaseConvexClient {
               void this.webSocketManager.terminate();
               throw error;
             }
-            case "Ping":
-              break; // do nothing
             default: {
               serverMessage satisfies never;
             }
@@ -580,8 +588,8 @@ export class BaseConvexClient {
         return {
           token,
           modification: {
-            kind: "Updated",
-            result: optimisticResult!.result,
+            kind: "Updated" as const,
+            result: optimisticResult,
           },
         };
       }),
@@ -614,6 +622,26 @@ export class BaseConvexClient {
     const id = this._transitionHandlerCounter++;
     this._onTransitionFns.set(id, fn);
     return () => this._onTransitionFns.delete(id);
+  }
+
+  /**
+   * Get the current JWT auth token and decoded claims.
+   */
+  getCurrentAuthClaims():
+    | { token: string; decoded: Record<string, any> }
+    | undefined {
+    const authToken = this.state.getAuth();
+    let decoded: Record<string, any> = {};
+    if (authToken && authToken.tokenType === "User") {
+      try {
+        decoded = authToken ? jwtDecode(authToken.value) : {};
+      } catch {
+        decoded = {};
+      }
+    } else {
+      return undefined;
+    }
+    return { token: authToken.value, decoded };
   }
 
   /**
@@ -715,7 +743,7 @@ export class BaseConvexClient {
   }
 
   /**
-   * Whether local query result is available for a toke.
+   * Whether local query result is available for a token.
    *
    * This method does not throw if the result is an error.
    *

@@ -25,6 +25,7 @@ import {
   CONVEX_SELF_HOSTED_URL_VAR_NAME,
   ENV_VAR_FILE_PATH,
   bigBrainAPI,
+  processDeployKeyValue,
 } from "./utils/utils.js";
 import * as dotenv from "dotenv";
 
@@ -84,7 +85,8 @@ export async function initializeBigBrainAuth(
       });
     }
     const config = dotenv.parse(existingFile);
-    const deployKey = config[CONVEX_DEPLOY_KEY_ENV_VAR_NAME];
+    const rawDeployKey = config[CONVEX_DEPLOY_KEY_ENV_VAR_NAME];
+    const deployKey = await processDeployKeyValue(ctx, rawDeployKey);
     if (deployKey !== undefined) {
       const bigBrainAuth = getBigBrainAuth(ctx, {
         previewDeployKey: isPreviewDeployKey(deployKey) ? deployKey : null,
@@ -97,7 +99,8 @@ export async function initializeBigBrainAuth(
   }
   dotenv.config({ path: ENV_VAR_FILE_PATH });
   dotenv.config();
-  const deployKey = process.env[CONVEX_DEPLOY_KEY_ENV_VAR_NAME];
+  const rawDeployKey = process.env[CONVEX_DEPLOY_KEY_ENV_VAR_NAME];
+  const deployKey = await processDeployKeyValue(ctx, rawDeployKey);
   if (deployKey !== undefined) {
     const bigBrainAuth = getBigBrainAuth(ctx, {
       previewDeployKey: isPreviewDeployKey(deployKey) ? deployKey : null,
@@ -335,7 +338,7 @@ async function _getDeploymentSelection(
    - url + adminKey specified via CLI
    - Do not check any env vars (including ones relevant for auth)
   */
-  if (cliArgs.url && cliArgs.adminKey) {
+  if (cliArgs.url !== undefined && cliArgs.adminKey !== undefined) {
     return {
       kind: "existingDeployment",
       deploymentToActOn: {
@@ -347,7 +350,7 @@ async function _getDeploymentSelection(
     };
   }
 
-  if (cliArgs.envFile) {
+  if (cliArgs.envFile !== undefined) {
     // If an `--env-file` is specified, it must contain enough information for both auth and deployment selection.
     logVerbose(`Checking env file: ${cliArgs.envFile}`);
     const existingFile = ctx.fs.exists(cliArgs.envFile)
@@ -425,8 +428,12 @@ async function getDeploymentSelectionFromEnv(
 ): Promise<
   { kind: "success"; metadata: DeploymentSelection } | { kind: "unknown" }
 > {
-  const deployKey = getEnv(CONVEX_DEPLOY_KEY_ENV_VAR_NAME);
-  if (deployKey !== null) {
+  const rawDeployKey = getEnv(CONVEX_DEPLOY_KEY_ENV_VAR_NAME);
+  const deployKey = await processDeployKeyValue(
+    ctx,
+    rawDeployKey === null ? undefined : rawDeployKey,
+  );
+  if (deployKey !== undefined) {
     const deployKeyType = isPreviewDeployKey(deployKey)
       ? "preview"
       : isProjectKey(deployKey)

@@ -29,6 +29,7 @@ export default [
       "**/tmpPackage*",
       "**/custom-vitest-environment.ts",
       "src/cli/generatedApi.ts",
+      "src/cli/lib/generatedFunctionLogsApi.ts",
       // TODO use a separate config for files that doesn't use TypeScript
       "**/*.js",
       "vitest.config.js",
@@ -36,6 +37,8 @@ export default [
       ".prettierrc.js",
       "eslint.config.mjs",
       "jest.config.mjs",
+      // we could ignore everything in vendor
+      "src/vendor/progress",
     ],
   },
   ...compat.plugins("require-extensions"),
@@ -150,6 +153,14 @@ export default [
               group: ["fs/promises", "node:fs/promises"],
               message:
                 "Use a `Filesystem` implementation like `nodeFs` instead of Node's 'fs/promises' package directly. Additionally, use synchronous filesystem IO within our CLI.",
+            },
+          ],
+          paths: [
+            {
+              name: "chalk",
+              importNames: ["default"],
+              message:
+                "Import { chalkStderr } from 'chalk' instead of the default chalk import. Use chalkStderr for stderr output (most cases). Only use default chalk with an eslint-disable comment if formatting text for stdout (e.g., logOutput() or console.log).",
             },
           ],
         },

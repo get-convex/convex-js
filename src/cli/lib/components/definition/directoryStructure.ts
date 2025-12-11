@@ -32,6 +32,25 @@ export type ComponentDirectory = {
    * Absolute local filesystem path to the `convex.config.{ts,js}` file within the component definition.
    */
   definitionPath: string;
+
+  /**
+   * Is this component a root without a config file?
+   */
+  isRootWithoutConfig: boolean;
+
+  /**
+   * The import specifier used to import this component, with `/convex.config.*` stripped.
+   * For example, if imported as `@convex-dev/workpool/convex.config`, this would be `@convex-dev/workpool`.
+   * For relative imports like `../examples/foo/convex.config.js`, this would be `../examples/foo`.
+   * This is undefined for components discovered through the filesystem (not through imports).
+   */
+  importSpecifier?: string;
+
+  /**
+   * For synthetic configs (used with --component-dir flag), the path to the component
+   * that should be imported in the virtual convex.config.ts.
+   */
+  syntheticComponentImport?: string;
 };
 
 /**
@@ -48,7 +67,10 @@ export function qualifiedDefinitionPath(
   workingDir = ".",
 ) {
   const definitionPath = path.relative(workingDir, directory.definitionPath);
-  return `./${definitionPath}`;
+  const posixDefinitionPath = definitionPath
+    .split(path.sep)
+    .join(path.posix.sep);
+  return `./${posixDefinitionPath}`;
 }
 
 // NB: The process cwd will be used to resolve the directory specified in the constructor.
@@ -59,8 +81,21 @@ export function isComponentDirectory(
 ):
   | { kind: "ok"; component: ComponentDirectory }
   | { kind: "err"; why: string } {
+  let isRootWithoutConfig = false;
+
+  // If the directory doesn't exist, we need to create one.
   if (!ctx.fs.exists(directory)) {
-    return { kind: "err", why: `Directory doesn't exist` };
+    return {
+      kind: "ok",
+      component: {
+        isRoot,
+        path: path.resolve(directory),
+        definitionPath: path.resolve(
+          path.join(directory, DEFINITION_FILENAME_TS),
+        ),
+        isRootWithoutConfig: true,
+      },
+    };
   }
   const dirStat = ctx.fs.stat(directory);
   if (!dirStat.isDirectory()) {
@@ -75,17 +110,15 @@ export function isComponentDirectory(
     definitionPath = path.resolve(path.join(directory, filename));
   }
   if (!ctx.fs.exists(definitionPath)) {
-    return {
-      kind: "err",
-      why: `Directory doesn't contain a ${filename} file`,
-    };
-  }
-  const definitionStat = ctx.fs.stat(definitionPath);
-  if (!definitionStat.isFile()) {
-    return {
-      kind: "err",
-      why: `Component definition ${filename} isn't a file`,
-    };
+    isRootWithoutConfig = true;
+  } else {
+    const definitionStat = ctx.fs.stat(definitionPath);
+    if (!definitionStat.isFile()) {
+      return {
+        kind: "err",
+        why: `Component definition ${filename} isn't a file`,
+      };
+    }
   }
   return {
     kind: "ok",
@@ -93,6 +126,7 @@ export function isComponentDirectory(
       isRoot,
       path: path.resolve(directory),
       definitionPath: definitionPath,
+      isRootWithoutConfig,
     },
   };
 }

@@ -1,9 +1,25 @@
+import { Expand } from "../type_utils.js";
 import { GenericId } from "./index.js";
-import { GenericValidator } from "./validator.js";
+import { GenericValidator, ObjectType } from "./validator.js";
 import { JSONValue, convexToJson } from "./value.js";
 
 type TableNameFromType<T> =
   T extends GenericId<infer TableName> ? TableName : string;
+
+const UNDEFINED_VALIDATOR_ERROR_URL =
+  "https://docs.convex.dev/error#undefined-validator";
+
+function throwUndefinedValidatorError(
+  context: string,
+  fieldName?: string,
+): never {
+  const fieldInfo = fieldName !== undefined ? ` for field "${fieldName}"` : "";
+  throw new Error(
+    `A validator is undefined${fieldInfo} in ${context}. ` +
+      `This is often caused by circular imports. ` +
+      `See ${UNDEFINED_VALIDATOR_ERROR_URL} for details.`,
+  );
+}
 
 /**
  * Avoid using `instanceof BaseValidator`; this is inheritence for code reuse
@@ -38,10 +54,6 @@ abstract class BaseValidator<
   constructor({ isOptional }: { isOptional: IsOptional }) {
     this.isOptional = isOptional;
     this.isConvexValidator = true;
-  }
-  /** @deprecated - use isOptional instead */
-  get optional(): boolean {
-    return this.isOptional === "optional" ? true : false;
   }
   /** @internal */
   abstract get json(): ValidatorJSON;
@@ -297,9 +309,12 @@ export class VObject<
     fields: Fields;
   }) {
     super({ isOptional });
-    globalThis.Object.values(fields).forEach((v) => {
-      if (!v.isConvexValidator) {
-        throw new Error("v.object() entries must be valiators");
+    globalThis.Object.entries(fields).forEach(([fieldName, validator]) => {
+      if (validator === undefined) {
+        throwUndefinedValidatorError("v.object()", fieldName);
+      }
+      if (!validator.isConvexValidator) {
+        throw new Error("v.object() entries must be validators");
       }
     });
     this.fields = fields;
@@ -324,6 +339,81 @@ export class VObject<
     return new VObject<Type | undefined, Fields, "optional", FieldPaths>({
       isOptional: "optional",
       fields: this.fields,
+    });
+  }
+
+  /**
+   * Create a new VObject with the specified fields omitted.
+   * @param fields The field names to omit from this VObject.
+   */
+  omit<K extends keyof Fields & string>(
+    ...fields: K[]
+  ): VObject<Expand<Omit<Type, K>>, Expand<Omit<Fields, K>>, IsOptional> {
+    const newFields = { ...this.fields };
+    for (const field of fields) {
+      delete newFields[field];
+    }
+    return new VObject({
+      isOptional: this.isOptional,
+      fields: newFields as any,
+    });
+  }
+
+  /**
+   * Create a new VObject with only the specified fields.
+   * @param fields The field names to pick from this VObject.
+   */
+  pick<K extends keyof Fields & string>(
+    ...fields: K[]
+  ): VObject<
+    Expand<Pick<Type, Extract<keyof Type, K>>>,
+    Expand<Pick<Fields, K>>,
+    IsOptional
+  > {
+    const newFields: Record<string, GenericValidator> = {};
+    for (const field of fields) {
+      newFields[field] = this.fields[field];
+    }
+    return new VObject({
+      isOptional: this.isOptional,
+      fields: newFields as Expand<Pick<Fields, K>>,
+    });
+  }
+
+  /**
+   * Create a new VObject with all fields marked as optional.
+   */
+  partial(): VObject<
+    { [K in keyof Type]?: Type[K] },
+    { [K in keyof Fields]: VOptional<Fields[K]> },
+    IsOptional
+  > {
+    const newFields: Record<string, GenericValidator> = {};
+    for (const [key, validator] of globalThis.Object.entries(this.fields)) {
+      newFields[key] = validator.asOptional();
+    }
+    return new VObject({
+      isOptional: this.isOptional,
+      fields: newFields as {
+        [K in keyof Fields]: VOptional<Fields[K]>;
+      },
+    });
+  }
+
+  /**
+   * Create a new VObject with additional fields merged in.
+   * @param fields An object with additional validators to merge into this VObject.
+   */
+  extend<NewFields extends Record<string, GenericValidator>>(
+    fields: NewFields,
+  ): VObject<
+    Expand<Type & ObjectType<NewFields>>,
+    Expand<Fields & NewFields>,
+    IsOptional
+  > {
+    return new VObject({
+      isOptional: this.isOptional,
+      fields: { ...this.fields, ...fields } as Expand<Fields & NewFields>,
     });
   }
 }
@@ -405,6 +495,9 @@ export class VArray<
     element: Element;
   }) {
     super({ isOptional });
+    if (element === undefined) {
+      throwUndefinedValidatorError("v.array()");
+    }
     this.element = element;
   }
   /** @internal */
@@ -461,6 +554,12 @@ export class VRecord<
     value: Value;
   }) {
     super({ isOptional });
+    if (key === undefined) {
+      throwUndefinedValidatorError("v.record()", "key");
+    }
+    if (value === undefined) {
+      throwUndefinedValidatorError("v.record()", "value");
+    }
     if ((key.isOptional as OptionalProperty) === "optional") {
       throw new Error("Record validator cannot have optional keys");
     }
@@ -519,7 +618,10 @@ export class VUnion<
    */
   constructor({ isOptional, members }: { isOptional: IsOptional; members: T }) {
     super({ isOptional });
-    members.forEach((member) => {
+    members.forEach((member, index) => {
+      if (member === undefined) {
+        throwUndefinedValidatorError("v.union()", `member at index ${index}`);
+      }
       if (!member.isConvexValidator) {
         throw new Error("All members of v.union() must be validators");
       }

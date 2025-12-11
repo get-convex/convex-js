@@ -10,11 +10,10 @@ import {
 } from "../lib/deployApi/componentDefinition.js";
 import { StartPushResponse } from "../lib/deployApi/startPush.js";
 import { ConvexValidator } from "../lib/deployApi/validator.js";
-import { header } from "./common.js";
+import { compareStrings, header } from "./common.js";
 import { validatorToType } from "./validator_helpers.js";
 
-export function noSchemaDataModelDTS() {
-  return `
+const NO_SCHEMA_DATA_MODEL_CONTENT = `
   ${header("Generated data model types.")}
   import { AnyDataModel } from "convex/server";
   import type { GenericId } from "convex/values";
@@ -46,7 +45,7 @@ export function noSchemaDataModelDTS() {
    * Convex documents are uniquely identified by their \`Id\`, which is accessible
    * on the \`_id\` field. To learn more, see [Document IDs](https://docs.convex.dev/using/document-ids).
    *
-   * Documents can be loaded using \`db.get(id)\` in query and mutation functions.
+   * Documents can be loaded using \`db.get(tableName, id)\` in query and mutation functions.
    *
    * IDs are just strings at runtime, but this type can be used to distinguish them from other
    * strings when type checking.
@@ -63,10 +62,16 @@ export function noSchemaDataModelDTS() {
    * \`mutationGeneric\` to make them type-safe.
    */
   export type DataModel = AnyDataModel;`;
+
+export function noSchemaDataModelDTS() {
+  return NO_SCHEMA_DATA_MODEL_CONTENT;
 }
 
-export function dynamicDataModelDTS() {
-  return `
+export function noSchemaDataModelTS() {
+  return NO_SCHEMA_DATA_MODEL_CONTENT;
+}
+
+const dynamicDataModelContent = `
   ${header("Generated data model types.")}
   import type { DataModelFromSchemaDefinition, DocumentByName, TableNamesInDataModel, SystemTableNames } from "convex/server";
   import type { GenericId } from "convex/values";
@@ -90,7 +95,7 @@ export function dynamicDataModelDTS() {
    * Convex documents are uniquely identified by their \`Id\`, which is accessible
    * on the \`_id\` field. To learn more, see [Document IDs](https://docs.convex.dev/using/document-ids).
    *
-   * Documents can be loaded using \`db.get(id)\` in query and mutation functions.
+   * Documents can be loaded using \`db.get(tableName, id)\` in query and mutation functions.
    *
    * IDs are just strings at runtime, but this type can be used to distinguish them from other
    * strings when type checking.
@@ -110,14 +115,22 @@ export function dynamicDataModelDTS() {
    */
   export type DataModel = DataModelFromSchemaDefinition<typeof schema>;
   `;
+
+export function dynamicDataModelDTS() {
+  return dynamicDataModelContent;
 }
 
-export async function staticDataModelDTS(
+export function dynamicDataModelTS() {
+  return dynamicDataModelContent;
+}
+
+async function staticDataModelImpl(
   ctx: Context,
   startPush: StartPushResponse,
   rootComponent: ComponentDirectory,
   componentDirectory: ComponentDirectory,
-) {
+  useTypeScript: boolean,
+): Promise<string> {
   const definitionPath = toComponentDefinitionPath(
     rootComponent,
     componentDirectory,
@@ -132,7 +145,7 @@ export async function staticDataModelDTS(
     });
   }
   if (!analysis.schema) {
-    return noSchemaDataModelDTS();
+    return useTypeScript ? noSchemaDataModelTS() : noSchemaDataModelDTS();
   }
 
   const lines = [
@@ -162,7 +175,7 @@ export async function staticDataModelDTS(
      * Convex documents are uniquely identified by their \`Id\`, which is accessible
      * on the \`_id\` field. To learn more, see [Document IDs](https://docs.convex.dev/using/document-ids).
      *
-     * Documents can be loaded using \`db.get(id)\` in query and mutation functions.
+     * Documents can be loaded using \`db.get(tableName, id)\` in query and mutation functions.
      *
      * IDs are just strings at runtime, but this type can be used to distinguish them from other
      * strings when type checking.
@@ -173,6 +186,37 @@ export async function staticDataModelDTS(
     `);
 
   return lines.join("\n");
+}
+
+export async function staticDataModelDTS(
+  ctx: Context,
+  startPush: StartPushResponse,
+  rootComponent: ComponentDirectory,
+  componentDirectory: ComponentDirectory,
+) {
+  return staticDataModelImpl(
+    ctx,
+    startPush,
+    rootComponent,
+    componentDirectory,
+    false,
+  );
+}
+
+// Used for components and root
+export async function staticDataModelTS(
+  ctx: Context,
+  startPush: StartPushResponse,
+  rootComponent: ComponentDirectory,
+  componentDirectory: ComponentDirectory,
+) {
+  return staticDataModelImpl(
+    ctx,
+    startPush,
+    rootComponent,
+    componentDirectory,
+    true,
+  );
 }
 
 async function* codegenDataModel(ctx: Context, schema: AnalyzedSchema) {
@@ -188,7 +232,7 @@ async function* codegenDataModel(ctx: Context, schema: AnalyzedSchema) {
      */
   `;
   const tables = [...schema.tables];
-  tables.sort((a, b) => a.tableName.localeCompare(b.tableName));
+  tables.sort((a, b) => compareStrings(a.tableName, b.tableName));
 
   yield `export type DataModel = {`;
   for (const table of tables) {
@@ -222,7 +266,7 @@ async function* codegenTable(ctx: Context, table: TableDefinition) {
   for (const fieldPath of extractFieldPaths(documentType)) {
     fieldPaths.add(fieldPath.join("."));
   }
-  yield `  fieldPaths: ${stringLiteralUnionType(Array.from(fieldPaths).sort())},`;
+  yield `  fieldPaths: ${stringLiteralUnionType(Array.from(fieldPaths).sort(compareStrings))},`;
 
   yield `  indexes: {`;
   const systemIndexes: SystemIndexes = {
@@ -261,7 +305,7 @@ async function* codegenTable(ctx: Context, table: TableDefinition) {
   for (const index of table.vectorIndexes ?? []) {
     yield `    "${index.indexDescriptor}": {`;
     yield `      vectorField: "${index.vectorField}",`;
-    yield `      dimensions: ${index.dimensions},`;
+    yield `      dimensions: number,`;
     yield `      filterFields: ${stringLiteralUnionType(index.filterFields)},`;
     yield `    },`;
   }
@@ -340,14 +384,19 @@ async function addSystemFieldsToObject(
 function* extractFieldPaths(validator: ConvexValidator): Generator<string[]> {
   if (validator.type === "object") {
     for (const [fieldName, fieldValidator] of Object.entries(validator.value)) {
+      yield [fieldName];
       for (const subFieldPath of extractFieldPaths(fieldValidator.fieldType)) {
-        yield [fieldName, ...subFieldPath];
+        if (subFieldPath.length > 0) {
+          yield [fieldName, ...subFieldPath];
+        }
       }
     }
   } else if (validator.type === "union") {
     for (const subValidator of validator.value) {
       yield* extractFieldPaths(subValidator);
     }
+  } else if (validator.type === "record") {
+    yield ["${string}"];
   } else {
     yield [];
   }
@@ -356,9 +405,9 @@ function* extractFieldPaths(validator: ConvexValidator): Generator<string[]> {
 function stringLiteralUnionType(fields: string[]) {
   if (fields.length === 0) {
     return "never";
-  } else if (fields.length === 1) {
-    return `"${fields[0]}"`;
   } else {
-    return fields.map((field) => `"${field}"`).join(" | ");
+    return fields
+      .map((field) => (field.includes("${") ? `\`${field}\`` : `"${field}"`))
+      .join(" | ");
   }
 }

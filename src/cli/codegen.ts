@@ -5,7 +5,7 @@ import { getDeploymentSelection } from "./lib/deploymentSelection.js";
 export const codegen = new Command("codegen")
   .summary("Generate backend type definitions")
   .description(
-    "Generate types in `convex/_generated/` based on the current contents of `convex/`.",
+    "Generate code in `convex/_generated/` based on the current contents of `convex/`.",
   )
   .allowExcessArguments(false)
   .option(
@@ -35,6 +35,12 @@ export const codegen = new Command("codegen")
       "Generate CommonJS modules (CJS) instead of ECMAScript modules, the default. Bundlers typically take care of this conversion while bundling, so this setting is generally only useful for projects which do not use a bundler, typically Node.js projects. Convex functions can be written with either syntax.",
     ).hideHelp(),
   )
+  // Only for doing codegen on system UDFs
+  .addOption(new Option("--system-udfs").hideHelp())
+  .option(
+    "--component-dir <path>",
+    "Generate code for a specific component directory instead of the current application.",
+  )
   .action(async (options) => {
     const ctx = await oneoffContext(options);
     const deploymentSelection = await getDeploymentSelection(ctx, options);
@@ -49,5 +55,8 @@ export const codegen = new Command("codegen")
       adminKey: options.adminKey,
       liveComponentSources: !!options.liveComponentSources,
       debugNodeApis: false,
+      systemUdfs: !!options.systemUdfs,
+      largeIndexDeletionCheck: "no verification", // `codegen` is a read-only operation
+      codegenOnlyThisComponent: options.componentDir,
     });
   });

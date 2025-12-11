@@ -1,4 +1,4 @@
-import chalk from "chalk";
+import { chalkStderr } from "chalk";
 import { Command, Option } from "@commander-js/extra-typings";
 import { Context, oneoffContext } from "../bundler/context.js";
 import { logFinishedStep, logMessage, showSpinner } from "../bundler/log.js";
@@ -11,7 +11,7 @@ import {
   isNonProdBuildEnvironment,
   suggestedEnvVarName,
 } from "./lib/envvars.js";
-import { PushOptions } from "./lib/push.js";
+import { PushOptions } from "./lib/components.js";
 import {
   CONVEX_DEPLOY_KEY_ENV_VAR_NAME,
   CONVEX_SELF_HOSTED_URL_VAR_NAME,
@@ -84,6 +84,12 @@ deployment, e.g. ${CONVEX_DEPLOYMENT_ENV_VAR_NAME} or ${CONVEX_SELF_HOSTED_URL_V
 Same format as .env.local or .env files, and overrides them.`,
     ),
   )
+  .addOption(
+    new Option("--allow-deleting-large-indexes")
+      .hideHelp()
+      .conflicts("preview-create")
+      .conflicts("preview-name"),
+  )
   .showHelpAfterError()
   .action(async (cmdOptions) => {
     const ctx = await oneoffContext(cmdOptions);
@@ -151,7 +157,27 @@ Same format as .env.local or .env files, and overrides them.`,
         },
       );
     } else {
-      await deployToExistingDeployment(ctx, cmdOptions);
+      if (cmdOptions.previewCreate !== undefined) {
+        const source =
+          deploymentSelection.kind === "deploymentWithinProject" &&
+          deploymentSelection.targetProject.kind === "deploymentName"
+            ? `at ${chalkStderr.blue.underline(`https://dashboard.convex.dev/dp/${deploymentSelection.targetProject.deploymentName}/settings#preview-deploy-keys`)}`
+            : deploymentSelection.kind === "existingDeployment" &&
+                deploymentSelection.deploymentToActOn.deploymentFields !== null
+              ? `at ${chalkStderr.blue.underline(`https://dashboard.convex.dev/dp/${deploymentSelection.deploymentToActOn.deploymentFields.deploymentName}/settings#preview-deploy-keys`)}`
+              : "on the dashboard";
+        await ctx.crash({
+          exitCode: 1,
+          errorType: "fatal",
+          printedMessage: `Preview deployments can only be created with preview deploy keys. Generate a preview deploy key ${source} and set the ${chalkStderr.bold(`CONVEX_DEPLOY_KEY`)} environment variable with it.`,
+        });
+      }
+
+      await deployToExistingDeployment(ctx, {
+        ...cmdOptions,
+        allowDeletingLargeIndexes:
+          cmdOptions.allowDeletingLargeIndexes ?? false,
+      });
     }
   });
 
@@ -320,6 +346,7 @@ async function deployToPreviewDeployment(
     codegen: options.codegen === "enable",
     url: previewUrl,
     liveComponentSources: false,
+    largeIndexDeletionCheck: "no verification", // fine for preview deployments
   };
   showSpinner(`Deploying to ${previewUrl}...`);
   await runPush(ctx, pushOptions);
@@ -360,6 +387,7 @@ async function deployToExistingDeployment(
     writePushRequest?: string | undefined;
     liveComponentSources?: boolean | undefined;
     envFile?: string | undefined;
+    allowDeletingLargeIndexes: boolean;
   },
 ) {
   const selectionWithinProject = deploymentSelectionWithinProjectFromOptions({
@@ -431,17 +459,17 @@ async function askToConfirmPush(
 ) {
   logMessage(
     `\
-You're currently developing against your ${chalk.bold(
+You're currently developing against your ${chalkStderr.bold(
       deployment.configuredType ?? "dev",
     )} deployment
 
   ${deployment.configuredName} (set in CONVEX_DEPLOYMENT)
 
-Your ${chalk.bold(deployment.requestedType)} deployment ${chalk.bold(
+Your ${chalkStderr.bold(deployment.requestedType)} deployment ${chalkStderr.bold(
       deployment.requestedName,
     )} serves traffic at:
 
-  ${(await suggestedEnvVarName(ctx)).envVar}=${chalk.bold(prodUrl)}
+  ${(await suggestedEnvVarName(ctx)).envVar}=${chalkStderr.bold(prodUrl)}
 
 Make sure that your published client is configured with this URL (for instructions see https://docs.convex.dev/hosting)\n`,
   );
