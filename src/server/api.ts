@@ -5,6 +5,7 @@ import {
   RegisteredAction,
   RegisteredMutation,
   RegisteredQuery,
+  AreAllPropertiesOptional,
 } from "./registration.js";
 import { Expand, UnionToIntersection } from "../type_utils.js";
 import { PaginationOptions, PaginationResult } from "./pagination.js";
@@ -444,9 +445,9 @@ export type FunctionArgs<FuncRef extends AnyFunctionReference> =
  * @public
  */
 export type OptionalRestArgs<FuncRef extends AnyFunctionReference> =
-  FuncRef["_args"] extends EmptyObject
-    ? [args?: EmptyObject]
-    : [args: FuncRef["_args"]];
+  AreAllPropertiesOptional<FuncRef['_args']> extends true
+    ? [args?: FuncRef['_args']]
+    : [args: FuncRef['_args']]
 
 /**
  * A tuple type of the (maybe optional) arguments to `FuncRef`, followed by an options
@@ -460,9 +461,10 @@ export type OptionalRestArgs<FuncRef extends AnyFunctionReference> =
 export type ArgsAndOptions<
   FuncRef extends AnyFunctionReference,
   Options,
-> = FuncRef["_args"] extends EmptyObject
-  ? [args?: EmptyObject, options?: Options]
-  : [args: FuncRef["_args"], options?: Options];
+> = 
+  AreAllPropertiesOptional<FuncRef['_args']> extends true
+    ? [args?: FuncRef['_args'], options?: Options]
+    : [args: FuncRef['_args'], options?: Options]
 
 /**
  * Given a {@link FunctionReference}, get the return type of the function.
