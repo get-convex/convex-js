@@ -819,10 +819,11 @@ export type OptionalRestArgsOrSkip<FuncRef extends FunctionReference<any>> =
  */
 export function useQuery<Query extends FunctionReference<"query">>(
   query: Query,
-  ...args: OptionalRestArgsOrSkip<Query>
+  args?: Query["_args"] | "skip",
+  client?: ConvexReactClient,
 ): Query["_returnType"] | undefined {
-  const skip = args[0] === "skip";
-  const argsObject = args[0] === "skip" ? {} : parseArgs(args[0]);
+  const skip = args === "skip";
+  const argsObject = args === "skip" ? {} : parseArgs(args);
 
   const queryReference =
     typeof query === "string"
@@ -842,7 +843,7 @@ export function useQuery<Query extends FunctionReference<"query">>(
     [JSON.stringify(convexToJson(argsObject)), queryName, skip],
   );
 
-  const results = useQueries(queries);
+  const results = useQueries(queries, client);
   const result = results["query"];
   if (result instanceof Error) {
     throw result;
@@ -871,13 +872,15 @@ export function useQuery<Query extends FunctionReference<"query">>(
  */
 export function useMutation<Mutation extends FunctionReference<"mutation">>(
   mutation: Mutation,
+  client?: ConvexReactClient,
 ): ReactMutation<Mutation> {
   const mutationReference =
     typeof mutation === "string"
       ? makeFunctionReference<"mutation", any, any>(mutation)
       : mutation;
 
-  const convex = useContext(ConvexContext);
+  const contextConvex = useConvex();
+  const convex = client ?? contextConvex;
   if (convex === undefined) {
     throw new Error(
       "Could not find Convex client! `useMutation` must be used in the React component " +
@@ -912,13 +915,15 @@ export function useMutation<Mutation extends FunctionReference<"mutation">>(
  */
 export function useAction<Action extends FunctionReference<"action">>(
   action: Action,
+  client?: ConvexReactClient,
 ): ReactAction<Action> {
-  const convex = useContext(ConvexContext);
   const actionReference =
     typeof action === "string"
       ? makeFunctionReference<"action", any, any>(action)
       : action;
 
+  const contextConvex = useConvex();
+  const convex = client ?? contextConvex;
   if (convex === undefined) {
     throw new Error(
       "Could not find Convex client! `useAction` must be used in the React component " +
@@ -949,8 +954,11 @@ export function useAction<Action extends FunctionReference<"action">>(
  *
  * @public
  */
-export function useConvexConnectionState(): ConnectionState {
-  const convex = useContext(ConvexContext);
+export function useConvexConnectionState(
+  client?: ConvexReactClient,
+): ConnectionState {
+  const contextConvex = useConvex();
+  const convex = client ?? contextConvex;
   if (convex === undefined) {
     throw new Error(
       "Could not find Convex client! `useConvexConnectionState` must be used in the React component " +

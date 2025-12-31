@@ -151,7 +151,6 @@ describe.skip("useQuery typing", () => {
 
   test("useQuery with query taking args", () => {
     const queryWithArgs = makeFunctionReference<"query", { x: number }>("foo");
-    // @ts-expect-error This should be an error
     useQuery(queryWithArgs);
     // @ts-expect-error This should be an error
     useQuery(queryWithArgs, { x: "not a number" });

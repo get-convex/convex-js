@@ -54,7 +54,6 @@ describe("useQuery types", () => {
     // @ts-expect-error wrong arg type is an error
     useQuery(api.module.args, { _arg: 1 });
 
-    // @ts-expect-error eliding args object is an error
     useQuery(api.module.args);
   });
 

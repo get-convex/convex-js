@@ -11,7 +11,7 @@ import { useQueries } from "./use_queries.js";
 import { PaginatedQueryResult } from "../browser/sync/pagination.js";
 import { SubscribeToPaginatedQueryOptions } from "../browser/sync/paginated_query_client.js";
 import { ConvexError } from "../values/errors.js";
-import { useConvex } from "./client.js";
+import { ConvexReactClient, useConvex } from "./client.js";
 
 type UsePaginatedQueryState = {
   query: FunctionReference<"query">;
@@ -79,6 +79,7 @@ export function usePaginatedQuery_experimental<
   // - maximumBytesRead
   // - a cursor for where to start? although probably no endCursor
   options: { initialNumItems: number },
+  client?: ConvexReactClient,
 ): UsePaginatedQueryReturnType<Query> {
   if (
     typeof options?.initialNumItems !== "number" ||
@@ -91,8 +92,7 @@ export function usePaginatedQuery_experimental<
   const skip = args === "skip";
   const argsObject = skip ? {} : args;
 
-  const convexClient = useConvex();
-  const logger = convexClient.logger;
+  const contextConvex = useConvex();
 
   // The identity of createInitialState changes each time!
   const createInitialState: () => UsePaginatedQueryState = () => {
@@ -137,7 +137,11 @@ export function usePaginatedQuery_experimental<
   }
   // currState.queries is just a single query; we use useQueries
   // because it's the lower-level ook sthat supports pagination options.
-  const resultsObject = useQueries(currState.queries);
+  const resultsObject = useQueries(currState.queries, client);
+
+  // convexClient will be defined if useQueries didn't throw
+  const convexClient = client ?? contextConvex;
+  const logger = convexClient!.logger;
 
   // skip
   if (!("paginatedQuery" in resultsObject)) {
