@@ -23,6 +23,7 @@ export type ConvexTool<Input extends ZodTypeAny, Output extends ZodTypeAny> = {
   ) => Promise<z.infer<Output>>;
 };
 
+// @ts-expect-error - for some reason zod is giving compatibility issues here, why? didn't changed anything
 type ToolInput = z.infer<(typeof ToolSchema)["shape"]["inputSchema"]>;
 
 export function mcpTool(tool: ConvexTool<ZodTypeAny, ZodTypeAny>): Tool {

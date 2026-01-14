@@ -15,7 +15,7 @@ import {
   getFunctionName,
 } from "../server/api.js";
 import { BetterOmit, Expand } from "../type_utils.js";
-import { useConvex } from "./client.js";
+import { ConvexReactClient, useConvex } from "./client.js";
 import { compareValues } from "../values/compare.js";
 
 /**
@@ -163,8 +163,9 @@ export function usePaginatedQuery<Query extends PaginatedQueryReference>(
   query: Query,
   args: PaginatedQueryArgs<Query> | "skip",
   options: { initialNumItems: number },
+  client?: ConvexReactClient,
 ): UsePaginatedQueryReturnType<Query> {
-  const { user } = usePaginatedQueryInternal(query, args, options);
+  const { user } = usePaginatedQueryInternal(query, args, options, client);
   return user;
 }
 
@@ -186,6 +187,7 @@ export function usePaginatedQueryInternal<
     initialNumItems: number;
     [includePage]?: boolean;
   },
+  client?: ConvexReactClient,
 ): {
   user: UsePaginatedQueryReturnType<Query>;
   internal: { state: UsePaginatedQueryState };
@@ -255,10 +257,12 @@ export function usePaginatedQueryInternal<
     currState = createInitialState();
     setState(currState);
   }
-  const convexClient = useConvex();
-  const logger = convexClient.logger;
+  const resultsObject = useQueries(currState.queries, client);
 
-  const resultsObject = useQueries(currState.queries);
+  const contextConvex = useConvex();
+  const convexClient = client ?? contextConvex;
+  // convexClient will be defined if useQueries didn't throw
+  const logger = convexClient!.logger;
 
   const isIncludingPageKeys = options[includePage] ?? false;
   const [results, maybeLastResult]: [
