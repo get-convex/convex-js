@@ -32,7 +32,12 @@ mcp
   .command("start")
   .summary("Start the MCP server")
   .description(
-    "Start the Model Context Protocol server for Convex that can be used with AI tools.",
+    "Start the Model Context Protocol server for Convex that can be used with AI tools.\n\n" +
+      "Usage with different deployment types:\n" +
+      "  Cloud deployment:      npx convex mcp start (requires login)\n" +
+      "  Local development:     npx convex mcp start (with CONVEX_DEPLOYMENT in .env.local)\n" +
+      "  Self-hosted:           npx convex mcp start --url <url> --admin-key <key>\n" +
+      "                         Or set CONVEX_SELF_HOSTED_URL and CONVEX_SELF_HOSTED_ADMIN_KEY",
   )
   .option(
     "--project-dir <project-dir>",
@@ -110,14 +115,18 @@ function makeServer(options: McpOptions) {
       const ctx = new RequestContext(options);
       await initializeBigBrainAuth(ctx, options);
       try {
-        const authorized = await checkAuthorization(ctx, false);
-        if (!authorized) {
-          await ctx.crash({
-            exitCode: 1,
-            errorType: "fatal",
-            printedMessage:
-              "Not Authorized: Run `npx convex dev` to login to your Convex project.",
-          });
+        // Smart authorization check: only require BigBrain auth for cloud deployments
+        // Self-hosted, local, and anonymous deployments don't need cloud authentication
+        if (await ctx.requiresBigBrainAuth()) {
+          const authorized = await checkAuthorization(ctx, false);
+          if (!authorized) {
+            await ctx.crash({
+              exitCode: 1,
+              errorType: "fatal",
+              printedMessage:
+                "Not Authorized: Run `npx convex dev` to login to your Convex project.",
+            });
+          }
         }
         if (!request.params.arguments) {
           await ctx.crash({

@@ -6,6 +6,10 @@ import {
   deploymentSelectionWithinProjectSchema,
   DeploymentSelectionOptions,
 } from "../api.js";
+import {
+  DeploymentSelection,
+  getDeploymentSelection,
+} from "../deploymentSelection.js";
 import { z } from "zod";
 
 export interface McpOptions extends DeploymentSelectionOptions {
@@ -85,6 +89,36 @@ export class RequestContext implements Context {
   get productionDeploymentsDisabled() {
     return !this.options.dangerouslyEnableProductionDeployments;
   }
+
+  /**
+   * Determine if BigBrain (Convex Cloud) authentication is required for the
+   * current deployment configuration.
+   *
+   * BigBrain authentication is NOT required for:
+   * - Self-hosted deployments (CONVEX_SELF_HOSTED_URL + CONVEX_SELF_HOSTED_ADMIN_KEY)
+   * - CLI-specified URL and admin key (--url + --admin-key)
+   * - Anonymous local development mode
+   *
+   * BigBrain authentication IS required for:
+   * - Cloud-hosted project deployments
+   * - Preview deployments
+   * - Deploy key-based deployments (needs BigBrain to resolve deployment info)
+   * - Interactive project selection
+   */
+  async requiresBigBrainAuth(): Promise<boolean> {
+    // If URL and adminKey are directly specified via CLI, no BigBrain auth needed
+    if (this.options.url !== undefined && this.options.adminKey !== undefined) {
+      return false;
+    }
+
+    try {
+      const deploymentSelection = await getDeploymentSelection(this, this.options);
+      return requiresBigBrainAuthForDeployment(deploymentSelection);
+    } catch {
+      // If we can't determine deployment type, conservatively require auth
+      return true;
+    }
+  }
 }
 
 export class RequestCrash {
@@ -121,4 +155,35 @@ const payloadSchema = z.object({
 function decodeDeploymentSelector(encoded: string) {
   const [_, serializedPayload] = encoded.split(":");
   return payloadSchema.parse(JSON.parse(atob(serializedPayload)));
+}
+
+/**
+ * Determine if BigBrain authentication is required for a given deployment selection.
+ *
+ * @param deploymentSelection - The deployment selection to check
+ * @returns true if BigBrain auth is required, false otherwise
+ */
+export function requiresBigBrainAuthForDeployment(
+  deploymentSelection: DeploymentSelection,
+): boolean {
+  switch (deploymentSelection.kind) {
+    case "existingDeployment":
+      // Self-hosted and CLI-specified deployments don't need BigBrain auth
+      // Deploy keys still need BigBrain to resolve deployment info
+      return deploymentSelection.deploymentToActOn.source === "deployKey";
+
+    case "anonymous":
+      // Anonymous local development doesn't need BigBrain auth
+      return false;
+
+    case "deploymentWithinProject":
+    case "preview":
+    case "chooseProject":
+      // Cloud-hosted deployments require BigBrain auth
+      return true;
+
+    default:
+      // Unknown type, conservatively require auth
+      return true;
+  }
 }
