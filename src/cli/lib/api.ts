@@ -249,7 +249,7 @@ export async function checkAccessToSelectedProject(
   }
 }
 
-export async function getTeamAndProjectSlugForDeployment(
+async function getTeamAndProjectSlugForDeployment(
   ctx: Context,
   selector: { deploymentName: string },
 ): Promise<{ teamSlug: string; projectSlug: string } | null> {
@@ -600,7 +600,14 @@ async function _loadExistingDeploymentCredentialsForProject(
     teamSlug: string | null;
   } | null;
 }> {
-  const accessResult = await checkAccessToSelectedProject(ctx, targetProject);
+  // Avoid BigBrain access checks for explicitly local deployments.
+  // These are self-contained and shouldn't require cloud auth.
+  const skipAccessCheck =
+    targetProject.kind === "deploymentName" &&
+    targetProject.deploymentType === "local";
+  const accessResult = skipAccessCheck
+    ? ({ kind: "unknown" } as const)
+    : await checkAccessToSelectedProject(ctx, targetProject);
   if (accessResult.kind === "noAccess") {
     return await ctx.crash({
       exitCode: 1,
@@ -809,15 +816,4 @@ export async function fetchTeamAndProjectForKey(
   }
 
   return data;
-}
-
-export async function getTeamsForUser(ctx: Context) {
-  const teams = await bigBrainAPI<{ id: number; name: string; slug: string }[]>(
-    {
-      ctx,
-      method: "GET",
-      url: "teams",
-    },
-  );
-  return teams;
 }
