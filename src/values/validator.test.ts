@@ -468,6 +468,295 @@ describe("v.object utility methods", () => {
     });
   });
 
+  describe("required", () => {
+    test("makes all top-level fields required", () => {
+      const original = v.object({
+        a: v.optional(v.string()),
+        b: v.optional(v.number()),
+        c: v.optional(v.boolean()),
+      });
+
+      const required = original.required();
+
+      // Type checks
+      assert<
+        Equals<
+          Infer<typeof required>,
+          {
+            a: string;
+            b: number;
+            c: boolean;
+          }
+        >
+      >();
+
+      // Runtime checks
+      expect(required.fields.a.isOptional).toBe("required");
+      expect(required.fields.b.isOptional).toBe("required");
+      expect(required.fields.c.isOptional).toBe("required");
+      expect(required.isOptional).toBe("required");
+    });
+
+    test("works with already required fields", () => {
+      const original = v.object({
+        a: v.string(),
+        b: v.optional(v.number()),
+        c: v.boolean(),
+      });
+
+      const required = original.required();
+
+      // Type checks - all fields should be required
+      type Result = Infer<typeof required>;
+      const _test1: Result = { a: "hello", b: 42, c: true };
+      // @ts-expect-error - fields should not be optional
+      const _test2: Result = { a: "hello" };
+
+      // Runtime checks
+      expect(required.fields.a.isOptional).toBe("required");
+      expect(required.fields.b.isOptional).toBe("required");
+      expect(required.fields.c.isOptional).toBe("required");
+    });
+
+    test("does not recurse into nested objects", () => {
+      const original = v.object({
+        nested: v.optional(v.object({
+          inner: v.optional(v.string()),
+          required: v.number(),
+        })),
+        simple: v.optional(v.number()),
+      });
+
+      const required = original.required();
+
+      // Type checks - nested.inner remains optional
+      type Result = Infer<typeof required>;
+      const _test: Result = {
+        nested: { inner: "hello", required: 42 },
+        simple: 42,
+      };
+      const _test2: Result = {
+        // nested.inner is still optional, so this is valid
+        nested: { required: 42 },
+        simple: 42,
+      };
+
+      // Runtime checks - top level
+      expect(required.fields.nested.isOptional).toBe("required");
+      expect(required.fields.simple.isOptional).toBe("required");
+      
+      // Runtime checks - nested object fields remain unchanged (shallow)
+      const nestedObj = required.fields.nested;
+      expect(nestedObj.fields.inner.isOptional).toBe("optional");
+      expect(nestedObj.fields.required.isOptional).toBe("required");
+    });
+
+    test("makes VObject itself required", () => {
+      const original = v.object({
+        a: v.optional(v.string()),
+        b: v.optional(v.number()),
+      });
+      const optional = original.asOptional();
+      const required = optional.required();
+
+      // Type checks
+      type Result = Infer<typeof required>;
+      const _test: Result = { a: "hello", b: 42 };
+
+      // Runtime check: Both VObject and fields become required
+      expect(required.isOptional).toBe("required");
+      expect(required.fields.a.isOptional).toBe("required");
+      expect(required.fields.b.isOptional).toBe("required");
+    });
+
+    test("preserves validator properties", () => {
+      const original = v.object({
+        id: v.optional(v.id("users")),
+        literal: v.optional(v.literal("test")),
+        array: v.optional(v.array(v.string())),
+        record: v.optional(v.record(v.string(), v.number())),
+        union: v.optional(v.union(v.string(), v.number())),
+      });
+
+      const required = original.required();
+
+      // Check that specific validator properties are preserved
+      expect((required.fields.id).tableName).toBe("users");
+      expect((required.fields.literal).value).toBe("test");
+      expect((required.fields.array).element.kind).toBe("string");
+      expect((required.fields.record).key.kind).toBe("string");
+      expect((required.fields.record).value.kind).toBe("float64");
+      expect((required.fields.union).members).toHaveLength(2);
+    });
+  });
+
+  describe("deepRequired", () => {
+    test("recursively makes all fields required including nested objects", () => {
+      const original = v.object({
+        nested: v.optional(v.object({
+          inner: v.optional(v.string()),
+          required: v.number(),
+        })),
+        simple: v.optional(v.number()),
+      });
+
+      const required = original.deepRequired();
+
+      // Type checks - nested.inner becomes required
+      type Result = Infer<typeof required>;
+      const _test: Result = {
+        nested: { inner: "hello", required: 42 },
+        simple: 42,
+      };
+      const _test2: Result = {
+        // @ts-expect-error - missing required property "inner"
+        nested: { required: 42 },
+        simple: 42,
+      };
+
+      // Runtime checks - top level
+      expect(required.fields.nested.isOptional).toBe("required");
+      expect(required.fields.simple.isOptional).toBe("required");
+      
+      // Runtime checks - nested object fields are also made required recursively
+      const nestedObj = required.fields.nested;
+      expect(nestedObj.fields.inner.isOptional).toBe("required");
+      expect(nestedObj.fields.required.isOptional).toBe("required");
+    });
+
+    test("works with multiple levels of nesting", () => {
+      const original = v.object({
+        level1: v.optional(v.object({
+          level2: v.optional(v.object({
+            level3: v.optional(v.string()),
+          })),
+        })),
+      });
+
+      const required = original.deepRequired();
+
+      // Runtime checks - all levels become required
+      const level1 = required.fields.level1;
+      const level2 = level1.fields.level2;
+      expect(level1.isOptional).toBe("required");
+      expect(level2.isOptional).toBe("required");
+      expect(level2.fields.level3.isOptional).toBe("required");
+    });
+
+    test("recursion works with already-required nested objects", () => {
+      const original = v.object({
+        id: v.string(),
+        profile: v.object({
+          displayName: v.optional(v.string()),
+          isPublic: v.optional(v.boolean())
+        }),
+        tags: v.array(v.string())
+      });
+      
+      const required = original.deepRequired();
+
+      // Type checks - nested fields should be required
+      type Result = Infer<typeof required>;
+      const _test: Result = {
+        id: "123",
+        profile: {
+          displayName: "John",
+          isPublic: true
+        },
+        tags: ["tag1"]
+      };
+
+      const _testShouldError: Result = {
+        id: "123", 
+        // @ts-expect-error - displayName should be required after recursion
+        profile: {
+          isPublic: true
+          // missing displayName
+        },
+        tags: ["tag1"]
+      };
+
+      // Runtime checks - verify recursion into already-required objects
+      expect(required.fields.profile.isOptional).toBe("required");
+      const profileObj = required.fields.profile;
+      expect(profileObj.fields.displayName.isOptional).toBe("required");
+      expect(profileObj.fields.isPublic.isOptional).toBe("required");
+    });
+  });
+
+  describe("required vs deepRequired", () => {
+    test("required is shallow, deepRequired is deep", () => {
+      const original = v.object({
+        a: v.optional(v.string()),
+        nested: v.optional(v.object({
+          inner: v.optional(v.string()),
+        })),
+      });
+
+      const shallow = original.required();
+      const deep = original.deepRequired();
+
+      // Both make top-level required
+      expect(shallow.fields.a.isOptional).toBe("required");
+      expect(deep.fields.a.isOptional).toBe("required");
+      expect(shallow.fields.nested.isOptional).toBe("required");
+      expect(deep.fields.nested.isOptional).toBe("required");
+
+      // Shallow: nested fields stay optional
+      const shallowNested = shallow.fields.nested;
+      expect(shallowNested.fields.inner.isOptional).toBe("optional");
+
+      // Deep: nested fields become required
+      const deepNested = deep.fields.nested;
+      expect(deepNested.fields.inner.isOptional).toBe("required");
+    });
+  });
+
+  describe("asOptional vs partial", () => {
+    test("asOptional only affects object, partial affects fields", () => {
+      const original = v.object({
+        a: v.string(),
+        b: v.optional(v.number()),
+      });
+
+      const asOptional = original.asOptional();
+      const partial = original.partial();
+
+      // asOptional: only object becomes optional, fields unchanged
+      expect(asOptional.isOptional).toBe("optional");
+      expect(asOptional.fields.a.isOptional).toBe("required");
+      expect(asOptional.fields.b.isOptional).toBe("optional");
+
+      // partial: object unchanged, all fields become optional  
+      expect(partial.isOptional).toBe("required");
+      expect(partial.fields.a.isOptional).toBe("optional");
+      expect(partial.fields.b.isOptional).toBe("optional");
+    });
+  });
+
+  describe("asRequired vs required", () => {
+    test("asRequired only affects object, required affects fields", () => {
+      const original = v.object({
+        a: v.string(),
+        b: v.optional(v.number()),
+      });
+      const optional = original.asOptional();
+
+      const asRequired = optional.asRequired();
+      const required = optional.required();
+
+      // asRequired: only object becomes required, fields unchanged
+      expect(asRequired.isOptional).toBe("required");
+      expect(asRequired.fields.a.isOptional).toBe("required");
+      expect(asRequired.fields.b.isOptional).toBe("optional");
+
+      // required: both object and top-level fields become required
+      expect(required.isOptional).toBe("required");
+      expect(required.fields.a.isOptional).toBe("required");
+      expect(required.fields.b.isOptional).toBe("required");
+    });
+  });
+
   describe("chaining utility methods", () => {
     test("can chain multiple operations", () => {
       const base = v.object({
@@ -497,6 +786,79 @@ describe("v.object utility methods", () => {
       expect(result.fields).toHaveProperty("e");
       expect(result.fields).not.toHaveProperty("d");
       expect(result.fields.a.isOptional).toBe("optional");
+    });
+
+    test("can chain operations including required()", () => {
+      const base = v.object({
+        a: v.optional(v.string()),
+        b: v.optional(v.number()),
+        c: v.optional(v.boolean()),
+        d: v.optional(v.int64()),
+      });
+
+      const result = base.required().omit("d").extend({ e: v.optional(v.bytes()) });
+
+      // Type checks
+      type Result = Infer<typeof result>;
+      const _test1: Result = {
+        a: "hello",
+        b: 42,
+        c: true,
+        e: new ArrayBuffer(0),
+      };
+      const _test2: Result = {
+        a: "hello",
+        b: 42,
+        c: true,
+        // e is optional
+      };
+
+      // Runtime checks
+      expect(result.fields).toHaveProperty("a");
+      expect(result.fields).toHaveProperty("b");
+      expect(result.fields).toHaveProperty("c");
+      expect(result.fields).toHaveProperty("e");
+      expect(result.fields).not.toHaveProperty("d");
+      
+      // Original fields became required, new field is optional
+      expect(result.fields.a.isOptional).toBe("required");
+      expect(result.fields.b.isOptional).toBe("required");
+      expect(result.fields.c.isOptional).toBe("required");
+      expect(result.fields.e.isOptional).toBe("optional");
+    });
+
+    test("required() in complex chain", () => {
+      const base = v.object({
+        keep: v.string(),
+        remove: v.number(),
+        makeOptional: v.boolean(),
+      });
+
+      // partial -> pick -> extend -> required
+      const result = base
+        .partial()
+        .pick("keep", "makeOptional")
+        .extend({ 
+          newRequired: v.string(),
+          newOptional: v.optional(v.number()),
+        })
+        .required();
+
+      // Type checks
+      type Result = Infer<typeof result>;
+      const _test: Result = {
+        keep: "hello",
+        makeOptional: true,
+        newRequired: "world",
+        newOptional: 42,
+      };
+
+      // Runtime checks
+      expect(result.fields.keep.isOptional).toBe("required");
+      expect(result.fields.makeOptional.isOptional).toBe("required");
+      expect(result.fields.newRequired.isOptional).toBe("required");
+      expect(result.fields.newOptional.isOptional).toBe("required");
+      expect(result.fields).not.toHaveProperty("remove");
     });
 
     test("complex chaining scenario", () => {
