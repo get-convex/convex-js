@@ -602,6 +602,7 @@ function convexName() {
 }
 
 export function rootDirectory(): string {
+  if (process.env.CONVEX_ROOT_DIRECTORY) return process.env.CONVEX_ROOT_DIRECTORY;
   return path.join(os.homedir(), `.${convexName()}`);
 }
 
