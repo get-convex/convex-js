@@ -17,6 +17,12 @@ const inputSchema = z.object({
     .max(1000)
     .optional()
     .describe("The maximum number of results to return, defaults to 100."),
+  componentPath: z
+    .string()
+    .optional()
+    .describe(
+      "Component path (e.g., 'widget') or component ID. Use the 'components' tool to list available components. Omit for root.",
+    ),
 });
 
 const outputSchema = z.object({
@@ -54,7 +60,7 @@ export const DataTool: ConvexTool<typeof inputSchema, typeof outputSchema> = {
       deploymentUrl: credentials.url,
       adminKey: credentials.adminKey,
       functionName: "_system/cli/tableData",
-      componentPath: undefined,
+      componentPath: args.componentPath,
       args: {
         table: args.tableName,
         order: args.order,

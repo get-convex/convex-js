@@ -23,6 +23,12 @@ const inputSchema = z.object({
     .describe(
       "The argument object to pass to the function, JSON-encoded as a string.",
     ),
+  componentPath: z
+    .string()
+    .optional()
+    .describe(
+      "Component path (e.g., 'widget') or component ID. Use the 'components' tool to list available components. Omit for root.",
+    ),
 });
 
 const outputSchema = z.object({
@@ -72,7 +78,11 @@ export const RunTool: ConvexTool<typeof inputSchema, typeof outputSchema> = {
     client.setAdminAuth(credentials.adminKey);
     let result: Value;
     try {
-      result = await client.function(parsedFunctionName, undefined, parsedArgs);
+      result = await client.function(
+        parsedFunctionName,
+        args.componentPath,
+        parsedArgs,
+      );
     } catch (err) {
       return await ctx.crash({
         exitCode: 1,

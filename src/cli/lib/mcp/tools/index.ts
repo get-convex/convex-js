@@ -9,6 +9,7 @@ import { RunTool } from "./run.js";
 import { EnvListTool, EnvGetTool, EnvSetTool, EnvRemoveTool } from "./env.js";
 import { RunOneoffQueryTool } from "./runOneoffQuery.js";
 import { LogsTool } from "./logs.js";
+import { ComponentsTool } from "./components.js";
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 
 export type ConvexTool<Input extends ZodTypeAny, Output extends ZodTypeAny> = {
@@ -34,6 +35,7 @@ export function mcpTool(tool: ConvexTool<ZodTypeAny, ZodTypeAny>): Tool {
 
 export const convexTools: ConvexTool<any, any>[] = [
   StatusTool,
+  ComponentsTool,
   DataTool,
   TablesTool,
   FunctionSpecTool,
