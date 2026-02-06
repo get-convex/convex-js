@@ -10,6 +10,12 @@ const inputSchema = z.object({
     .describe(
       "Deployment selector (from the status tool) to get function metadata from.",
     ),
+  componentPath: z
+    .string()
+    .optional()
+    .describe(
+      "Component path (e.g., 'widget') or component ID. Use the 'components' tool to list available components. Omit for root.",
+    ),
 });
 
 const outputSchema = z
@@ -49,7 +55,7 @@ export const FunctionSpecTool: ConvexTool<
       deploymentUrl: credentials.url,
       adminKey: credentials.adminKey,
       functionName: "_system/cli/modules:apiSpec",
-      componentPath: undefined,
+      componentPath: args.componentPath,
       args: {},
     });
     return functions;
