@@ -3,6 +3,7 @@ import React, {
   ReactNode,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { AuthTokenFetcher } from "../browser/sync/client.js";
@@ -207,11 +208,54 @@ function ConvexAuthStateLastEffect({
     React.SetStateAction<boolean | null>
   >;
 }) {
+  // Store information about *future* render, future from the perspective of
+  // the cleanup function below that needs it.
+  const isUnmountingRef = useRef(false);
+  useEffect(
+    () => () => {
+      isUnmountingRef.current = true;
+    },
+    [],
+  );
+  const futureValuesRef = useRef({
+    authProviderAuthenticated,
+    client,
+    authProviderLoading,
+  });
+  futureValuesRef.current = {
+    authProviderAuthenticated,
+    client,
+    authProviderLoading,
+  };
+
   useEffect(() => {
-    // If rendered with authProviderAuthenticated=true then clear that auth on in cleanup.
+    // Capture the values from when this effect was set up
+    const effectClient = client;
+    const effectAuthProviderLoading = authProviderLoading;
+
+    // If rendered with authProviderAuthenticated=true then clear that auth on cleanup if needed.
     if (authProviderAuthenticated) {
       return () => {
-        client.clearAuth();
+        // Get the "future" values which triggered this cleanup
+        if (isUnmountingRef.current) {
+          client.clearAuth();
+          return;
+        }
+
+        const future = futureValuesRef.current;
+        const clientChanged = effectClient !== future.client;
+        const authProviderWentBackToLoading =
+          !effectAuthProviderLoading && future.authProviderLoading;
+
+        const shouldClearAuth =
+          !future.authProviderAuthenticated ||
+          clientChanged ||
+          authProviderWentBackToLoading;
+
+        if (shouldClearAuth) {
+          client.clearAuth();
+        }
+
         // Set state back to loading in case this is a transition from one
         // fetchToken function to another which signals a new auth context,
         // e.g. a new orgId from Clerk. Auth context changes like this
