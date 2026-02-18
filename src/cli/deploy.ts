@@ -9,7 +9,7 @@ import {
 import {
   gitBranchFromEnvironment,
   isNonProdBuildEnvironment,
-  suggestedEnvVarName,
+  suggestedEnvVarNames,
 } from "./lib/envvars.js";
 import { PushOptions } from "./lib/components.js";
 import {
@@ -30,6 +30,11 @@ import { deployToDeployment, runCommand } from "./lib/deploy2.js";
 import { getDeploymentSelection } from "./lib/deploymentSelection.js";
 import { deploymentNameAndTypeFromSelection } from "./lib/deploymentSelection.js";
 import { checkVersion } from "./lib/updates.js";
+import { readProjectConfig, getAuthKitConfig } from "./lib/config.js";
+import { ensureAuthKitProvisionedBeforeBuild } from "./lib/workos/workos.js";
+import { DASHBOARD_HOST } from "./lib/dashboard.js";
+import { extractDeploymentNameForWorkOS } from "./lib/extractDeploymentNameForWorkOS.js";
+
 export const deploy = new Command("deploy")
   .summary("Deploy to your prod deployment")
   .description(
@@ -83,6 +88,12 @@ export const deploy = new Command("deploy")
 deployment, e.g. ${CONVEX_DEPLOYMENT_ENV_VAR_NAME} or ${CONVEX_SELF_HOSTED_URL_VAR_NAME}. \
 Same format as .env.local or .env files, and overrides them.`,
     ),
+  )
+  .addOption(
+    new Option(
+      "--skip-workos-check",
+      "Skip WorkOS AuthKit provisioning and credential checks during deploy.",
+    ).hideHelp(),
   )
   .addOption(
     new Option("--allow-deleting-large-indexes")
@@ -163,10 +174,10 @@ Same format as .env.local or .env files, and overrides them.`,
         const source =
           deploymentSelection.kind === "deploymentWithinProject" &&
           deploymentSelection.targetProject.kind === "deploymentName"
-            ? `at ${chalkStderr.blue.underline(`https://dashboard.convex.dev/dp/${deploymentSelection.targetProject.deploymentName}/settings#preview-deploy-keys`)}`
+            ? `at ${chalkStderr.blue.underline(`${DASHBOARD_HOST}/dp/${deploymentSelection.targetProject.deploymentName}/settings#preview-deploy-keys`)}`
             : deploymentSelection.kind === "existingDeployment" &&
                 deploymentSelection.deploymentToActOn.deploymentFields !== null
-              ? `at ${chalkStderr.blue.underline(`https://dashboard.convex.dev/dp/${deploymentSelection.deploymentToActOn.deploymentFields.deploymentName}/settings#preview-deploy-keys`)}`
+              ? `at ${chalkStderr.blue.underline(`${DASHBOARD_HOST}/dp/${deploymentSelection.deploymentToActOn.deploymentFields.deploymentName}/settings#preview-deploy-keys`)}`
               : "on the dashboard";
         await ctx.crash({
           exitCode: 1,
@@ -177,6 +188,7 @@ Same format as .env.local or .env files, and overrides them.`,
 
       await deployToExistingDeployment(ctx, {
         ...cmdOptions,
+        skipWorkosCheck: cmdOptions.skipWorkosCheck ?? false,
         allowDeletingLargeIndexes:
           cmdOptions.allowDeletingLargeIndexes ?? false,
       });
@@ -204,10 +216,12 @@ async function deployToPreviewDeployment(
     typecheck: "enable" | "try" | "disable";
     typecheckComponents: boolean;
     codegen: "enable" | "disable";
+    pushAllModules?: boolean;
 
     debug?: boolean | undefined;
     debugBundlePath?: string | undefined;
     allowDeletingLargeIndexes: boolean;
+    skipWorkosCheck?: boolean | undefined;
   },
 ) {
   if (options.previewCreate && options.previewDeployOrCreate) {
@@ -331,6 +345,22 @@ async function deployToPreviewDeployment(
   const previewAdminKey = data.adminKey;
   const previewUrl = data.instanceUrl;
 
+  // Extract deployment name from URL for WorkOS provisioning
+  const deploymentNameForWorkOS = extractDeploymentNameForWorkOS(previewUrl);
+
+  // Provision WorkOS before building the client bundle (if configured)
+  const { projectConfig } = await readProjectConfig(ctx);
+  const authKitConfig = await getAuthKitConfig(ctx, projectConfig);
+
+  if (authKitConfig && deploymentNameForWorkOS && !options.skipWorkosCheck) {
+    await ensureAuthKitProvisionedBeforeBuild(
+      ctx,
+      deploymentNameForWorkOS,
+      { deploymentUrl: previewUrl, adminKey: previewAdminKey },
+      "preview",
+    );
+  }
+
   await runCommand(ctx, {
     ...options,
     url: previewUrl,
@@ -338,7 +368,7 @@ async function deployToPreviewDeployment(
   });
 
   const pushOptions: PushOptions = {
-    deploymentName: data.deploymentName,
+    deploymentName: null,
     adminKey: previewAdminKey,
     verbose: !!options.verbose,
     dryRun: false,
@@ -350,6 +380,7 @@ async function deployToPreviewDeployment(
     codegen: options.codegen === "enable",
     url: previewUrl,
     liveComponentSources: false,
+    pushAllModules: !!options.pushAllModules,
     largeIndexDeletionCheck: "no verification", // fine for preview deployments
   };
   showSpinner(`Deploying to ${previewUrl}...`);
@@ -383,6 +414,7 @@ async function deployToExistingDeployment(
     codegen: "enable" | "disable";
     cmd?: string | undefined;
     cmdUrlEnvVarName?: string | undefined;
+    pushAllModules?: boolean;
 
     debugBundlePath?: string | undefined;
     debug?: boolean | undefined;
@@ -391,6 +423,7 @@ async function deployToExistingDeployment(
     writePushRequest?: string | undefined;
     liveComponentSources?: boolean | undefined;
     envFile?: string | undefined;
+    skipWorkosCheck?: boolean | undefined;
     allowDeletingLargeIndexes: boolean;
   },
 ) {
@@ -439,8 +472,11 @@ async function deployToExistingDeployment(
         url: deploymentToActOn.url,
         adminKey: deploymentToActOn.adminKey,
         deploymentName: deploymentFields?.deploymentName ?? null,
+        ...(deploymentFields?.deploymentType !== undefined
+          ? { deploymentType: deploymentFields.deploymentType }
+          : {}),
       },
-      options,
+      { ...options, skipWorkosCheck: options.skipWorkosCheck },
     ),
     ...(isCloudDeployment
       ? [
@@ -473,7 +509,7 @@ Your ${chalkStderr.bold(deployment.requestedType)} deployment ${chalkStderr.bold
       deployment.requestedName,
     )} serves traffic at:
 
-  ${(await suggestedEnvVarName(ctx)).envVar}=${chalkStderr.bold(prodUrl)}
+  ${(await suggestedEnvVarNames(ctx)).convexUrlEnvVar}=${chalkStderr.bold(prodUrl)}
 
 Make sure that your published client is configured with this URL (for instructions see https://docs.convex.dev/hosting)\n`,
   );

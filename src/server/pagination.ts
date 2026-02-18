@@ -87,37 +87,36 @@ export interface PaginationOptions {
    * A {@link Cursor} representing the end of this page or `null | undefined` to
    * use `numItems` instead.
    *
-   * @internal
+   * This explicitly sets the range of documents the query will return, from
+   * `cursor` to `endCursor`. It's used by reactive pagination clients to ensure
+   * there are no gaps between pages when data changes, and to split pages when
+   * `pageStatus` indicates a split is recommended or required.
+   *
+   * When splitting a page, use the returned `splitCursor` as `endCursor` for the
+   * first half and as `cursor` for the second half.
    */
   endCursor?: Cursor | null;
 
   /**
-   * The maximum number of rows that should be read from the database.
+   * The maximum number of rows to read from the database during pagination.
    *
-   * This option is different from `numItems` in that it controls the number of rows entering a query's
-   * pipeline, where `numItems` controls the number of rows coming out. For example, a `filter`
-   * may disqualify most of the rows coming in, so setting a low `numItems` would not help
-   * bound its execution time. Instead, set a low `maximumRowsRead` to efficiently paginate
-   * through the filter.
+   * This limits rows entering the query pipeline before filters are applied.
+   * Use this when filtering for rare items, where low `numItems` won't bound
+   * execution time because the query scans many rows to find matches.
    *
    * Currently this is not enforced for search queries.
-   *
-   * @internal
    */
   maximumRowsRead?: number;
 
   /**
-   * The maximum number of bytes that should be read from the database.
+   * The maximum number of bytes to read from the database during pagination.
    *
-   * As with {@link PaginationOptions.maximumRowsRead}, this affects the number
-   * of rows entering a query's pipeline.
-   *
-   * Once a paginated query hits its bytes read budget, an incomplete page
-   * will be returned.
+   * This limits bytes entering the query pipeline before filters are applied.
+   * Use this to control bandwidth usage when documents are large.
+   * If the limit is reached, the query may return an incomplete page and
+   * require a page split.
    *
    * Currently this is not enforced for search queries.
-   *
-   * @internal
    */
   maximumBytesRead?: number;
 }
@@ -125,9 +124,40 @@ export interface PaginationOptions {
 /**
  * A {@link values.Validator} for {@link PaginationOptions}.
  *
- * This includes the standard {@link PaginationOptions} properties along with
- * an optional cache-busting `id` property used by {@link react.usePaginatedQuery}.
+ * Use this as the args validator in paginated query functions so that clients
+ * can pass pagination options.
  *
+ * @example
+ * ```typescript
+ * import { query } from "./_generated/server";
+ * import { paginationOptsValidator } from "convex/server";
+ * import { v } from "convex/values";
+ *
+ * export const listMessages = query({
+ *   args: {
+ *     channelId: v.id("channels"),
+ *     paginationOpts: paginationOptsValidator,
+ *   },
+ *   handler: async (ctx, args) => {
+ *     return await ctx.db
+ *       .query("messages")
+ *       .withIndex("by_channel", (q) => q.eq("channelId", args.channelId))
+ *       .order("desc")
+ *       .paginate(args.paginationOpts);
+ *   },
+ * });
+ * ```
+ *
+ * On the client, use `usePaginatedQuery` from `"convex/react"`:
+ * ```tsx
+ * const { results, status, loadMore } = usePaginatedQuery(
+ *   api.messages.listMessages,
+ *   { channelId },
+ *   { initialNumItems: 25 },
+ * );
+ * ```
+ *
+ * @see https://docs.convex.dev/database/pagination
  * @public
  */
 export const paginationOptsValidator = v.object({

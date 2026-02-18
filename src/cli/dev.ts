@@ -43,6 +43,14 @@ export const dev = new Command("dev")
       .choices(["enable", "disable"] as const)
       .default("enable" as const),
   )
+  .addOption(
+    new Option(
+      "--push-all-modules",
+      "Push all modules without checking for unchanged module hashes from the server",
+    )
+      .default(false)
+      .hideHelp(),
+  )
   .option(
     "--once",
     "Execute only the first 3 steps, stop on any failure",
@@ -249,6 +257,12 @@ Same format as .env.local or .env files, and overrides them.`,
                 adminKey: credentials.adminKey,
                 deploymentName:
                   credentials.deploymentFields?.deploymentName ?? null,
+                ...(credentials.deploymentFields?.deploymentType !== undefined
+                  ? {
+                      deploymentType:
+                        credentials.deploymentFields.deploymentType,
+                    }
+                  : {}),
               },
               devOptions,
             ),

@@ -1,5 +1,101 @@
 # Changelog
 
+## 1.32.0
+
+- Improved the API documentation with more examples to help AI agents.
+
+- Added a new `npx convex insights` CLI command to show the insights
+  for a deployment.
+- Added `insights` MCP tool for diagnosing OCC conflicts and resource limit issues
+  on cloud deployments.
+- The `insights` MCP tool works on production deployments without requiring
+  `--dangerously-enable-production-deployments`.
+- When using a local Convex backend (local dev deployment, agent mode or
+  anonymous mode), the deployment’s data is now stored in a `.convex`
+  directory in the project root (instead of `~/.convex`). This change
+  is helpful when using multiple worktrees, since each worktree can get
+  its own isolated storage. Existing local deployments are not affected.
+- Added new options `maximumRowsRead` and `maximumBytesRead`
+  to `PaginationOptions` to get more fine-grained control over
+  the number of rows read when using pagination.
+- When creating a new dev deployment, the Convex CLI now asks you which
+  deployment region you want to use if you haven’t set a team default.
+- Increased the default value for `authRefreshTokenLeewaySeconds`
+  to 10 seconds.
+- The CLI now uses `VITE_CONVEX_*` environment variables when using Remix
+  alongside Vite, instead of `CONVEX_*`.
+- Fixed an issue where the CLI would sometimes be affected by GitHub API
+  rate limits when downloading the local deployment binary.
+- Fixed an issue where websockets would disconnect when using Bun.
+- Fixed an issue with the WorkOS integration that caused crashes
+  when running `npx convex deploy` with a deployment that has
+  its own WorkOS credentials.
+- Fixed an issue with the WorkOS integration where the
+  `WORKOS_API_KEY` environment variable from the shell
+  would incorrectly be used.
+- Fixed an issue where some modifications to `auth.config.ts`
+  would cause the push process to fail.
+- Fixed an issue on Windows that caused arrow key presses to be ignored when the “cloud or local deployment” prompt is shown.
+
+## 1.31.7
+
+- Add `getConvexSize` and `getDocumentSize` functions to `convex/values` for
+  calculating the size of Convex values in bytes. This is the same size
+  calculation used for bandwidth tracking and document size limits.
+- Optimize code push to only upload changed modules.
+- Include `CONVEX_SITE_URL` in environment variables.
+
+## 1.31.6
+
+- Added a new
+  [`authKit`](https://docs.convex.dev/production/project-configuration#configuring-workos-authkit-integration)
+  field in `convex.json` that allows you to customize the automatic provisioning
+  and configuration of WorkOS environments.
+- The CLI now warns you when using a Node.js version older than Node.js 20.
+- Improved error messages when requests fail in the MCP server.
+- Improved the error message when creating a component with an invalid name.
+
+## 1.31.5
+
+- Exclude source code content from bundled sourcemaps by default. This reduces
+  the size of the bundled pushed by `npx convex dev` and `npx convex deploy` to
+  make them run faster.
+- This version drops support for Node.js 18. Please update to Node.js 20 or
+  newer.
+
+## 1.31.4
+
+- Fix
+  [`window.addEventListener is not a function`](https://github.com/get-convex/convex-backend/issues/304)
+  bug in React Native.
+
+## 1.31.3
+
+- `CONVEX_AGENT_MODE=anonymous` can now be used while logged in.
+
+- The client will try to reconnect immediately after being offline instead of
+  waiting for the scheduled backoff delay.
+
+- Optimize bundling during code push, and add `includeSourcesContent` option in
+  `convex.json` to configure whether to include source code content in bundled
+  sourcemaps.
+
+## 1.31.2
+
+- Bug fix: the TypeScript types of the new `ctx.db` APIs introduced in 1.31.0
+  incorrectly allowed passing IDs with types broader than the table name
+  argument (e.g. `db.get("table1", id)` where `id` is
+  `Id<"table1"> | Id<"table2">`). This issue is fixed in 1.31.2.
+
+## 1.31.1
+
+- You can now increase the speed of type checking when using `npx convex dev` by
+  enabling the
+  [TypeScript native preview](https://devblogs.microsoft.com/typescript/announcing-typescript-native-previews/)
+  ([TypeScript 7](https://devblogs.microsoft.com/typescript/typescript-native-port/)).
+  To do so, add `@typescript/native-preview` as a dev dependency and
+  [set `typescriptCompiler: "tsGo"` in `convex.json`](https://docs.convex.dev/production/project-configuration#configuring-the-typescript-compiler).
+
 ## 1.31.0
 
 - `db.get`, `db.patch`, `db.replace`, and `db.delete` now accept a table name as

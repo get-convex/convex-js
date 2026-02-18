@@ -1,4 +1,4 @@
-import { Command, Option } from "@commander-js/extra-typings";
+import { Command, Option, OptionValues } from "@commander-js/extra-typings";
 import { OneoffCtx } from "../../bundler/context.js";
 import { LogMode } from "./logs.js";
 import {
@@ -25,8 +25,15 @@ declare module "@commander-js/extra-typings" {
      * NOTE: This method only exists at runtime if this file is imported.
      * To help avoid this bug, this method takes in an `ActionDescription` which
      * can only be constructed via `actionDescription` from this file.
+     *
+     * @param action - The action description
+     * @param options - Optional settings
+     * @param options.showUrlHelp - If true, show the --url option in help output
      */
-    addDeploymentSelectionOptions(action: ActionDescription): Command<
+    addDeploymentSelectionOptions(
+      action: ActionDescription,
+      options?: { showUrlHelp?: boolean },
+    ): Command<
       Args,
       Opts & {
         envFile?: string;
@@ -156,12 +163,18 @@ declare module "@commander-js/extra-typings" {
 
 Command.prototype.addDeploymentSelectionOptions = function (
   action: ActionDescription,
+  options?: { showUrlHelp?: boolean },
 ) {
-  return this.addOption(
-    new Option("--url <url>")
-      .conflicts(["--prod", "--preview-name", "--deployment-name"])
-      .hideHelp(),
-  )
+  const urlOption = new Option(
+    "--url <url>",
+    options?.showUrlHelp
+      ? action + " the deployment at the given URL."
+      : undefined,
+  ).conflicts(["--prod", "--preview-name", "--deployment-name"]);
+  if (!options?.showUrlHelp) {
+    urlOption.hideHelp();
+  }
+  return this.addOption(urlOption)
     .addOption(new Option("--admin-key <adminKey>").hideHelp())
     .addOption(
       new Option(
@@ -214,6 +227,7 @@ export async function normalizeDevOptions(
     debugBundlePath?: string | undefined;
     debugNodeApis?: boolean;
     liveComponentSources?: boolean;
+    pushAllModules?: boolean;
     while?: string;
   },
 ): Promise<{
@@ -232,6 +246,7 @@ export async function normalizeDevOptions(
   debugBundlePath?: string | undefined;
   debugNodeApis: boolean;
   liveComponentSources: boolean;
+  pushAllModules: boolean;
 }> {
   if (cmdOptions.runComponent && !cmdOptions.run) {
     return await ctx.crash({
@@ -284,6 +299,7 @@ export async function normalizeDevOptions(
     debugBundlePath: cmdOptions.debugBundlePath,
     debugNodeApis: !!cmdOptions.debugNodeApis,
     liveComponentSources: !!cmdOptions.liveComponentSources,
+    pushAllModules: !!cmdOptions.pushAllModules,
   };
 }
 
@@ -330,7 +346,15 @@ Command.prototype.addDeployOptions = function () {
     .addOption(new Option("--debug-bundle-path <path>").hideHelp())
     .addOption(new Option("--debug").hideHelp())
     .addOption(new Option("--write-push-request <writePushRequest>").hideHelp())
-    .addOption(new Option("--live-component-sources").hideHelp());
+    .addOption(new Option("--live-component-sources").hideHelp())
+    .addOption(
+      new Option(
+        "--push-all-modules",
+        "Push all modules without checking for unchanged module hashes from the server",
+      )
+        .default(false)
+        .hideHelp(),
+    );
 };
 
 Command.prototype.addSelfHostOptions = function () {

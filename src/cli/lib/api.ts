@@ -19,7 +19,7 @@ import {
 import { loadLocalDeploymentCredentials } from "./localDeployment/localDeployment.js";
 import { loadAnonymousDeployment } from "./localDeployment/anonymous.js";
 export type DeploymentName = string;
-export type CloudDeploymentType = "prod" | "dev" | "preview";
+export type CloudDeploymentType = "prod" | "dev" | "preview" | "custom";
 export type AccountRequiredDeploymentType = CloudDeploymentType | "local";
 export type DeploymentType = AccountRequiredDeploymentType | "anonymous";
 
@@ -32,17 +32,22 @@ export type Project = {
 
 type AdminKey = string;
 
-// Provision a new project, creating a deployment of type `deploymentTypeToProvision`
+/**
+ * Create a new project. If `deploymentToProvision` is specified, also provision a deployment for the project.
+ */
 export async function createProject(
   ctx: Context,
   {
     teamSlug: selectedTeamSlug,
     projectName,
-    deploymentTypeToProvision,
+    deploymentToProvision,
   }: {
     teamSlug: string;
     projectName: string;
-    deploymentTypeToProvision: "prod" | "dev";
+    deploymentToProvision: {
+      deploymentType: "prod" | "dev";
+      region: string | null;
+    } | null;
   },
 ): Promise<{
   projectSlug: string;
@@ -52,9 +57,7 @@ export async function createProject(
   const provisioningArgs = {
     team: selectedTeamSlug,
     projectName,
-    // TODO: Consider allowing projects with no deployments, or consider switching
-    // to provisioning prod on creation.
-    deploymentType: deploymentTypeToProvision,
+    ...deploymentToProvision,
   };
   const data = await bigBrainAPI({
     ctx,
@@ -590,16 +593,7 @@ async function _loadExistingDeploymentCredentialsForProject(
   targetProject: ProjectSelection,
   deploymentSelection: DeploymentSelectionWithinProject,
   { ensureLocalRunning } = { ensureLocalRunning: true },
-): Promise<{
-  adminKey: string;
-  url: string;
-  deploymentFields: {
-    deploymentName: string;
-    deploymentType: DeploymentType;
-    projectSlug: string | null;
-    teamSlug: string | null;
-  } | null;
-}> {
+): Promise<DetailedDeploymentCredentials> {
   const accessResult = await checkAccessToSelectedProject(ctx, targetProject);
   if (accessResult.kind === "noAccess") {
     return await ctx.crash({

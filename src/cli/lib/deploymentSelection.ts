@@ -5,7 +5,6 @@ import {
   DeploymentType,
   fetchTeamAndProjectForKey,
 } from "./api.js";
-import { readProjectConfig } from "./config.js";
 import {
   deploymentNameFromAdminKeyOrCrash,
   deploymentTypeFromAdminKey,
@@ -394,22 +393,12 @@ async function _getDeploymentSelection(
   }
   // none of these?
 
-  // Check the `convex.json` for a configured team and project
-  const { projectConfig } = await readProjectConfig(ctx);
-  if (projectConfig.team !== undefined && projectConfig.project !== undefined) {
-    return {
-      kind: "deploymentWithinProject",
-      targetProject: {
-        kind: "teamAndProjectSlugs",
-        teamSlug: projectConfig.team,
-        projectSlug: projectConfig.project,
-      },
-    };
-  }
-
   // Check if they're logged in
   const isLoggedIn = ctx.bigBrainAuth() !== null;
-  if (!isLoggedIn && shouldAllowAnonymousDevelopment()) {
+  if (
+    (!isLoggedIn || process.env.CONVEX_AGENT_MODE === "anonymous") &&
+    shouldAllowAnonymousDevelopment()
+  ) {
     return {
       kind: "anonymous",
       deploymentName: null,

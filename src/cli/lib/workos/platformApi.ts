@@ -8,6 +8,16 @@ import {
 } from "../utils/utils.js";
 import { components } from "../../generatedApi.js";
 
+// Re-export generated types for convenience
+export type ProjectEnvironmentSummary =
+  components["schemas"]["ProjectEnvironmentSummary"];
+export type ProvisionProjectEnvironmentResponse =
+  components["schemas"]["ProvisionProjectEnvironmentResponse"];
+export type GetProjectEnvironmentResponse =
+  components["schemas"]["GetProjectEnvironmentResponse"];
+export type DeleteProjectEnvironmentResponse =
+  components["schemas"]["DeleteProjectEnvironmentResponse"];
+
 /**
  * Verified emails for a user that aren't known to be an admin email for
  * another WorkOS integration.
@@ -56,7 +66,7 @@ export async function getDeploymentCanProvisionWorkOSEnvironments(
 export async function createEnvironmentAndAPIKey(
   ctx: Context,
   deploymentName: string,
-  environmentName?: string,
+  environmentType?: "production" | "nonproduction",
 ): Promise<
   | {
       success: true;
@@ -69,17 +79,16 @@ export async function createEnvironmentAndAPIKey(
     }
 > {
   try {
-    const request: components["schemas"]["GetOrProvisionEnvironmentRequest"] = {
-      deploymentName,
-      environmentName: environmentName ?? null,
-    };
     const data = await bigBrainAPI<
       components["schemas"]["ProvisionEnvironmentResponse"]
     >({
       ctx,
       method: "POST",
       url: "workos/get_or_provision_workos_environment",
-      data: request,
+      data: {
+        deploymentName,
+        environmentType,
+      },
     });
     return {
       success: true,
@@ -148,24 +157,22 @@ export async function createAssociatedWorkosTeam(
 
 /**
  * Check if the WorkOS team associated with a Convex team is still accessible.
- * Returns null if the team is not provisioned or cannot be accessed.
+ * Returns the team info if provisioned, or null if not provisioned.
  */
 export async function getWorkosTeamHealth(
   ctx: Context,
   teamId: number,
-): Promise<components["schemas"]["WorkOSTeamHealthResponse"] | null> {
-  try {
-    return (await bigBrainAPIMaybeThrows({
-      ctx,
-      method: "GET",
-      url: `teams/${teamId}/workos_team_health`,
-    })) as components["schemas"]["WorkOSTeamHealthResponse"];
-  } catch (error: any) {
-    if (error?.serverErrorData?.code === "WorkOSTeamNotProvisioned") {
-      return null;
-    }
-    return await logAndHandleFetchError(ctx, error);
-  }
+): Promise<components["schemas"]["WorkOSTeamInfo"] | null> {
+  const response = await bigBrainAPI<
+    components["schemas"]["WorkOSTeamHealthResponse"]
+  >({
+    ctx,
+    method: "GET",
+    url: `teams/${teamId}/workos_team_health`,
+  });
+
+  // Return the team info if provisioned, otherwise null
+  return response.teamProvisioned ? (response.teamInfo ?? null) : null;
 }
 
 /**
@@ -283,6 +290,75 @@ export async function inviteToWorkosTeam(
           "This email is already a member of another WorkOS workspace",
       };
     }
+    if (data?.code === "WorkosUserAlreadyInvited") {
+      return {
+        result: "alreadyInWorkspace", // Reuse same result type for UI consistency
+        message:
+          data?.message ||
+          "This email has already been invited to the WorkOS team",
+      };
+    }
+    if (data?.code === "WorkosUserAlreadyInThisTeam") {
+      return {
+        result: "alreadyInWorkspace",
+        message:
+          data?.message || "This email is already a member of this WorkOS team",
+      };
+    }
     return await logAndHandleFetchError(ctx, error);
   }
+}
+
+// Project environment API functions
+export async function listProjectWorkOSEnvironments(
+  ctx: Context,
+  projectId: number,
+): Promise<ProjectEnvironmentSummary[]> {
+  const response = await bigBrainAPI<
+    components["schemas"]["GetProjectEnvironmentsResponse"]
+  >({
+    ctx,
+    method: "GET",
+    url: `projects/${projectId}/workos_environments`,
+  });
+  return response.environments;
+}
+
+export async function createProjectWorkOSEnvironment(
+  ctx: Context,
+  projectId: number,
+  environmentName: string,
+  isProduction?: boolean,
+): Promise<ProvisionProjectEnvironmentResponse> {
+  return bigBrainAPI<ProvisionProjectEnvironmentResponse>({
+    ctx,
+    method: "POST",
+    url: `projects/${projectId}/workos_environments`,
+    data: { environmentName, isProduction },
+  });
+}
+
+export async function getProjectWorkOSEnvironment(
+  ctx: Context,
+  projectId: number,
+  clientId: string,
+): Promise<GetProjectEnvironmentResponse> {
+  return bigBrainAPI<GetProjectEnvironmentResponse>({
+    ctx,
+    method: "GET",
+    url: `projects/${projectId}/workos_environments/${clientId}`,
+  });
+}
+
+export async function deleteProjectWorkOSEnvironment(
+  ctx: Context,
+  projectId: number,
+  clientId: string,
+): Promise<DeleteProjectEnvironmentResponse> {
+  return bigBrainAPI<DeleteProjectEnvironmentResponse>({
+    ctx,
+    method: "POST",
+    url: "workos/delete_project_environment",
+    data: { projectId, clientId },
+  });
 }

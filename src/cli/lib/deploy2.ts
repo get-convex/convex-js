@@ -28,12 +28,19 @@ import { Reporter, Span } from "./tracing.js";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { PushOptions } from "./components.js";
+import { DeploymentType } from "./api.js";
 import { runPush } from "./components.js";
-import { suggestedEnvVarName } from "./envvars.js";
+import { suggestedEnvVarNames } from "./envvars.js";
 import { runSystemQuery } from "./run.js";
-import { handlePushConfigError } from "./config.js";
+import {
+  handlePushConfigError,
+  readProjectConfig,
+  getAuthKitConfig,
+} from "./config.js";
 import { deploymentDashboardUrlPage } from "./dashboard.js";
 import { addProgressLinkIfSlow } from "./indexes.js";
+import { ensureAuthKitProvisionedBeforeBuild } from "./workos/workos.js";
+import { fetchDeploymentCanonicalSiteUrl } from "./env.js";
 
 const brotli = promisify(zlib.brotliCompress);
 
@@ -61,6 +68,7 @@ export async function startPush(
   options: {
     url: string;
     deploymentName: string | null;
+    deploymentType?: DeploymentType;
   },
 ): Promise<StartPushResponse> {
   const response = await pushCode(
@@ -80,6 +88,7 @@ export async function evaluatePush(
   options: {
     url: string;
     deploymentName: string | null;
+    deploymentType?: DeploymentType;
   },
 ): Promise<EvaluatePushResponse> {
   const response = await pushCode(
@@ -99,12 +108,23 @@ async function pushCode(
   options: {
     url: string;
     deploymentName: string | null;
+    deploymentType?: DeploymentType;
   },
   endpoint: "/api/deploy2/start_push" | "/api/deploy2/evaluate_push",
 ): Promise<unknown> {
-  const custom = (_k: string | number, s: any) =>
-    typeof s === "string" ? s.slice(0, 40) + (s.length > 40 ? "..." : "") : s;
-  logVerbose(JSON.stringify(request, custom, 2));
+  // Log a summary of the push request instead of the full object
+  const unchangedModuleCount =
+    request.appDefinition?.unchangedModuleHashes?.length ?? 0;
+  const changedModuleCount = request.appDefinition?.changedModules?.length ?? 0;
+  const requestSummary = {
+    hasAppDefinition: request.appDefinition !== undefined,
+    appFunctionCount: unchangedModuleCount + changedModuleCount,
+    hasAppSchema: request.appDefinition?.schema !== null,
+    componentCount: request.componentDefinitions?.length ?? 0,
+    hasDependencies: request.nodeDependencies?.length > 0,
+    dryRun: request.dryRun,
+  };
+  logVerbose(`Push request summary: ${JSON.stringify(requestSummary)}`);
   const onError = (err: any) => {
     if (err.toString() === "TypeError: fetch failed") {
       changeSpinner(`Fetch failed, is ${options.url} correct? Retrying...`);
@@ -137,6 +157,7 @@ async function pushCode(
         deploymentUrl: options.url,
         deploymentNotice: "",
       },
+      options.deploymentType,
     );
   }
 }
@@ -279,6 +300,7 @@ export async function finishPush(
     dryRun: boolean;
     verbose?: boolean;
     deploymentName: string | null;
+    deploymentType?: DeploymentType;
   },
 ): Promise<FinishPushDiff> {
   changeSpinner("Finalizing push...");
@@ -313,6 +335,7 @@ export async function finishPush(
         deploymentUrl: options.url,
         deploymentNotice: "",
       },
+      options.deploymentType,
     );
   }
 }
@@ -358,6 +381,7 @@ export async function deployToDeployment(
     url: string;
     adminKey: string;
     deploymentName: string | null;
+    deploymentType?: DeploymentType;
   },
   options: {
     verbose?: boolean | undefined;
@@ -368,15 +392,42 @@ export async function deployToDeployment(
     codegen: "enable" | "disable";
     cmd?: string | undefined;
     cmdUrlEnvVarName?: string | undefined;
+    pushAllModules?: boolean;
 
     debugBundlePath?: string | undefined;
     debug?: boolean | undefined;
     writePushRequest?: string | undefined;
     liveComponentSources?: boolean | undefined;
+    skipWorkosCheck?: boolean | undefined;
     allowDeletingLargeIndexes: boolean;
   },
 ) {
   const { url, adminKey } = credentials;
+
+  // Pre-flight check: Ensure AuthKit is provisioned before building client bundle
+  if (!options.skipWorkosCheck) {
+    const { projectConfig } = await readProjectConfig(ctx);
+    const authKitConfig = await getAuthKitConfig(ctx, projectConfig);
+
+    if (authKitConfig && credentials.deploymentName) {
+      // Only provision for cloud deployments (dev/preview/prod)
+      // Skip for local and anonymous deployments
+      const deploymentType = credentials.deploymentType;
+      if (
+        deploymentType === "dev" ||
+        deploymentType === "preview" ||
+        deploymentType === "prod"
+      ) {
+        await ensureAuthKitProvisionedBeforeBuild(
+          ctx,
+          credentials.deploymentName,
+          { deploymentUrl: url, adminKey },
+          deploymentType,
+        );
+      }
+    }
+  }
+
   await runCommand(ctx, { ...options, url, adminKey });
 
   const pushOptions: PushOptions = {
@@ -393,6 +444,7 @@ export async function deployToDeployment(
     url,
     writePushRequest: options.writePushRequest,
     liveComponentSources: !!options.liveComponentSources,
+    pushAllModules: !!options.pushAllModules,
     largeIndexDeletionCheck: options.allowDeletingLargeIndexes
       ? "has confirmation"
       : "ask for confirmation",
@@ -420,21 +472,31 @@ export async function runCommand(
     return;
   }
 
-  const urlVar =
-    options.cmdUrlEnvVarName ?? (await suggestedEnvVarName(ctx)).envVar;
+  const suggestedEnvVars = await suggestedEnvVarNames(ctx);
+  const urlVar = options.cmdUrlEnvVarName ?? suggestedEnvVars.convexUrlEnvVar;
+  const siteVar = suggestedEnvVars.convexSiteEnvVar;
   showSpinner(
-    `Running '${options.cmd}' with environment variable "${urlVar}" set...${
+    `Running '${options.cmd}' with environment variables "${urlVar}" and "${siteVar}" set...${
       options.dryRun ? " [dry run]" : ""
     }`,
   );
   if (!options.dryRun) {
-    const canonicalCloudUrl = await fetchDeploymentCanonicalCloudUrl(ctx, {
+    const deployment = {
       deploymentUrl: options.url,
       adminKey: options.adminKey,
-    });
+    };
+    const canonicalCloudUrl = await fetchDeploymentCanonicalCloudUrl(
+      ctx,
+      deployment,
+    );
+    const canonicalSiteUrl = await fetchDeploymentCanonicalSiteUrl(
+      ctx,
+      deployment,
+    );
 
     const env = { ...process.env };
     env[urlVar] = canonicalCloudUrl;
+    env[siteVar] = canonicalSiteUrl;
     const result = spawnSync(options.cmd, {
       env,
       stdio: "inherit",
@@ -451,7 +513,7 @@ export async function runCommand(
   logFinishedStep(
     `${options.dryRun ? "Would have run" : "Ran"} "${
       options.cmd
-    }" with environment variable "${urlVar}" set`,
+    }" with environment variables "${urlVar}" and "${siteVar}" set`,
   );
 }
 

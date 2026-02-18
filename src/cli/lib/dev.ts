@@ -24,6 +24,12 @@ import {
 import { Crash, WatchContext, Watcher } from "./watch.js";
 import { runFunctionAndLog, subscribe } from "./run.js";
 import { Value } from "../../values/index.js";
+import { DeploymentType } from "./api.js";
+import { readProjectConfig, getAuthKitConfig } from "./config.js";
+import {
+  syncAuthKitConfigAfterPush,
+  ensureAuthKitProvisionedBeforeBuild,
+} from "./workos/workos.js";
 
 export async function devAgainstDeployment(
   ctx: OneoffCtx,
@@ -31,6 +37,7 @@ export async function devAgainstDeployment(
     url: string;
     adminKey: string;
     deploymentName: string | null;
+    deploymentType?: DeploymentType;
   },
   devOptions: {
     verbose: boolean;
@@ -48,9 +55,32 @@ export async function devAgainstDeployment(
     debugBundlePath?: string | undefined;
     debugNodeApis: boolean;
     liveComponentSources: boolean;
+    pushAllModules: boolean;
   },
 ) {
   const logManager = new LogManager(devOptions.tailLogs);
+
+  // Pre-flight check: Ensure AuthKit is provisioned before starting dev
+  const { projectConfig } = await readProjectConfig(ctx);
+  const authKitConfig = await getAuthKitConfig(ctx, projectConfig);
+
+  if (authKitConfig && credentials.deploymentName) {
+    // Only provision for cloud deployments (dev/preview/prod)
+    // Skip for local and anonymous deployments
+    const deploymentType = credentials.deploymentType;
+    if (
+      deploymentType === "dev" ||
+      deploymentType === "preview" ||
+      deploymentType === "prod"
+    ) {
+      await ensureAuthKitProvisionedBeforeBuild(
+        ctx,
+        credentials.deploymentName,
+        { deploymentUrl: credentials.url, adminKey: credentials.adminKey },
+        deploymentType,
+      );
+    }
+  }
 
   const promises = [];
   if (devOptions.tailLogs !== "disable") {
@@ -76,6 +106,7 @@ export async function devAgainstDeployment(
         debugNodeApis: devOptions.debugNodeApis,
         codegen: devOptions.codegen,
         liveComponentSources: devOptions.liveComponentSources,
+        pushAllModules: devOptions.pushAllModules,
         logManager, // Pass logManager to control logs during deploy
         largeIndexDeletionCheck: "no verification", // `convex dev` can’t push to prod
       },
@@ -100,11 +131,15 @@ export async function watchAndPush(
   },
 ) {
   const watch: { watcher: Watcher | undefined } = { watcher: undefined };
+  const authKitCache: { lastAppliedConfig: string | undefined } = {
+    lastAppliedConfig: undefined,
+  };
   let numFailures = 0;
   let ran = false;
   let pushed = false;
   let tableNameTriggeringRetry;
   let shouldRetryOnDeploymentEnvVarChange;
+  let isFirstPush = true; // Track if this is the first push in the session
 
   while (true) {
     const start = performance.now();
@@ -114,6 +149,7 @@ export async function watchAndPush(
     const ctx = new WatchContext(
       cmdOptions.traceEvents,
       outerCtx.bigBrainAuth(),
+      isFirstPush,
     );
     options.logManager?.beginDeploy();
     showSpinner("Preparing Convex functions...");
@@ -130,6 +166,31 @@ export async function watchAndPush(
           end - start,
         )})`,
       );
+
+      // Sync AuthKit configuration if it has changed
+      const { projectConfig } = await readProjectConfig(ctx);
+      const authKitConfig = await getAuthKitConfig(ctx, projectConfig);
+
+      // Check if config has changed by comparing stringified versions
+      const currentConfigString = authKitConfig
+        ? JSON.stringify(authKitConfig)
+        : undefined;
+
+      // Skip sync on first push since ensureAuthKitProvisionedBeforeBuild already configured WorkOS
+      if (
+        !isFirstPush &&
+        currentConfigString !== authKitCache.lastAppliedConfig
+      ) {
+        // Config has changed, sync it
+        await syncAuthKitConfigAfterPush(ctx, projectConfig, {
+          deploymentUrl: options.url,
+          adminKey: options.adminKey,
+        });
+      }
+
+      // Always update cache after push (even if we skipped sync)
+      authKitCache.lastAppliedConfig = currentConfigString;
+      isFirstPush = false;
       if (cmdOptions.run !== undefined && !ran) {
         switch (cmdOptions.run.kind) {
           case "function":

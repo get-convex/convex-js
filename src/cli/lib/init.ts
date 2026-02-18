@@ -2,7 +2,7 @@ import { chalkStderr } from "chalk";
 import { Context } from "../../bundler/context.js";
 import { logFinishedStep, logMessage } from "../../bundler/log.js";
 import { DeploymentType } from "./api.js";
-import { writeConvexUrlToEnvFile } from "./envvars.js";
+import { writeUrlsToEnvFile } from "./envvars.js";
 import { getDashboardUrl } from "./dashboard.js";
 
 export async function finalizeConfiguration(
@@ -12,16 +12,36 @@ export async function finalizeConfiguration(
     deploymentType: DeploymentType;
     deploymentName: string;
     url: string;
+    siteUrl: string | null | undefined;
     wroteToGitIgnore: boolean;
     changedDeploymentEnvVar: boolean;
   },
 ) {
-  const envVarWrite = await writeConvexUrlToEnvFile(ctx, options.url);
-  if (envVarWrite !== null) {
+  const envFileConfig = await writeUrlsToEnvFile(ctx, {
+    convexUrl: options.url,
+    siteUrl: options.siteUrl,
+  });
+  const isEnvFileConfigChanged =
+    envFileConfig !== null &&
+    (envFileConfig.convexUrlEnvVar || envFileConfig.siteUrlEnvVar);
+
+  if (isEnvFileConfigChanged) {
+    const urlUpdateMessages = [];
+    if (envFileConfig.convexUrlEnvVar) {
+      urlUpdateMessages.push(
+        `    client URL as ${envFileConfig.convexUrlEnvVar}\n`,
+      );
+    }
+    if (envFileConfig.siteUrlEnvVar) {
+      urlUpdateMessages.push(
+        `    HTTP actions URL as ${envFileConfig.siteUrlEnvVar}\n`,
+      );
+    }
     logFinishedStep(
       `${messageForDeploymentType(options.deploymentType, options.url)} and saved its:\n` +
-        `    name as CONVEX_DEPLOYMENT to .env.local\n` +
-        `    URL as ${envVarWrite.envVar} to ${envVarWrite.envFile}`,
+        `    name as CONVEX_DEPLOYMENT\n` +
+        urlUpdateMessages.join("") +
+        ` to ${envFileConfig.envFile}`,
     );
   } else if (options.changedDeploymentEnvVar) {
     logFinishedStep(
@@ -40,9 +60,9 @@ export async function finalizeConfiguration(
   const anyChanges =
     options.wroteToGitIgnore ||
     options.changedDeploymentEnvVar ||
-    envVarWrite !== null;
+    isEnvFileConfigChanged;
   if (anyChanges) {
-    const dashboardUrl = getDashboardUrl(ctx, {
+    const dashboardUrl = await getDashboardUrl(ctx, {
       deploymentName: options.deploymentName,
       deploymentType: options.deploymentType,
     });
@@ -63,6 +83,7 @@ function messageForDeploymentType(deploymentType: DeploymentType, url: string) {
     case "dev":
     case "prod":
     case "preview":
+    case "custom":
       return `Provisioned a ${deploymentType} deployment`;
     default: {
       deploymentType satisfies never;

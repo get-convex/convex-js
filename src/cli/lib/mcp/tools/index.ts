@@ -1,5 +1,3 @@
-import { ToolSchema } from "@modelcontextprotocol/sdk/types";
-import { Tool } from "@modelcontextprotocol/sdk/types";
 import { RequestContext } from "../requestContext.js";
 import { ZodTypeAny, z } from "zod";
 import zodToJsonSchema from "zod-to-json-schema";
@@ -11,6 +9,8 @@ import { RunTool } from "./run.js";
 import { EnvListTool, EnvGetTool, EnvSetTool, EnvRemoveTool } from "./env.js";
 import { RunOneoffQueryTool } from "./runOneoffQuery.js";
 import { LogsTool } from "./logs.js";
+import { InsightsTool } from "./insights.js";
+import { Tool } from "@modelcontextprotocol/sdk/types.js";
 
 export type ConvexTool<Input extends ZodTypeAny, Output extends ZodTypeAny> = {
   name: string;
@@ -23,7 +23,7 @@ export type ConvexTool<Input extends ZodTypeAny, Output extends ZodTypeAny> = {
   ) => Promise<z.infer<Output>>;
 };
 
-type ToolInput = z.infer<(typeof ToolSchema)["shape"]["inputSchema"]>;
+type ToolInput = Tool["inputSchema"];
 
 export function mcpTool(tool: ConvexTool<ZodTypeAny, ZodTypeAny>): Tool {
   return {
@@ -45,4 +45,5 @@ export const convexTools: ConvexTool<any, any>[] = [
   EnvRemoveTool,
   RunOneoffQueryTool,
   LogsTool,
+  InsightsTool,
 ];

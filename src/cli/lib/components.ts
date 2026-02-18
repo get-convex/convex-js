@@ -32,7 +32,7 @@ import {
   doFinalComponentCodegen,
   doInitialComponentCodegen,
   CodegenOptions,
-  doInitCodegen,
+  doInitConvexFolder,
   doCodegen,
 } from "./codegen.js";
 import {
@@ -52,10 +52,14 @@ import { FinishPushDiff } from "./deployApi/finishPush.js";
 import { Reporter, Span } from "./tracing.js";
 import { DEFINITION_FILENAME_TS } from "./components/constants.js";
 import { DeploymentSelection } from "./deploymentSelection.js";
+import { DeploymentType } from "./api.js";
 import { deploymentDashboardUrlPage } from "./dashboard.js";
 import { formatIndex, LargeIndexDeletionCheck } from "./indexes.js";
 import { checkForLargeIndexDeletion } from "./checkForLargeIndexDeletion.js";
 import { LogManager } from "./logs.js";
+import { createHash } from "crypto";
+import { Bundle, BundleHash } from "../../bundler/index.js";
+import { ModuleHashConfig } from "./deployApi/modules.js";
 
 export type PushOptions = {
   adminKey: string;
@@ -69,8 +73,10 @@ export type PushOptions = {
   codegen: boolean;
   url: string;
   deploymentName: string | null;
+  deploymentType?: DeploymentType;
   writePushRequest?: string | undefined;
   liveComponentSources: boolean;
+  pushAllModules: boolean;
   logManager?: LogManager | undefined;
   largeIndexDeletionCheck: LargeIndexDeletionCheck;
 };
@@ -87,7 +93,7 @@ export async function runCodegen(
   const functionsDirectoryPath = functionsDir(configPath, projectConfig);
 
   if (options.init) {
-    await doInitCodegen(ctx, functionsDirectoryPath, false, {
+    await doInitConvexFolder(ctx, functionsDirectoryPath, {
       dryRun: options.dryRun,
       debug: options.debug,
     });
@@ -119,6 +125,9 @@ export async function runCodegen(
       {
         ...options,
         deploymentName: credentials.deploymentFields?.deploymentName ?? null,
+        ...(credentials.deploymentFields?.deploymentType !== undefined
+          ? { deploymentType: credentials.deploymentFields.deploymentType }
+          : {}),
         url: credentials.url,
         adminKey: credentials.adminKey,
         generateCommonJSApi: options.commonjs,
@@ -147,6 +156,72 @@ export async function runPush(ctx: Context, options: PushOptions) {
   await runComponentsPush(ctx, options, configPath, projectConfig);
 }
 
+export function hash(bundle: Bundle) {
+  return createHash("sha256")
+    .update(bundle.source)
+    .update(bundle.sourceMap || "")
+    .digest("hex");
+}
+
+function isModuleTheSame(newBundle: Bundle, oldBundleHash: BundleHash) {
+  return (
+    newBundle.environment === oldBundleHash.environment &&
+    hash(newBundle) === oldBundleHash.hash
+  );
+}
+
+export function partitionModulesByChanges(
+  functions: Bundle[],
+  remoteHashesByPath: Map<string, BundleHash>,
+): {
+  unchangedModuleHashes: ModuleHashConfig[];
+  changedModules: Bundle[];
+} {
+  // Partition modules based on whether they match the existing modules
+  const unchangedModuleHashes = functions
+    .filter((newBundle) => {
+      const oldBundleHash = remoteHashesByPath.get(newBundle.path);
+      return oldBundleHash && isModuleTheSame(newBundle, oldBundleHash);
+    })
+    .map((func) => ({
+      path: func.path,
+      environment: func.environment,
+      sha256: hash(func),
+    }));
+  const changedModules = functions.filter((newBundle) => {
+    const oldBundleHash = remoteHashesByPath.get(newBundle.path);
+    return !oldBundleHash || !isModuleTheSame(newBundle, oldBundleHash);
+  });
+  return { unchangedModuleHashes, changedModules };
+}
+
+async function getUnchangedModuleHashesFromServer(
+  ctx: Context,
+  appImplementation: { functions: Bundle[] },
+  options: { url: string; adminKey: string },
+): Promise<{
+  unchangedModuleHashes: ModuleHashConfig[];
+  changedModules: Bundle[];
+}> {
+  const remoteConfigWithModuleHashes = await pullConfig(
+    ctx,
+    undefined,
+    undefined,
+    options.url,
+    options.adminKey,
+  );
+  const remoteHashesByPath = new Map(
+    remoteConfigWithModuleHashes.moduleHashes.map((moduleHash) => [
+      moduleHash.path,
+      moduleHash,
+    ]),
+  );
+  return partitionModulesByChanges(
+    appImplementation.functions,
+    remoteHashesByPath,
+  );
+}
+
 async function startComponentsPushAndCodegen(
   ctx: Context,
   parentSpan: Span,
@@ -158,6 +233,7 @@ async function startComponentsPushAndCodegen(
     adminKey: string;
     url: string;
     deploymentName: string | null;
+    deploymentType?: DeploymentType;
     verbose: boolean;
     debugBundlePath?: string | undefined;
     dryRun: boolean;
@@ -166,6 +242,7 @@ async function startComponentsPushAndCodegen(
     writePushRequest?: string | undefined;
     codegen: boolean;
     liveComponentSources?: boolean;
+    pushAllModules?: boolean;
     debugNodeApis: boolean;
     largeIndexDeletionCheck: LargeIndexDeletionCheck;
     codegenOnlyThisComponent?: string | undefined;
@@ -291,15 +368,21 @@ async function startComponentsPushAndCodegen(
   changeSpinner("Bundling component schemas and implementations...");
   const { appImplementation, componentImplementations } =
     await parentSpan.enterAsync("bundleImplementations", () =>
-      bundleImplementations(
+      bundleImplementations({
         ctx,
-        rootComponent,
+        rootComponentDirectory: rootComponent,
         // When running codegen for a specific component, don't bundle the root.
-        [...components.values()].filter((dir) => !dir.syntheticComponentImport),
-        projectConfig.node.externalPackages,
-        options.liveComponentSources ? ["@convex-dev/component-source"] : [],
-        options.verbose,
-      ),
+        componentDirectories: [...components.values()].filter(
+          (dir) => !dir.isRoot && !dir.syntheticComponentImport,
+        ),
+        nodeExternalPackages: projectConfig.node.externalPackages,
+        extraConditions: options.liveComponentSources
+          ? ["@convex-dev/component-source"]
+          : [],
+        verbose: options.verbose,
+        includeSourcesContent:
+          projectConfig.bundler?.includeSourcesContent ?? false,
+      }),
     );
   if (options.debugBundlePath) {
     const { config: localConfig } = await configFromProjectConfig(
@@ -323,9 +406,20 @@ async function startComponentsPushAndCodegen(
   // component, and may be different for each component.
   const udfServerVersion = version;
 
+  const { unchangedModuleHashes, changedModules } = options.pushAllModules
+    ? {
+        unchangedModuleHashes: [],
+        changedModules: appImplementation.functions,
+      }
+    : await parentSpan.enterAsync("getUnchangedModuleHashesFromServer", () =>
+        getUnchangedModuleHashesFromServer(ctx, appImplementation, options),
+      );
+
   const appDefinition: AppDefinitionConfig = {
     ...appDefinitionSpecWithoutImpls,
-    ...appImplementation,
+    schema: appImplementation.schema,
+    changedModules,
+    unchangedModuleHashes,
     udfServerVersion,
   };
 
@@ -523,29 +617,28 @@ export async function runComponentsPush(
     waitForSchema(ctx, span, startPushResponse, options),
   );
 
-  const remoteConfigWithModuleHashes = await pullConfig(
-    ctx,
-    undefined,
-    undefined,
-    options.url,
-    options.adminKey,
-  );
-
-  const { config: localConfig } = await configFromProjectConfig(
-    ctx,
-    projectConfig,
-    configPath,
-    options.verbose,
-  );
-
-  changeSpinner("Diffing local code and deployment state...");
-  const { diffString } = diffConfig(
-    remoteConfigWithModuleHashes,
-    localConfig,
-    false,
-  );
-
   if (verbose) {
+    const remoteConfigWithModuleHashes = await pullConfig(
+      ctx,
+      undefined,
+      undefined,
+      options.url,
+      options.adminKey,
+    );
+
+    const { config: localConfig } = await configFromProjectConfig(
+      ctx,
+      projectConfig,
+      configPath,
+      options.verbose,
+    );
+
+    changeSpinner("Diffing local code and deployment state...");
+    const { diffString } = diffConfig(
+      remoteConfigWithModuleHashes,
+      localConfig,
+    );
+
     logFinishedStep(
       `Remote config ${
         options.dryRun ? "would" : "will"

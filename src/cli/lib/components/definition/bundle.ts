@@ -618,14 +618,23 @@ export async function bundleDefinitions(
   };
 }
 
-export async function bundleImplementations(
-  ctx: Context,
-  rootComponentDirectory: ComponentDirectory,
-  componentDirectories: ComponentDirectory[],
-  nodeExternalPackages: string[],
-  extraConditions: string[],
-  verbose: boolean = false,
-): Promise<{
+export async function bundleImplementations({
+  ctx,
+  rootComponentDirectory,
+  componentDirectories,
+  nodeExternalPackages,
+  extraConditions,
+  verbose = false,
+  includeSourcesContent = false,
+}: {
+  ctx: Context;
+  rootComponentDirectory: ComponentDirectory;
+  componentDirectories: ComponentDirectory[];
+  nodeExternalPackages: string[];
+  extraConditions: string[];
+  verbose: boolean;
+  includeSourcesContent?: boolean;
+}): Promise<{
   appImplementation: {
     schema: Bundle | null;
     functions: Bundle[];
@@ -667,16 +676,15 @@ export async function bundleImplementations(
       modules: Bundle[];
       externalDependencies: Map<string, string>;
       bundledModuleNames: Set<string>;
-    } = await bundle(
+    } = await bundle({
       ctx,
-      resolvedPath,
-      entryPoints.isolate,
-      true,
-      "browser",
-      undefined,
-      undefined,
+      dir: resolvedPath,
+      entryPoints: entryPoints.isolate,
+      generateSourceMaps: true,
+      platform: "browser",
       extraConditions,
-    );
+      includeSourcesContent,
+    });
 
     if (convexResult.externalDependencies.size !== 0) {
       return await ctx.crash({
@@ -694,16 +702,17 @@ export async function bundleImplementations(
         modules: Bundle[];
         externalDependencies: Map<string, string>;
         bundledModuleNames: Set<string>;
-      } = await bundle(
+      } = await bundle({
         ctx,
-        resolvedPath,
-        entryPoints.node,
-        true,
-        "node",
-        path.join("_deps", "node"),
-        nodeExternalPackages,
+        dir: resolvedPath,
+        entryPoints: entryPoints.node,
+        generateSourceMaps: true,
+        platform: "node",
+        chunksFolder: path.join("_deps", "node"),
+        externalPackagesAllowList: nodeExternalPackages,
         extraConditions,
-      );
+        includeSourcesContent,
+      });
 
       const externalNodeDependencies: NodeDependency[] = [];
       for (const [
@@ -728,16 +737,17 @@ export async function bundleImplementations(
           modules: Bundle[];
           externalDependencies: Map<string, string>;
           bundledModuleNames: Set<string>;
-        } = await bundle(
+        } = await bundle({
           ctx,
-          resolvedPath,
-          entryPoints.node,
-          true,
-          "node",
-          path.join("_deps", "node"),
-          nodeExternalPackages,
+          dir: resolvedPath,
+          entryPoints: entryPoints.node,
+          generateSourceMaps: true,
+          platform: "node",
+          chunksFolder: path.join("_deps", "node"),
+          externalPackagesAllowList: nodeExternalPackages,
           extraConditions,
-        );
+          includeSourcesContent,
+        });
         if (nodeResult.modules.length > 0) {
           // TODO(ENG-7116) Remove error and bundle the component node actions when we are ready to support them.
           await ctx.crash({

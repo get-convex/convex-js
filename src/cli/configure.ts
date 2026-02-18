@@ -17,12 +17,7 @@ import {
   checkAccessToSelectedProject,
   validateDeploymentSelectionForExistingDeployment,
 } from "./lib/api.js";
-import {
-  configName,
-  readProjectConfig,
-  upgradeOldAuthInfoToAuthConfig,
-  writeProjectConfig,
-} from "./lib/config.js";
+import { readProjectConfig, writeProjectConfig } from "./lib/config.js";
 import {
   DeploymentDetails,
   eraseDeploymentEnvVar,
@@ -35,13 +30,14 @@ import {
   hasProjects,
   logAndHandleFetchError,
   selectDevDeploymentType,
+  selectRegionOrUseDefault,
   validateOrSelectProject,
   validateOrSelectTeam,
 } from "./lib/utils/utils.js";
-import { writeConvexUrlToEnvFile } from "./lib/envvars.js";
+import { writeUrlsToEnvFile } from "./lib/envvars.js";
 import path from "path";
 import { projectDashboardUrl } from "./lib/dashboard.js";
-import { doInitialCodegen } from "./lib/codegen.js";
+import { doInitConvexFolder } from "./lib/codegen.js";
 import { handleLocalDeployment } from "./lib/localDeployment/localDeployment.js";
 import {
   promptOptions,
@@ -57,6 +53,7 @@ import {
 } from "./lib/deploymentSelection.js";
 import { ensureLoggedIn } from "./lib/login.js";
 import { handleAnonymousDeployment } from "./lib/localDeployment/anonymous.js";
+import { fetchDeploymentCanonicalSiteUrl } from "./lib/env.js";
 type DeploymentCredentials = {
   url: string;
   adminKey: string;
@@ -114,9 +111,10 @@ export async function deploymentCredentialsOrConfigure(
   DeploymentCredentials & {
     deploymentFields: {
       deploymentName: DeploymentName;
-      deploymentType: string;
+      deploymentType: DeploymentType;
       projectSlug: string | null;
       teamSlug: string | null;
+      siteUrl: string | null;
     } | null;
   }
 > {
@@ -126,6 +124,10 @@ export async function deploymentCredentialsOrConfigure(
     chosenConfiguration,
     cmdOptions,
   );
+  const siteUrl = await fetchDeploymentCanonicalSiteUrl(ctx, {
+    adminKey: selectedDeployment.adminKey,
+    deploymentUrl: selectedDeployment.url,
+  });
 
   if (selectedDeployment.deploymentFields !== null) {
     // Set the `CONVEX_DEPLOYMENT` env var + the `CONVEX_URL` env var
@@ -133,6 +135,7 @@ export async function deploymentCredentialsOrConfigure(
       ctx,
       {
         url: selectedDeployment.url,
+        siteUrl,
         deploymentName: selectedDeployment.deploymentFields.deploymentName,
         teamSlug: selectedDeployment.deploymentFields.teamSlug,
         projectSlug: selectedDeployment.deploymentFields.projectSlug,
@@ -141,16 +144,21 @@ export async function deploymentCredentialsOrConfigure(
       deploymentNameFromSelection(deploymentSelection),
     );
   } else {
-    // Clear the `CONVEX_DEPLOYMENT` env var + set the `CONVEX_URL` env var
+    // Clear the `CONVEX_DEPLOYMENT` env var + set the `CONVEX_URL` and
+    // `CONVEX_SITE_URL` env vars.
     await handleManuallySetUrlAndAdminKey(ctx, {
       url: selectedDeployment.url,
+      siteUrl,
       adminKey: selectedDeployment.adminKey,
     });
   }
   return {
     url: selectedDeployment.url,
     adminKey: selectedDeployment.adminKey,
-    deploymentFields: selectedDeployment.deploymentFields,
+    deploymentFields:
+      selectedDeployment.deploymentFields === null
+        ? null
+        : { ...selectedDeployment.deploymentFields, siteUrl: siteUrl },
   };
 }
 
@@ -187,13 +195,6 @@ export async function _deploymentCredentialsOrConfigure(
         cmdOptions.selectionWithinProject,
         deploymentSelection.deploymentToActOn.source,
       );
-      if (deploymentSelection.deploymentToActOn.deploymentFields === null) {
-        // erase `CONVEX_DEPLOYMENT` from .env.local + set the url env var
-        await handleManuallySetUrlAndAdminKey(ctx, {
-          url: deploymentSelection.deploymentToActOn.url,
-          adminKey: deploymentSelection.deploymentToActOn.adminKey,
-        });
-      }
       return {
         url: deploymentSelection.deploymentToActOn.url,
         adminKey: deploymentSelection.deploymentToActOn.adminKey,
@@ -232,11 +233,16 @@ export async function _deploymentCredentialsOrConfigure(
     }
     case "anonymous": {
       const hasAuth = ctx.bigBrainAuth() !== null;
-      if (hasAuth && deploymentSelection.deploymentName !== null) {
+      const isAgentMode = process.env.CONVEX_AGENT_MODE === "anonymous";
+      if (
+        !isAgentMode &&
+        hasAuth &&
+        deploymentSelection.deploymentName !== null
+      ) {
         const shouldConfigure =
           chosenConfiguration !== null ||
           (await promptYesNo(ctx, {
-            message: `${CONVEX_DEPLOYMENT_ENV_VAR_NAME} is configured with deployment ${deploymentSelection.deploymentName}, which is not linked with your account. Would you like to choose a different project instead?`,
+            message: `${CONVEX_DEPLOYMENT_ENV_VAR_NAME} is configured with deployment ${deploymentSelection.deploymentName}, which is not linked with your account. Would you like to link it now?`,
           }));
         if (!shouldConfigure) {
           return await ctx.crash({
@@ -257,8 +263,7 @@ export async function _deploymentCredentialsOrConfigure(
       const alreadyHasConfiguredAnonymousDeployment =
         deploymentSelection.deploymentName !== null &&
         chosenConfiguration === null;
-      const forceAnonymous = process.env.CONVEX_AGENT_MODE === "anonymous";
-      if (forceAnonymous) {
+      if (isAgentMode) {
         logWarning(
           chalkStderr.yellow.bold(
             "CONVEX_AGENT_MODE=anonymous mode is in beta, functionality may change in the future.",
@@ -266,7 +271,7 @@ export async function _deploymentCredentialsOrConfigure(
         );
       }
 
-      const shouldPromptForLogin = forceAnonymous
+      const shouldPromptForLogin = isAgentMode
         ? "no"
         : alreadyHasConfiguredAnonymousDeployment
           ? "no"
@@ -329,7 +334,8 @@ async function handleDeploymentWithinProject(
   const loginMessage =
     hasAuth && shouldAllowAnonymousDevelopment()
       ? undefined
-      : `Tip: You can try out Convex without creating an account by clearing the ${CONVEX_DEPLOYMENT_ENV_VAR_NAME} environment variable.`;
+      : "Tip: You can try out Convex without creating an account by clearing the " +
+        `${CONVEX_DEPLOYMENT_ENV_VAR_NAME} environment variable (often in .env.local).`;
   await ensureLoggedIn(ctx, {
     message: loginMessage,
     overrideAuthUrl: cmdOptions.overrideAuthUrl,
@@ -453,11 +459,11 @@ async function handleChooseProject(
   };
 }
 
-export async function handleManuallySetUrlAndAdminKey(
+async function handleManuallySetUrlAndAdminKey(
   ctx: Context,
-  cmdOptions: { url: string; adminKey: string },
+  cmdOptions: { url: string; siteUrl: string; adminKey: string },
 ) {
-  const { url, adminKey } = cmdOptions;
+  const { url, siteUrl, adminKey } = cmdOptions;
   const didErase = await eraseDeploymentEnvVar(ctx);
   if (didErase) {
     logMessage(
@@ -466,12 +472,23 @@ export async function handleManuallySetUrlAndAdminKey(
       ),
     );
   }
-  const envVarWrite = await writeConvexUrlToEnvFile(ctx, url);
-  if (envVarWrite !== null) {
+  const envFileConfig = await writeUrlsToEnvFile(ctx, {
+    convexUrl: url,
+    siteUrl,
+  });
+  if (
+    envFileConfig !== null &&
+    (envFileConfig.convexUrlEnvVar || envFileConfig.siteUrlEnvVar)
+  ) {
+    // Join both names with " and " if both exist, otherwise just use one of them.
+    const updatedVars = [
+      envFileConfig.convexUrlEnvVar,
+      envFileConfig.siteUrlEnvVar,
+    ]
+      .filter(Boolean)
+      .join(" and ");
     logMessage(
-      chalkStderr.green(
-        `Saved the given --url as ${envVarWrite.envVar} to ${envVarWrite.envFile}`,
-      ),
+      chalkStderr.green(`Saved ${updatedVars} to ${envFileConfig.envFile}`),
     );
   }
   return { url, adminKey };
@@ -525,7 +542,7 @@ async function selectNewProject(
     defaultProjectName?: string | undefined;
   },
 ) {
-  const { teamSlug: selectedTeam, chosen: didChooseBetweenTeams } =
+  const { team: selectedTeam, chosen: didChooseBetweenTeams } =
     await validateOrSelectTeam(ctx, config.team, "Team:");
   let projectName: string = config.project || cwd;
   let choseProjectInteractively = false;
@@ -540,7 +557,7 @@ async function selectNewProject(
   const { devDeployment } = await selectDevDeploymentType(ctx, {
     chosenConfiguration,
     newOrExisting: "new",
-    teamSlug: selectedTeam,
+    teamSlug: selectedTeam.slug,
     userHasChosenSomethingInteractively:
       didChooseBetweenTeams || choseProjectInteractively,
     projectSlug: undefined,
@@ -552,15 +569,27 @@ async function selectNewProject(
         : undefined,
   });
 
+  const region =
+    devDeployment === "cloud"
+      ? await selectRegionOrUseDefault(ctx, selectedTeam)
+      : null;
+
   showSpinner("Creating new Convex project...");
+
+  const deploymentToProvision =
+    devDeployment === "cloud"
+      ? {
+          deploymentType: "dev" as const,
+          region,
+        }
+      : null;
 
   let projectSlug, teamSlug, projectsRemaining;
   try {
     ({ projectSlug, teamSlug, projectsRemaining } = await createProject(ctx, {
-      teamSlug: selectedTeam,
+      teamSlug: selectedTeam.slug,
       projectName,
-      // We have to create some deployment initially for a project.
-      deploymentTypeToProvision: devDeployment === "local" ? "prod" : "dev",
+      deploymentToProvision,
     }));
   } catch (err) {
     logFailure("Unable to create project.");
@@ -587,7 +616,7 @@ async function selectNewProject(
     );
   }
 
-  await doInitialCodegen(ctx, { init: true });
+  await doInitConvexFolder(ctx);
   return { teamSlug, projectSlug, devDeployment };
 }
 
@@ -606,11 +635,10 @@ async function selectExistingProject(
   projectSlug: string;
   devDeployment: "cloud" | "local";
 }> {
-  const { teamSlug, chosen } = await validateOrSelectTeam(
-    ctx,
-    config.team,
-    "Team:",
-  );
+  const {
+    team: { slug: teamSlug },
+    chosen,
+  } = await validateOrSelectTeam(ctx, config.team, "Team:");
 
   const projectSlug = await validateOrSelectProject(
     ctx,
@@ -640,9 +668,6 @@ async function selectExistingProject(
         : undefined,
   });
 
-  showSpinner(`Reinitializing project ${projectSlug}...\n`);
-  // TODO: Do we need to do codegen for existing projects? (-Ian)
-  await doInitialCodegen(ctx, { init: false });
   logFinishedStep(`Reinitialized project ${chalkStderr.bold(projectSlug)}`);
   return { teamSlug, projectSlug, devDeployment };
 }
@@ -729,6 +754,7 @@ export async function updateEnvAndConfigForDeploymentSelection(
   ctx: Context,
   options: {
     url: string;
+    siteUrl?: string | null;
     deploymentName: string;
     teamSlug: string | null;
     projectSlug: string | null;
@@ -736,10 +762,7 @@ export async function updateEnvAndConfigForDeploymentSelection(
   },
   existingValue: string | null,
 ) {
-  const { configPath, projectConfig: existingProjectConfig } =
-    await readProjectConfig(ctx);
-
-  const functionsPath = functionsDir(configName(), existingProjectConfig);
+  const { configPath, projectConfig } = await readProjectConfig(ctx);
 
   const { wroteToGitIgnore, changedDeploymentEnvVar } =
     await writeDeploymentEnvVar(
@@ -752,18 +775,12 @@ export async function updateEnvAndConfigForDeploymentSelection(
       },
       existingValue,
     );
-  const projectConfig = await upgradeOldAuthInfoToAuthConfig(
-    ctx,
-    existingProjectConfig,
-    functionsPath,
-  );
-  await writeProjectConfig(ctx, projectConfig, {
-    deleteIfAllDefault: true,
-  });
+  await writeProjectConfig(ctx, projectConfig);
   await finalizeConfiguration(ctx, {
     deploymentType: options.deploymentType,
     deploymentName: options.deploymentName,
     url: options.url,
+    siteUrl: options.siteUrl,
     wroteToGitIgnore,
     changedDeploymentEnvVar,
     functionsPath: functionsDir(configPath, projectConfig),
