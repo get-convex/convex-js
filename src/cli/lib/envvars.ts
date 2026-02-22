@@ -49,6 +49,7 @@ export async function writeUrlsToEnvFile(
   options: {
     convexUrl: string;
     siteUrl?: string | null | undefined;
+    envFile?: string | undefined;
   },
 ): Promise<EnvFileUrlConfig> {
   const envFileConfig = await loadEnvFileUrlConfig(ctx, options);
@@ -243,12 +244,15 @@ async function loadEnvFileUrlConfig(
   options: {
     convexUrl: string;
     siteUrl?: string | null | undefined;
+    envFile?: string | undefined;
   },
 ): Promise<EnvFileUrlConfig> {
   const { detectedFramework, convexUrlEnvVar, convexSiteEnvVar } =
     await suggestedEnvVarNames(ctx);
 
-  const { envFile, existing } = suggestedDevEnvFile(ctx, detectedFramework);
+  const { envFile, existing } = options.envFile
+    ? { envFile: options.envFile, existing: ctx.fs.exists(options.envFile) }
+    : suggestedDevEnvFile(ctx, detectedFramework);
 
   if (!existing) {
     return {

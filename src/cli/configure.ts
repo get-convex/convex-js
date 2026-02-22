@@ -140,6 +140,7 @@ export async function deploymentCredentialsOrConfigure(
         teamSlug: selectedDeployment.deploymentFields.teamSlug,
         projectSlug: selectedDeployment.deploymentFields.projectSlug,
         deploymentType: selectedDeployment.deploymentFields.deploymentType,
+        envFile: cmdOptions.envFile,
       },
       deploymentNameFromSelection(deploymentSelection),
     );
@@ -150,6 +151,7 @@ export async function deploymentCredentialsOrConfigure(
       url: selectedDeployment.url,
       siteUrl,
       adminKey: selectedDeployment.adminKey,
+      envFile: cmdOptions.envFile,
     });
   }
   return {
@@ -461,20 +463,26 @@ async function handleChooseProject(
 
 async function handleManuallySetUrlAndAdminKey(
   ctx: Context,
-  cmdOptions: { url: string; siteUrl: string; adminKey: string },
+  cmdOptions: {
+    url: string;
+    siteUrl: string;
+    adminKey: string;
+    envFile?: string | undefined;
+  },
 ) {
-  const { url, siteUrl, adminKey } = cmdOptions;
-  const didErase = await eraseDeploymentEnvVar(ctx);
+  const { url, siteUrl, adminKey, envFile } = cmdOptions;
+  const didErase = await eraseDeploymentEnvVar(ctx, envFile);
   if (didErase) {
     logMessage(
       chalkStderr.yellowBright(
-        `Removed the CONVEX_DEPLOYMENT environment variable from .env.local`,
+        `Removed the CONVEX_DEPLOYMENT environment variable from ${envFile ?? ".env.local"}`,
       ),
     );
   }
   const envFileConfig = await writeUrlsToEnvFile(ctx, {
     convexUrl: url,
     siteUrl,
+    envFile,
   });
   if (
     envFileConfig !== null &&
@@ -759,6 +767,7 @@ export async function updateEnvAndConfigForDeploymentSelection(
     teamSlug: string | null;
     projectSlug: string | null;
     deploymentType: DeploymentType;
+    envFile?: string | undefined;
   },
   existingValue: string | null,
 ) {
@@ -774,6 +783,7 @@ export async function updateEnvAndConfigForDeploymentSelection(
         deploymentName: options.deploymentName,
       },
       existingValue,
+      options.envFile,
     );
   await writeProjectConfig(ctx, projectConfig);
   await finalizeConfiguration(ctx, {
@@ -784,5 +794,6 @@ export async function updateEnvAndConfigForDeploymentSelection(
     wroteToGitIgnore,
     changedDeploymentEnvVar,
     functionsPath: functionsDir(configPath, projectConfig),
+    envFile: options.envFile,
   });
 }
