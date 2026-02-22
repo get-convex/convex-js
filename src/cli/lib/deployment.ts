@@ -48,9 +48,11 @@ export async function writeDeploymentEnvVar(
     deploymentName: string;
   },
   existingValue: string | null,
+  envFile?: string | undefined,
 ): Promise<{ wroteToGitIgnore: boolean; changedDeploymentEnvVar: boolean }> {
-  const existingFile = ctx.fs.exists(ENV_VAR_FILE_PATH)
-    ? ctx.fs.readUtf8File(ENV_VAR_FILE_PATH)
+  const targetFile = envFile ?? ENV_VAR_FILE_PATH;
+  const existingFile = ctx.fs.exists(targetFile)
+    ? ctx.fs.readUtf8File(targetFile)
     : null;
   const changedFile = changesToEnvVarFile(
     existingFile,
@@ -67,7 +69,7 @@ export async function writeDeploymentEnvVar(
     existingValue !== deploymentEnvVarValue;
 
   if (changedFile !== null) {
-    ctx.fs.writeUtf8File(ENV_VAR_FILE_PATH, changedFile);
+    ctx.fs.writeUtf8File(targetFile, changedFile);
     // Only do this if we're not reinitializing an existing setup
     return {
       wroteToGitIgnore: await gitIgnoreEnvVarFile(ctx),
@@ -81,9 +83,13 @@ export async function writeDeploymentEnvVar(
 }
 
 // Only used in the internal --url flow
-export async function eraseDeploymentEnvVar(ctx: Context): Promise<boolean> {
-  const existingFile = ctx.fs.exists(ENV_VAR_FILE_PATH)
-    ? ctx.fs.readUtf8File(ENV_VAR_FILE_PATH)
+export async function eraseDeploymentEnvVar(
+  ctx: Context,
+  envFile?: string | undefined,
+): Promise<boolean> {
+  const targetFile = envFile ?? ENV_VAR_FILE_PATH;
+  const existingFile = ctx.fs.exists(targetFile)
+    ? ctx.fs.readUtf8File(targetFile)
     : null;
   if (existingFile === null) {
     return false;
@@ -97,7 +103,7 @@ export async function eraseDeploymentEnvVar(ctx: Context): Promise<boolean> {
     getEnvVarRegex(CONVEX_DEPLOYMENT_ENV_VAR_NAME),
     "",
   );
-  ctx.fs.writeUtf8File(ENV_VAR_FILE_PATH, changedFile);
+  ctx.fs.writeUtf8File(targetFile, changedFile);
   return true;
 }
 
