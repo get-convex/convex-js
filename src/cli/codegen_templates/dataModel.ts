@@ -148,9 +148,20 @@ async function staticDataModelImpl(
     return useTypeScript ? noSchemaDataModelTS() : noSchemaDataModelDTS();
   }
 
+  // Conditionally include AnyDataModel in the import only when schema
+  // validation is disabled (it is used later as `& AnyDataModel`).
+  const serverImports = [
+    "DocumentByName",
+    "TableNamesInDataModel",
+    "SystemTableNames",
+  ];
+  if (!analysis.schema.schemaValidation) {
+    serverImports.push("AnyDataModel");
+  }
+
   const lines = [
     header("Generated data model types."),
-    `import type { DocumentByName, TableNamesInDataModel, SystemTableNames, AnyDataModel } from "convex/server";`,
+    `import type { ${serverImports.join(", ")} } from "convex/server";`,
     `import type { GenericId } from "convex/values";`,
   ];
   for await (const line of codegenDataModel(ctx, analysis.schema)) {
