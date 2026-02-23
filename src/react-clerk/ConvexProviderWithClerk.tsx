@@ -15,8 +15,7 @@ type IConvexReactClient = {
 type UseAuth = () => {
   isLoaded: boolean;
   isSignedIn: boolean | undefined;
-  getToken: (options: {
-    template?: "convex";
+  getToken: (options?: {
     skipCache?: boolean;
   }) => Promise<string | null>;
   // We don't use these properties but they should trigger a new token fetch.
@@ -64,7 +63,6 @@ function useUseAuthFromClerk(useAuth: UseAuth) {
           async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
             try {
               return await getToken({
-                template: "convex",
                 skipCache: forceRefreshToken,
               });
             } catch {
