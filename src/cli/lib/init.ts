@@ -15,11 +15,13 @@ export async function finalizeConfiguration(
     siteUrl: string | null | undefined;
     wroteToGitIgnore: boolean;
     changedDeploymentEnvVar: boolean;
+    envFile?: string | undefined;
   },
 ) {
   const envFileConfig = await writeUrlsToEnvFile(ctx, {
     convexUrl: options.url,
     siteUrl: options.siteUrl,
+    envFile: options.envFile,
   });
   const isEnvFileConfigChanged =
     envFileConfig !== null &&
@@ -45,7 +47,7 @@ export async function finalizeConfiguration(
     );
   } else if (options.changedDeploymentEnvVar) {
     logFinishedStep(
-      `${messageForDeploymentType(options.deploymentType, options.url)} and saved its name as CONVEX_DEPLOYMENT to .env.local`,
+      `${messageForDeploymentType(options.deploymentType, options.url)} and saved its name as CONVEX_DEPLOYMENT to ${options.envFile ?? ".env.local"}`,
     );
   }
   if (options.wroteToGitIgnore) {
