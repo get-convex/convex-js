@@ -4,6 +4,9 @@ const fs = require("fs");
 const path = require("path");
 const process = require("process");
 
+const pkg = require(path.join(__dirname, "..", "package.json"));
+const versionDefine = { __VERSION__: JSON.stringify(pkg.version) };
+
 // when browser/index-node.ts imports simple_client, don't bundle it
 const importPathPlugin = {
   name: "import-path",
@@ -43,6 +46,7 @@ if (process.argv.includes("esm")) {
     sourcemap: true,
     outdir: tempDir + "/esm",
     target: "es2020",
+    define: versionDefine,
   };
   require("esbuild")
     .build(opts)
@@ -78,6 +82,7 @@ if (process.argv.includes("cjs")) {
     sourcemap: true,
     outdir: tempDir + "/cjs",
     target: "es2020",
+    define: versionDefine,
   };
   require("esbuild")
     .build(opts)
