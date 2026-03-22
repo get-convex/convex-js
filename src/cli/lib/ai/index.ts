@@ -820,6 +820,12 @@ export async function maybeSetupAiFiles(
     return;
   }
 
+  // Respect the user's explicit opt-out via convex.json aiFiles.disableStalenessMessage.
+  const config = await readAiConfig(projectDir, convexDir);
+  if (config?.disableStalenessMessage) {
+    return;
+  }
+
   // Non-interactive (no TTY) is almost always an AI agent, not CI
   // (CI uses `npx convex deploy`). Default to installing so agents
   // get context automatically.
