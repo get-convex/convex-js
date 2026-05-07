@@ -147,10 +147,11 @@ export async function handleAnonymousDeployment(
     adminKey = data.adminKey;
   }
 
-  const { cloudPort, sitePort } = await chooseLocalBackendPorts(
-    ctx,
-    options.ports,
-  );
+  const { cloudPort, sitePort } = await chooseLocalBackendPorts(ctx, {
+    requestedPorts: options.ports,
+    suggestedPorts:
+      deployment.kind === "existing" ? deployment.config.ports : undefined,
+  });
   const onActivity = async (isOffline: boolean, _wasOffline: boolean) => {
     await ensureBackendRunning(ctx, {
       cloudPort,

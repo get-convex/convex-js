@@ -103,10 +103,10 @@ export async function handleLocalDeployment(
         }
       : { kind: "version", version: options.backendVersion },
   );
-  const { cloudPort, sitePort } = await chooseLocalBackendPorts(
-    ctx,
-    options.ports,
-  );
+  const { cloudPort, sitePort } = await chooseLocalBackendPorts(ctx, {
+    requestedPorts: options.ports,
+    suggestedPorts: existingDeploymentForProject?.config.ports,
+  });
   const { deploymentName, adminKey } = await bigBrainStart(ctx, {
     port: cloudPort,
     projectSlug: options.projectSlug,
@@ -226,10 +226,11 @@ async function handleOffline(
     kind: "version",
     version: config.backendVersion,
   });
-  const { cloudPort, sitePort } = await chooseLocalBackendPorts(
-    ctx,
-    options.ports,
-  );
+  const { cloudPort, sitePort } = await chooseLocalBackendPorts(ctx, {
+    requestedPorts: options.ports,
+    // FIXME: This doesn’t try to reuse the ports already assigned in the config.
+    // Please update this if we ever support offline mode (currently this is dead code).
+  });
   saveDeploymentConfig(ctx, "local", deploymentName, config);
   await runLocalBackend(ctx, {
     binaryPath,
