@@ -44,7 +44,7 @@ import {
   componentTS,
   rootComponentApiCJS,
 } from "../codegen_templates/component_api.js";
-import { functionsDir } from "./utils/utils.js";
+import { functionsDir, sorted } from "./utils/utils.js";
 import { LargeIndexDeletionCheck } from "./indexes.js";
 
 const PRESERVED_GENERATED_ENTRIES = new Set(["ai"]);
@@ -844,9 +844,11 @@ async function doApiCodegen(
   opts?: { dryRun?: boolean; debug?: boolean },
 ) {
   const absModulePaths = await entryPoints(ctx, functionsDir);
-  const modulePaths = absModulePaths
-    .map((p) => path.relative(functionsDir, p))
-    .sort();
+  // Sort paths as generic (forward slash) for identical results on POSIX and Windows.
+  const modulePaths = sorted(
+    absModulePaths.map((p) => path.relative(functionsDir, p)),
+    (p) => p.replaceAll("\\", "/"),
+  );
 
   const writtenFiles: string[] = [];
 
