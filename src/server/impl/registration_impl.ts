@@ -505,6 +505,7 @@ async function invokeAction<
   const calls = setupActionCalls(requestId);
   const ctx = {
     ...calls,
+    requestId,
     auth: setupAuth(requestId),
     scheduler: setupActionScheduler(requestId),
     storage: setupStorageActionWriter(requestId),
@@ -689,6 +690,7 @@ async function invokeHttpAction<
   const calls = setupActionCalls(requestId);
   const ctx = {
     ...calls,
+    requestId,
     auth: setupAuth(requestId),
     storage: setupStorageActionWriter(requestId),
     scheduler: setupActionScheduler(requestId),
