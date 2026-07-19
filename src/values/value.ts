@@ -7,14 +7,17 @@
  */
 import * as Base64 from "./base64.js";
 import { isSimpleObject } from "../common/index.js";
+import {
+  BI,
+  MIN_INT64,
+  MAX_INT64,
+  ZERO,
+  EIGHT,
+  TWOFIFTYSIX,
+  type BigIntValue,
+} from "./bigint-ops.js";
 
 const LITTLE_ENDIAN = true;
-// This code is used by code that may not have bigint literals.
-const MIN_INT64 = BigInt("-9223372036854775808");
-const MAX_INT64 = BigInt("9223372036854775807");
-const ZERO = BigInt("0");
-const EIGHT = BigInt("8");
-const TWOFIFTYSIX = BigInt("256");
 
 /**
  * The type of JavaScript values serializable to JSON.
@@ -22,12 +25,7 @@ const TWOFIFTYSIX = BigInt("256");
  * @public
  */
 export type JSONValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JSONValue[]
-  | { [key: string]: JSONValue };
+  null | boolean | number | string | JSONValue[] | { [key: string]: JSONValue };
 
 /**
  * An identifier for a document in Convex.
@@ -84,10 +82,10 @@ function isSpecial(n: number) {
   return Number.isNaN(n) || !Number.isFinite(n) || Object.is(n, -0);
 }
 
-export function slowBigIntToBase64(value: bigint): string {
+export function slowBigIntToBase64(value: BigIntValue): string {
   // the conversion is easy if we pretend it's unsigned
-  if (value < ZERO) {
-    value -= MIN_INT64 + MIN_INT64;
+  if (BI.lessThan(value, ZERO)) {
+    value = BI.subtract(value, BI.add(MIN_INT64, MIN_INT64));
   }
   let hex = value.toString(16);
   if (hex.length % 2 === 1) hex = "0" + hex;
@@ -96,12 +94,12 @@ export function slowBigIntToBase64(value: bigint): string {
   let i = 0;
   for (const hexByte of hex.match(/.{2}/g)!.reverse()) {
     bytes.set([parseInt(hexByte, 16)], i++);
-    value >>= EIGHT;
+    value = BI.rightShift(value, EIGHT);
   }
   return Base64.fromByteArray(bytes);
 }
 
-export function slowBase64ToBigInt(encoded: string): bigint {
+export function slowBase64ToBigInt(encoded: string): BigIntValue {
   const integerBytes = Base64.toByteArray(encoded);
   if (integerBytes.byteLength !== 8) {
     throw new Error(
@@ -111,27 +109,30 @@ export function slowBase64ToBigInt(encoded: string): bigint {
   let value = ZERO;
   let power = ZERO;
   for (const byte of integerBytes) {
-    value += BigInt(byte) * TWOFIFTYSIX ** power;
-    power++;
+    value = BI.add(
+      value,
+      BI.multiply(BI.from(byte), BI.exponentiate(TWOFIFTYSIX, power)),
+    );
+    power = BI.add(power, BI.from(1));
   }
-  if (value > MAX_INT64) {
-    value += MIN_INT64 + MIN_INT64;
+  if (BI.greaterThan(value, MAX_INT64)) {
+    value = BI.add(value, BI.add(MIN_INT64, MIN_INT64));
   }
   return value;
 }
 
-export function modernBigIntToBase64(value: bigint): string {
-  if (value < MIN_INT64 || MAX_INT64 < value) {
+export function modernBigIntToBase64(value: BigIntValue): string {
+  if (BI.lessThan(value, MIN_INT64) || BI.greaterThan(value, MAX_INT64)) {
     throw new Error(
       `BigInt ${value} does not fit into a 64-bit signed integer.`,
     );
   }
   const buffer = new ArrayBuffer(8);
-  new DataView(buffer).setBigInt64(0, value, true);
+  new DataView(buffer).setBigInt64(0, value as bigint, true);
   return Base64.fromByteArray(new Uint8Array(buffer));
 }
 
-export function modernBase64ToBigInt(encoded: string): bigint {
+export function modernBase64ToBigInt(encoded: string): BigIntValue {
   const integerBytes = Base64.toByteArray(encoded);
   if (integerBytes.byteLength !== 8) {
     throw new Error(
@@ -139,7 +140,7 @@ export function modernBase64ToBigInt(encoded: string): bigint {
     );
   }
   const intBytesView = new DataView(integerBytes.buffer);
-  return intBytesView.getBigInt64(0, true);
+  return BI.from(intBytesView.getBigInt64(0, true));
 }
 
 // Fall back to a slower version on Safari 14 which lacks these APIs.
@@ -305,12 +306,13 @@ function convexToJsonInternal(
     return value;
   }
   if (typeof value === "bigint") {
-    if (value < MIN_INT64 || MAX_INT64 < value) {
+    const biValue = BI.from(value);
+    if (BI.lessThan(biValue, MIN_INT64) || BI.greaterThan(biValue, MAX_INT64)) {
       throw new Error(
         `BigInt ${value} does not fit into a 64-bit signed integer.`,
       );
     }
-    return { $integer: bigIntToBase64(value) };
+    return { $integer: bigIntToBase64(biValue) };
   }
   if (typeof value === "number") {
     if (isSpecial(value)) {

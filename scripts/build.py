@@ -121,6 +121,11 @@ def build_standalone_cli(temp_dir) -> None:
     run(f"node scripts/build.cjs standalone-cli tempDir={temp_dir}")
 
 
+@log_duration
+def build_polyfill_variants() -> None:
+    run("node scripts/run-python.mjs scripts/build-polyfill.py")
+
+
 def main() -> None:
     t0 = time.time()
 
@@ -155,6 +160,9 @@ def main() -> None:
         pass
     shutil.move(TEMP_DIR, "dist")
     shutil.rmtree(temp_to_delete, ignore_errors=True)
+
+    # Build polyfill variants after main builds complete
+    build_polyfill_variants()
 
     for name in sorted(times.keys(), key=lambda task: times[task]):
         print(f"{round(times[name], 3):2.2f}s {name}")

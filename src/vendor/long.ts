@@ -216,7 +216,7 @@ export class Long {
   high: number;
   __isUnsignedLong__: boolean;
 
-  static isLong(obj: Long) {
+  static isLong(obj: any): obj is Long {
     return (obj && obj.__isUnsignedLong__) === true;
   }
 
@@ -264,10 +264,45 @@ export class Long {
   }
 
   toString() {
-    return (
-      BigInt(this.high) * BigInt(TWO_PWR_32_DBL) +
-      BigInt(this.low)
-    ).toString();
+    // Use native BigInt if available
+    if (typeof BigInt !== "undefined") {
+      // Convert to unsigned via >>> 0 and use bit shift for clarity
+      return (
+        ((BigInt(this.high >>> 0) << 32n) | BigInt(this.low >>> 0))
+      ).toString();
+    }
+
+    // Fallback: manual base-10 conversion without BigInt
+    return this._toStringFallback();
+  }
+
+  private _toStringFallback(): string {
+    let high = this.high >>> 0;
+    let low = this.low >>> 0;
+
+    if (high === 0) {
+      return low.toString();
+    }
+
+    const digits: number[] = [];
+
+    while (high !== 0 || low !== 0) {
+      // Divide the upper 32 bits by 10
+      const qHigh = Math.floor(high / 10);
+      let rem = high % 10;
+
+      // Divide (rem * 2^32 + low) by 10
+      const cur = rem * 0x100000000 + low;
+      const qLow = Math.floor(cur / 10);
+      rem = cur % 10;
+
+      digits.push(rem);
+
+      high = qHigh >>> 0;
+      low = qLow >>> 0;
+    }
+
+    return digits.reverse().join("");
   }
 
   equals(other: Long) {

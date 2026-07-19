@@ -1,5 +1,6 @@
 import { Value } from "./value.js";
 import { compareUTF8 } from "./compare_utf8.js";
+import { BI, ZERO as BIT_0, BIT_63 } from "./bigint-ops.js";
 
 export function compareValues(k1: Value | undefined, k2: Value | undefined) {
   return compareAsTuples(makeComparable(k1), makeComparable(k2));
@@ -65,16 +66,16 @@ function compareNumbers(v1: number, v2: number): number {
     new DataView(buffer2).setFloat64(0, v2, /* little-endian */ true);
 
     // Read as BigInt to compare bits
-    const v1Bits = BigInt(
+    const v1Bits = BI.from(
       new DataView(buffer1).getBigInt64(0, /* little-endian */ true),
     );
-    const v2Bits = BigInt(
+    const v2Bits = BI.from(
       new DataView(buffer2).getBigInt64(0, /* little-endian */ true),
     );
 
     // The sign bit is the most significant bit (bit 63)
-    const v1Sign = (v1Bits & 0x8000000000000000n) !== 0n;
-    const v2Sign = (v2Bits & 0x8000000000000000n) !== 0n;
+    const v1Sign = BI.notEqual(BI.bitwiseAnd(v1Bits, BIT_63), BIT_0);
+    const v2Sign = BI.notEqual(BI.bitwiseAnd(v2Bits, BIT_63), BIT_0);
 
     // If one value is NaN and the other isn't, use sign bits first
     if (isNaN(v1) !== isNaN(v2)) {
@@ -90,7 +91,7 @@ function compareNumbers(v1: number, v2: number): number {
     if (v1Sign !== v2Sign) {
       return v1Sign ? -1 : 1; // true means negative
     }
-    return v1Bits < v2Bits ? -1 : v1Bits === v2Bits ? 0 : 1;
+    return BI.lessThan(v1Bits, v2Bits) ? -1 : BI.equal(v1Bits, v2Bits) ? 0 : 1;
   }
 
   if (Object.is(v1, v2)) {
