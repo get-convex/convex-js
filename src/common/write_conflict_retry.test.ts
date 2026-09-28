@@ -2,23 +2,36 @@ import { describe, expect, test, vi } from "vitest";
 
 import {
   isWriteConflictRetryableMessage,
+  isWriteConflictRetryableResult,
   retryOnWriteConflict,
   validateMaxWriteConflictRetries,
   validateWriteConflictRetryDelayMs,
 } from "./write_conflict_retry.js";
+
+const writeConflictMessages = [
+  'Documents read from or written to the "users" table changed while this mutation was being run and on every subsequent retry.',
+  "Data read or written in this mutation changed while it was being run. Consider reducing the amount of data read by using indexed queries with selective index range expressions (https://docs.convex.dev/database/indexes/).",
+];
 
 describe("write conflict retries", () => {
   test("matches Convex write conflict messages", () => {
     expect(
       isWriteConflictRetryableMessage("OptimisticConcurrencyControlFailure"),
     ).toBe(true);
-    expect(
-      isWriteConflictRetryableMessage(
-        'Documents read from or written to the "users" table changed while this mutation was being run and on every subsequent retry.',
-      ),
-    ).toBe(true);
+    for (const message of writeConflictMessages) {
+      expect(isWriteConflictRetryableMessage(message)).toBe(true);
+    }
     expect(isWriteConflictRetryableMessage("Validation failed")).toBe(false);
   });
+
+  test.each(writeConflictMessages)(
+    "matches write conflict results: %s",
+    (errorMessage) => {
+      expect(
+        isWriteConflictRetryableResult({ success: false, errorMessage }),
+      ).toBe(true);
+    },
+  );
 
   test("validates retry counts", () => {
     expect(validateMaxWriteConflictRetries(undefined)).toBe(1);
@@ -46,28 +59,31 @@ describe("write conflict retries", () => {
     ).toThrow("writeConflictRetryDelayMs must be a nonnegative number.");
   });
 
-  test("retries write conflict errors", async () => {
-    vi.useFakeTimers();
-    let calls = 0;
-    const result = retryOnWriteConflict(
-      async () => {
-        calls += 1;
-        if (calls === 1) {
-          throw new Error("OptimisticConcurrencyControlFailure");
-        }
-        return "ok";
-      },
-      {
-        maxWriteConflictRetries: 1,
-        writeConflictRetryDelayMs: 2000,
-      },
-    );
+  test.each(writeConflictMessages)(
+    "retries write conflict errors: %s",
+    async (message) => {
+      vi.useFakeTimers();
+      let calls = 0;
+      const result = retryOnWriteConflict(
+        async () => {
+          calls += 1;
+          if (calls === 1) {
+            throw new Error(message);
+          }
+          return "ok";
+        },
+        {
+          maxWriteConflictRetries: 1,
+          writeConflictRetryDelayMs: 2000,
+        },
+      );
 
-    await vi.advanceTimersByTimeAsync(2000);
-    await expect(result).resolves.toBe("ok");
-    expect(calls).toBe(2);
-    vi.useRealTimers();
-  });
+      await vi.advanceTimersByTimeAsync(2000);
+      await expect(result).resolves.toBe("ok");
+      expect(calls).toBe(2);
+      vi.useRealTimers();
+    },
+  );
 
   test("does not retry other errors", async () => {
     let calls = 0;

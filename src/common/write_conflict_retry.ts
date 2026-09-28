@@ -2,6 +2,8 @@ const WRITE_CONFLICT_ERROR_TEXT = "OptimisticConcurrencyControlFailure";
 const WRITE_CONFLICT_PUBLIC_ERROR_TEXT = "Documents read from or written to";
 const WRITE_CONFLICT_PUBLIC_RETRY_TEXT =
   "changed while this mutation was being run and on every subsequent retry";
+const WRITE_CONFLICT_SYSTEM_ERROR_TEXT =
+  "Data read or written in this mutation changed while it was being run.";
 
 const DEFAULT_MAX_WRITE_CONFLICT_RETRIES = 1;
 const DEFAULT_WRITE_CONFLICT_RETRY_DELAY_MS = 2000;
@@ -68,6 +70,7 @@ export function validateWriteConflictRetryDelayMs(
 export function isWriteConflictRetryableMessage(message: string): boolean {
   return (
     message.includes(WRITE_CONFLICT_ERROR_TEXT) ||
+    message.includes(WRITE_CONFLICT_SYSTEM_ERROR_TEXT) ||
     (message.includes(WRITE_CONFLICT_PUBLIC_ERROR_TEXT) &&
       message.includes(WRITE_CONFLICT_PUBLIC_RETRY_TEXT))
   );
