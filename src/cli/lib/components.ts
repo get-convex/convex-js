@@ -230,6 +230,22 @@ async function getUnchangedModuleHashesFromServer(
   );
 }
 
+/**
+ * Whether the start_push request should be marked as a dry run.
+ *
+ * Codegen needs the backend's evaluated schema to generate the TypeScript
+ * bindings, but it must not modify the deployment (`npx convex codegen
+ * --help` says it doesn't). Marking the push as a dry run keeps
+ * `start_push` from creating tables or indexes on the deployment.
+ * See https://github.com/convex/convex-js/issues/199.
+ */
+export function isDryRunStartPush(options: {
+  dryRun: boolean;
+  codegen: boolean;
+}): boolean {
+  return options.dryRun || options.codegen;
+}
+
 async function startComponentsPushAndCodegen(
   ctx: Context,
   parentSpan: Span,
@@ -454,7 +470,11 @@ async function startComponentsPushAndCodegen(
   }
   const startPushRequest = {
     adminKey: options.adminKey,
-    dryRun: options.dryRun,
+    // Codegen is a read-only operation: it needs the backend's evaluated
+    // schema for the generated bindings, but it must not create tables or
+    // indexes on the deployment. `dryRun` is the protocol's established
+    // "don't mutate" signal (`npx convex deploy --dry-run` relies on it).
+    dryRun: isDryRunStartPush(options),
     functions: projectConfig.functions,
     appDefinition,
     componentDefinitions,
@@ -542,7 +562,13 @@ async function startComponentsPushAndCodegen(
     );
   }
 
-  changeSpinner("Uploading functions to Convex...");
+  changeSpinner(
+    // Codegen never uploads anything (see isDryRunStartPush above), so the
+    // deploy-oriented spinner text would be misleading here.
+    options.codegen
+      ? "Analyzing functions for codegen..."
+      : "Uploading functions to Convex...",
+  );
   const startPushResponse = await parentSpan.enterAsync("startPush", (span) =>
     startPush(ctx, span, startPushRequest, options),
   );
